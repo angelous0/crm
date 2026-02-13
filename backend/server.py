@@ -1313,6 +1313,44 @@ def _talla_sort_key(t):
         return (2, t)
 
 
+def _stock_filters_aliased(alias, tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro):
+    """Build WHERE clause with table alias prefix for JOIN queries."""
+    parts = []
+    params = []
+    a = f"{alias}." if alias else ""
+
+    def _add_multi(col, val):
+        if not val:
+            return
+        vals = [v.strip() for v in val.split(',') if v.strip()]
+        if vals:
+            params.append(vals)
+            parts.append(f"{a}{col} = ANY(${len(params)})")
+
+    _add_multi('tienda', tienda)
+    _add_multi('marca', marca)
+    _add_multi('tipo', tipo)
+    _add_multi('entalle', entalle)
+    _add_multi('tela', tela)
+    _add_multi('talla', talla)
+    _add_multi('color', color)
+
+    if modelo:
+        params.append(f"%{modelo}%")
+        parts.append(f"{a}modelo ILIKE ${len(params)}")
+    if es_lq == 'si':
+        parts.append(f"{a}es_lq = true")
+    elif es_lq == 'no':
+        parts.append(f"{a}es_lq = false")
+    if es_negro == 'si':
+        parts.append(f"{a}es_negro = true")
+    elif es_negro == 'no':
+        parts.append(f"{a}es_negro = false")
+
+    where = "WHERE " + (" AND ".join(parts) if parts else "1=1")
+    return where, params
+
+
 @stock_dash_router.get("/filtros")
 async def stock_filtros(user=Depends(get_current_user)):
     """Get distinct filter values for dropdowns."""
