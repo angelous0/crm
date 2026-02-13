@@ -1,0 +1,77 @@
+{
+  "summary": "Owner/Cuenta Principal Mapping feature testing complete. Backend: 13/13 tests pass (100%). Frontend: All features working - Ventas tab with Cuenta+Contacto columns, Top 10 Clientes shows owner names, Reservas tab demonstrates owner mapping (ALEX MEDINA as Cuenta, MARLENE CHAVEZ ESTEVES as Contacto). Security fix verified: all endpoints now require authentication (401 without token).",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Backend: GET /api/comercial/summary requires authentication (401 without token)",
+    "Backend: GET /api/comercial/detail requires authentication (401 without token)", 
+    "Backend: GET /api/comercial/filter-options requires authentication (401 without token)",
+    "Backend: GET /api/comercial/summary returns top_clientes with owner_partner_id field",
+    "Backend: GET /api/comercial/summary returns top_clientes with owner_partner_name field",
+    "Backend: Summary top_clientes grouped by owner_partner_id (no duplicates)",
+    "Backend: GET /api/comercial/detail items have owner_partner_id field",
+    "Backend: GET /api/comercial/detail items have owner_partner_name field (Cuenta)",
+    "Backend: GET /api/comercial/detail items have partner_name field (Contacto) for audit",
+    "Backend: RESERVA data shows owner mapping working (owner != contact in some rows)",
+    "Backend: Cliente filter uses owner_partner_name for search",
+    "Backend: RESERVA summary has owner fields",
+    "Backend: RESERVA detail has both owner and contact fields",
+    "Frontend: Login with admin@stockdash.com/admin123 successful",
+    "Frontend: /comercial page loads with data-testid='comercial-page'",
+    "Frontend: Ventas tab shows KPIs (52,827 qty, S/ 2.67M subtotal, 5,381 orders)",
+    "Frontend: Top 10 Clientes table shows owner names (CLIENTES VARIOS, ANGELINO MONTANEZ, etc.)",
+    "Frontend: Detail table has 'Cuenta' column header",
+    "Frontend: Detail table has 'Contacto' column header",
+    "Frontend: Reservas tab loads with lower KPIs (248 qty, 11 orders)",
+    "Frontend: Reservas detail demonstrates owner mapping (Cuenta: ALEX MEDINA, Contacto: MARLENE CHAVEZ ESTEVES)"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_comercial_owner.py",
+    "/app/test_reports/pytest/pytest_comercial_owner.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "Security fix confirmed: All 3 comercial endpoints now require authentication (Depends(get_current_user) added)",
+    "Owner mapping via crm.v_partner_account_final is working correctly",
+    "Summary top_clientes groups by owner_partner_id (cuenta principal), not contact",
+    "Detail endpoint returns both owner (Cuenta) and contact (Contacto) fields for audit trail",
+    "Cliente search filter uses owner_partner_name ILIKE (line 58 in comercial.py)",
+    "Frontend ComercialPage.jsx correctly displays both Cuenta and Contacto columns in detail table",
+    "Frontend displays owner_partner_name (not partner_name) in Top 10 Clientes table"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_comercial_owner.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (13/13 pytest tests pass)",
+    "frontend": "100% (all features verified via Playwright)"
+  },
+
+  "test_credentials": {
+    "email": "admin@stockdash.com",
+    "password": "admin123"
+  },
+
+  "seed_data_creation": "None - used existing PostgreSQL data from crm.v_comercial_mov_flat view",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Owner/cuenta principal mapping verified in Ventas y Reservas module. Summary endpoint groups top_clientes by owner_partner_id and returns owner_partner_name. Detail endpoint returns both owner_partner_name (Cuenta) and partner_name (Contacto) fields. Owner mapping demonstrated in RESERVA data where owner (ALEX MEDINA) differs from contact (MARLENE CHAVEZ ESTEVES). Authentication now required for all endpoints (security fix from iteration 17 is verified). Test file: /app/backend/tests/test_comercial_owner.py (13 tests). Frontend verified via Playwright with screenshots."
+}
