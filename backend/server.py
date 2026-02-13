@@ -2730,4 +2730,6 @@ app.include_router(partners_router)
 app.include_router(stock_dash_router)
 from routers.stock_balance import router as stock_balance_router
 app.include_router(stock_balance_router)
+from routers.reposicion import router as reposicion_router
+app.include_router(reposicion_router)
 app.include_router(sync_router)
