@@ -38,9 +38,14 @@ CRM B2B module integrated with Odoo PostgreSQL ODS database. Reads clients and s
 - Task management (create, complete, cancel)
 - Interaction logging (WhatsApp, Llamada, Visita, Nota)
 - **Vincular contacto existente** (2026-02-13): Search + link unlinked Odoo partners to CRM accounts
-  - GET /api/partners/unlinked endpoint with search, filters (solo_dni, solo_telefono), pagination
-  - POST /api/cuentas/:id/vincular-contacto endpoint with upsert logic
-  - UI: search with debounce, filter toggles, results table, confirmation dialog with optional note
+- **CRM Restructuring** (2026-02-13):
+  - Contactos = ALL odoo.res_partner (GLOBAL, active) with "Cuenta asignada" column
+  - Cuentas = Only "free" partners (principal = self) via crm.v_cuentas_libres view
+  - Vincular removes partner from Cuentas but keeps in Contactos
+  - v_partner_account_final covers ALL odoo partners (override > map > self)
+  - Cuentas use odoo_id (int) routing instead of UUID
+  - On-demand upsert crm.cuenta on detail page open
+  - Stats: cuentas_libres (11,008), total_partners (11,592), contactos_vinculados (584)
 - All UI in Spanish
 
 ## User Credentials
