@@ -89,8 +89,11 @@ function KpiCard({ icon: Icon, label, value, color }) {
 /* ══════════════════════════════════════════════════════ */
 export default function ComercialPage() {
   const [tab, setTab] = useState("SALE");
-  const [fechaDesde, setFechaDesde] = useState("");
-  const [fechaHasta, setFechaHasta] = useState("");
+  const [fechaDesde, setFechaDesde] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 3);
+    return d.toISOString().slice(0, 10);
+  });
+  const [fechaHasta, setFechaHasta] = useState(() => new Date().toISOString().slice(0, 10));
   const [filters, setFilters] = useState({ marca: [], tipo: [], entalle: [], tela: [], hilo: [], talla: [], color: [] });
   const [modelo, setModelo] = useState("");
   const [cliente, setCliente] = useState("");
