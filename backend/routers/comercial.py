@@ -74,6 +74,7 @@ async def comercial_summary(
     color: Optional[str] = None,
     cliente: Optional[str] = None,
     doc_tipo: Optional[str] = None,
+    user=Depends(_get_auth_dep()),
 ):
     pool = await get_pool()
     params = []
