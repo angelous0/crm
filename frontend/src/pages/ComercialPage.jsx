@@ -134,6 +134,13 @@ export default function ComercialPage() {
     finally { setLoading(false); }
   }, [buildParams]);
 
+  const fetchFilterOpts = useCallback(async () => {
+    try {
+      const r = await api.get("/comercial/filter-options", { params: { doc_tipo: tab, fecha_desde: fechaDesde, fecha_hasta: fechaHasta } });
+      setFilterOpts(r.data || {});
+    } catch {}
+  }, [tab, fechaDesde, fechaHasta]);
+
   const fetchDetail = useCallback(async (pg) => {
     setDetailLoading(true);
     try {
