@@ -375,17 +375,22 @@ async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
                 rp_cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'")
                 rp_col_names = [r['column_name'] for r in rp_cols]
                 has_ck = 'company_key' in rp_col_names
+                # Build safe SELECT list based on available columns
+                select_cols = ['name']
+                if 'phone' in rp_col_names: select_cols.append('phone')
+                if 'mobile' in rp_col_names: select_cols.append('mobile')
+                select_str = ', '.join(select_cols)
                 for item in items:
                     ck_filter = "AND company_key = 'GLOBAL'" if has_ck else ""
                     partner = await conn.fetchrow(
-                        f"SELECT name, phone, mobile, email FROM odoo.res_partner WHERE odoo_id = $1 {ck_filter} LIMIT 1",
+                        f"SELECT {select_str} FROM odoo.res_partner WHERE odoo_id = $1 {ck_filter} LIMIT 1",
                         item['contacto_partner_odoo_id']
                     )
                     if partner:
-                        item['partner_nombre'] = partner['name']
+                        item['partner_nombre'] = partner.get('name', '')
                         item['partner_phone'] = partner.get('phone', '')
                         item['partner_mobile'] = partner.get('mobile', '')
-                        item['partner_email'] = partner.get('email', '')
+                        item['partner_email'] = ''
         except Exception as e:
             logger.warning(f"Could not enrich contactos: {e}")
 
