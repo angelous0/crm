@@ -15,13 +15,114 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Save, Loader2, Phone, Mail, MapPin,
   MessageSquare, PhoneCall, Footprints, StickyNote, Plus,
-  Search, UserPlus, Link2, ChevronLeft, ChevronRight
+  Search, UserPlus, Link2, ChevronLeft, ChevronRight, Hash, ShoppingBag, Users
 } from "lucide-react";
 
 const ESTADOS = ["NUEVO", "ACTIVO", "SEGUIMIENTO", "DORMIDO", "NO_VOLVER"];
 const CLASIFICACIONES = ["A", "B", "C"];
 const TIPO_INTERACCION = ["WHATSAPP", "LLAMADA", "VISITA", "NOTA"];
 const TIPO_TAREA = ["LLAMAR", "WHATSAPP", "VISITAR", "COBRANZA", "POSTVENTA"];
+
+function fmtNum(n) { return Number(n || 0).toLocaleString("es-PE"); }
+function fmtMoney(n) { return "S/ " + Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "-"; }
+
+/* ── Ventas/Reservas sub-tab component ── */
+function VentasCuentaTab({ data, loading, page, onPageChange }) {
+  const kpis = data?.kpis || {};
+  const items = data?.items || [];
+  const hasNext = data?.has_next || false;
+  const debug = data?.debug || {};
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
+  }
+
+  return (
+    <div className="space-y-4" data-testid="ventas-cuenta-tab">
+      {/* Debug info if no partners */}
+      {debug.partners_count === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800" data-testid="ventas-no-partner-msg">
+          Esta cuenta no tiene partner Odoo vinculado (odoo_id: {debug.cuenta_partner_odoo_id})
+        </div>
+      )}
+
+      {/* KPIs row */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm">
+          <Hash size={14} className="text-slate-400" />
+          <div><p className="text-[10px] text-slate-500 uppercase">Cantidad</p><p className="text-base font-bold">{fmtNum(kpis.qty_total)}</p></div>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm">
+          <ShoppingBag size={14} className="text-slate-400" />
+          <div><p className="text-[10px] text-slate-500 uppercase">Ordenes</p><p className="text-base font-bold">{fmtNum(kpis.orders)}</p></div>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm">
+          <Users size={14} className="text-slate-400" />
+          <div><p className="text-[10px] text-slate-500 uppercase">Contactos</p><p className="text-base font-bold">{fmtNum(kpis.clientes_distintos)}</p></div>
+        </div>
+      </div>
+
+      {/* Detail table */}
+      <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50/50">
+                <TableHead className="text-xs">Fecha</TableHead>
+                <TableHead className="text-xs">Orden</TableHead>
+                <TableHead className="text-xs">Modelo</TableHead>
+                <TableHead className="text-xs">Marca</TableHead>
+                <TableHead className="text-xs">Tipo</TableHead>
+                <TableHead className="text-xs">Talla</TableHead>
+                <TableHead className="text-xs">Color</TableHead>
+                <TableHead className="text-xs text-right">Qty</TableHead>
+                <TableHead className="text-xs text-right">P.Unit</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.length === 0 ? (
+                <TableRow><TableCell colSpan={9} className="h-20 text-center text-slate-500">
+                  {debug.partners_count === 0 ? "Sin partner vinculado" : "No hay ventas en el rango seleccionado"}
+                </TableCell></TableRow>
+              ) : items.map((v, i) => (
+                <TableRow key={i} className={i % 2 ? "bg-slate-50/30" : ""}>
+                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(v.fecha)}</TableCell>
+                  <TableCell className="text-xs font-mono text-slate-500">{v.order_id}</TableCell>
+                  <TableCell className="text-xs font-medium truncate max-w-[120px]">{v.modelo_display || "-"}</TableCell>
+                  <TableCell className="text-xs text-slate-500">{v.marca || "-"}</TableCell>
+                  <TableCell className="text-xs text-slate-500">{v.tipo || "-"}</TableCell>
+                  <TableCell className="text-xs">{v.talla || "-"}</TableCell>
+                  <TableCell className="text-xs">{v.color || "-"}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtNum(v.qty)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(v.price_unit)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {(page > 1 || hasNext) && (
+          <div className="flex items-center justify-between px-3 py-2 border-t text-xs text-slate-500">
+            <span>Pagina {page}</span>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="ventas-prev-page">
+                <ChevronLeft size={14} />
+              </Button>
+              <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="ventas-next-page">
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Debug: partner count */}
+      {debug.partners_count > 0 && (
+        <p className="text-[10px] text-slate-400">Partners vinculados: {debug.partners_count} | IDs: {(debug.partner_ids || []).slice(0, 10).join(", ")}{debug.partner_ids?.length > 10 ? "..." : ""}</p>
+      )}
+    </div>
+  );
+}
 
 export default function CuentaDetalle() {
   const { id } = useParams();
