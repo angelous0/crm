@@ -295,14 +295,17 @@ async def get_matriz(tmpl_id: int, location_id: str = "ALL", user=Depends(get_cu
                 "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_catalogo_con_stock_variantes_loc')"
             )
 
-            # Get locations for the dropdown
+            # Get locations for the dropdown (only tiendas with x_nombre)
             locations = []
             try:
                 loc_rows = await conn.fetch("""
-                    SELECT odoo_id as id, COALESCE(x_nombre, name) as nombre
+                    SELECT odoo_id as id, x_nombre as nombre
                     FROM odoo.stock_location
-                    WHERE usage = 'internal' AND COALESCE(active, true) = true
-                    ORDER BY COALESCE(x_nombre, name)
+                    WHERE usage = 'internal'
+                      AND COALESCE(active, true) = true
+                      AND x_nombre IS NOT NULL
+                      AND btrim(x_nombre) <> ''
+                    ORDER BY x_nombre
                 """)
                 locations = [{"id": r['id'], "nombre": r['nombre']} for r in loc_rows]
             except Exception:

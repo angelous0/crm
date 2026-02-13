@@ -258,9 +258,11 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_contactos_vinculados: {e}")
 
-    # 3.1d) v_catalogo_con_stock - eligible products with stock, grouped by template
+    # 3.1d) v_catalogo_con_stock - eligible products with stock, grouped by template (tiendas only)
     try:
-        if 'v_stock_by_product' in odoo_tables and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
+        has_stock_loc_d = 'v_stock_by_product_location' in odoo_tables
+        has_stock_loc_sl = 'stock_location' in odoo_tables
+        if has_stock_loc_d and has_stock_loc_sl and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
             await conn.execute("""
                 CREATE OR REPLACE VIEW crm.v_catalogo_con_stock AS
                 SELECT
@@ -275,7 +277,13 @@ async def _create_views(conn):
                     pt.list_price,
                     SUM(s.available_qty) as stock_total_disponible,
                     COUNT(DISTINCT vv.product_product_id) as variantes_con_stock
-                FROM odoo.v_stock_by_product s
+                FROM odoo.v_stock_by_product_location s
+                JOIN odoo.stock_location sl
+                    ON sl.odoo_id = s.location_id
+                    AND sl.usage = 'internal'
+                    AND COALESCE(sl.active, true) = true
+                    AND sl.x_nombre IS NOT NULL
+                    AND btrim(sl.x_nombre) <> ''
                 JOIN odoo.v_product_variant_flat vv
                     ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
                 JOIN odoo.product_template pt
@@ -289,15 +297,17 @@ async def _create_views(conn):
                 GROUP BY pt.odoo_id, pt.name, pt.marca, pt.tipo, pt.tela,
                          pt.entalle, pt.tel, pt.hilo, pt.list_price;
             """)
-            logger.info("View crm.v_catalogo_con_stock created")
+            logger.info("View crm.v_catalogo_con_stock created (tiendas only)")
         else:
             logger.warning("Missing tables for v_catalogo_con_stock")
     except Exception as e:
         logger.warning(f"Could not create v_catalogo_con_stock: {e}")
 
-    # 3.1e) v_catalogo_con_stock_variantes - variant-level stock detail
+    # 3.1e) v_catalogo_con_stock_variantes - variant-level stock detail (tiendas only, aggregated)
     try:
-        if 'v_stock_by_product' in odoo_tables and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
+        has_stock_loc_e = 'v_stock_by_product_location' in odoo_tables
+        has_stock_loc_sl_e = 'stock_location' in odoo_tables
+        if has_stock_loc_e and has_stock_loc_sl_e and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
             await conn.execute("""
                 CREATE OR REPLACE VIEW crm.v_catalogo_con_stock_variantes AS
                 SELECT
@@ -306,10 +316,16 @@ async def _create_views(conn):
                     vv.barcode,
                     vv.talla,
                     vv.color,
-                    s.available_qty,
-                    s.qty as stock_total,
-                    s.reserved_qty
-                FROM odoo.v_stock_by_product s
+                    SUM(s.available_qty) as available_qty,
+                    SUM(s.qty) as stock_total,
+                    SUM(s.reserved_qty) as reserved_qty
+                FROM odoo.v_stock_by_product_location s
+                JOIN odoo.stock_location sl
+                    ON sl.odoo_id = s.location_id
+                    AND sl.usage = 'internal'
+                    AND COALESCE(sl.active, true) = true
+                    AND sl.x_nombre IS NOT NULL
+                    AND btrim(sl.x_nombre) <> ''
                 JOIN odoo.v_product_variant_flat vv
                     ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
                 JOIN odoo.product_template pt
@@ -319,18 +335,20 @@ async def _create_views(conn):
                     AND pt.purchase_ok = false
                     AND pt.name NOT ILIKE '%correa%'
                     AND pt.name NOT ILIKE '%saco%'
-                    AND pt.name NOT ILIKE '%bolsa%';
+                    AND pt.name NOT ILIKE '%bolsa%'
+                GROUP BY vv.product_tmpl_id, vv.product_product_id, vv.barcode, vv.talla, vv.color;
             """)
-            logger.info("View crm.v_catalogo_con_stock_variantes created")
+            logger.info("View crm.v_catalogo_con_stock_variantes created (tiendas only)")
         else:
             logger.warning("Missing tables for v_catalogo_con_stock_variantes")
     except Exception as e:
         logger.warning(f"Could not create v_catalogo_con_stock_variantes: {e}")
 
-    # 3.1f) v_catalogo_con_stock_variantes_loc - variant stock by location
+    # 3.1f) v_catalogo_con_stock_variantes_loc - variant stock by location (tiendas only)
     try:
         has_stock_loc = 'v_stock_by_product_location' in odoo_tables
-        if has_stock_loc and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
+        has_stock_loc_sl_f = 'stock_location' in odoo_tables
+        if has_stock_loc and has_stock_loc_sl_f and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
             await conn.execute("""
                 CREATE OR REPLACE VIEW crm.v_catalogo_con_stock_variantes_loc AS
                 SELECT
@@ -340,10 +358,17 @@ async def _create_views(conn):
                     vv.talla,
                     vv.color,
                     s.location_id,
+                    sl.x_nombre as tienda,
                     s.available_qty,
                     s.qty as stock_total,
                     s.reserved_qty
                 FROM odoo.v_stock_by_product_location s
+                JOIN odoo.stock_location sl
+                    ON sl.odoo_id = s.location_id
+                    AND sl.usage = 'internal'
+                    AND COALESCE(sl.active, true) = true
+                    AND sl.x_nombre IS NOT NULL
+                    AND btrim(sl.x_nombre) <> ''
                 JOIN odoo.v_product_variant_flat vv
                     ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
                 JOIN odoo.product_template pt
@@ -355,7 +380,7 @@ async def _create_views(conn):
                     AND pt.name NOT ILIKE '%saco%'
                     AND pt.name NOT ILIKE '%bolsa%';
             """)
-            logger.info("View crm.v_catalogo_con_stock_variantes_loc created")
+            logger.info("View crm.v_catalogo_con_stock_variantes_loc created (tiendas only)")
         else:
             logger.warning("Missing tables for v_catalogo_con_stock_variantes_loc")
     except Exception as e:
