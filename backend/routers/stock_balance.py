@@ -70,47 +70,59 @@ async def stock_balance_matrix(
         try:
             where, params = _build_where(tienda, marca, tipo, entalle, tela, hilo, color, talla, modelo)
 
-            # Single aggregation query
+            # Fetch all filtered rows in one query (view has ~15K rows max)
             rows = await conn.fetch(f"""
-                SELECT
-                    COALESCE(marca::text,'') as marca,
-                    COALESCE(tipo::text,'') as tipo,
-                    COALESCE(entalle::text,'') as entalle,
-                    COALESCE(tela::text,'') as tela,
-                    COALESCE(hilo::text,'SIN_HILO') as hilo,
-                    talla::text as talla,
-                    SUM(available_qty) as qty
+                SELECT marca::text, tipo::text, entalle::text, tela::text,
+                       COALESCE(hilo::text,'SIN_HILO') as hilo,
+                       talla::text, color::text, tienda::text,
+                       available_qty
                 FROM {VIEW} {where}
-                GROUP BY marca, tipo, entalle, tela, hilo, talla
             """, *params, timeout=120)
 
-            # Build item map in Python
+            # Process everything in Python (fast for <20K rows)
             item_map = {}
             tallas_set = set()
+            fopts = {"tienda": set(), "marca": set(), "tipo": set(),
+                     "entalle": set(), "tela": set(), "hilo": set(), "color": set()}
+
             for r in rows:
-                key = f"{r['marca']}|{r['tipo']}|{r['entalle']}|{r['tela']}|{r['hilo']}"
+                marca_v = r['marca'] or ''
+                tipo_v = r['tipo'] or ''
+                entalle_v = r['entalle'] or ''
+                tela_v = r['tela'] or ''
+                hilo_v = r['hilo'] or 'SIN_HILO'
+                t = r['talla']
+                qty = float(r['available_qty'] or 0)
+
+                # Collect filter options
+                if r['tienda']: fopts['tienda'].add(r['tienda'])
+                if r['marca']: fopts['marca'].add(r['marca'])
+                if r['tipo']: fopts['tipo'].add(r['tipo'])
+                if r['entalle']: fopts['entalle'].add(r['entalle'])
+                if r['tela']: fopts['tela'].add(r['tela'])
+                if r['hilo']: fopts['hilo'].add(r['hilo'])
+                if r['color']: fopts['color'].add(r['color'])
+
+                key = f"{marca_v}|{tipo_v}|{entalle_v}|{tela_v}|{hilo_v}"
                 if key not in item_map:
                     item_map[key] = {
-                        "marca": r['marca'], "tipo": r['tipo'],
-                        "entalle": r['entalle'], "tela": r['tela'],
-                        "hilo": r['hilo'],
+                        "marca": marca_v, "tipo": tipo_v,
+                        "entalle": entalle_v, "tela": tela_v,
+                        "hilo": hilo_v,
                         "values": {}, "total": 0
                     }
-                qty = float(r['qty'] or 0)
-                t = r['talla']
                 if t:
                     tallas_set.add(t)
-                    item_map[key]["values"][t] = round(qty)
+                    item_map[key]["values"][t] = item_map[key]["values"].get(t, 0) + round(qty)
                     item_map[key]["total"] += qty
 
             tallas = sorted(tallas_set, key=_talla_sort_key)
 
-            # Sort by total desc, paginate in Python
+            # Sort by total desc, paginate
             all_items = sorted(item_map.values(), key=lambda x: -x['total'])
             total_items = len(all_items)
             offset = (page - 1) * limit
             page_items = all_items[offset:offset + limit]
-
             for row in page_items:
                 row["total"] = round(row["total"])
 
@@ -122,26 +134,8 @@ async def stock_balance_matrix(
                 for t in tallas:
                     totals_by_talla[t] = totals_by_talla.get(t, 0) + row["values"].get(t, 0)
 
-            # Filter options from a single query
-            opt_row = await conn.fetchrow(f"""
-                SELECT
-                    ARRAY(SELECT DISTINCT tienda::text FROM {VIEW} {where} AND tienda IS NOT NULL ORDER BY 1) as tiendas,
-                    ARRAY(SELECT DISTINCT marca::text FROM {VIEW} {where} AND marca IS NOT NULL ORDER BY 1) as marcas,
-                    ARRAY(SELECT DISTINCT tipo::text FROM {VIEW} {where} AND tipo IS NOT NULL ORDER BY 1) as tipos,
-                    ARRAY(SELECT DISTINCT entalle::text FROM {VIEW} {where} AND entalle IS NOT NULL ORDER BY 1) as entalles,
-                    ARRAY(SELECT DISTINCT tela::text FROM {VIEW} {where} AND tela IS NOT NULL ORDER BY 1) as telas,
-                    ARRAY(SELECT DISTINCT hilo::text FROM {VIEW} {where} AND hilo IS NOT NULL ORDER BY 1) as hilos,
-                    ARRAY(SELECT DISTINCT color::text FROM {VIEW} {where} AND color IS NOT NULL ORDER BY 1) as colores
-            """, *(params * 7), timeout=60)
-            filter_opts = {
-                "tienda": list(opt_row['tiendas']),
-                "marca": list(opt_row['marcas']),
-                "tipo": list(opt_row['tipos']),
-                "entalle": list(opt_row['entalles']),
-                "tela": list(opt_row['telas']),
-                "hilo": list(opt_row['hilos']),
-                "color": list(opt_row['colores']),
-            }
+            # Build filter options
+            filter_opts = {k: sorted(v) for k, v in fopts.items()}
             filter_opts['talla'] = tallas
 
             return {
