@@ -5,7 +5,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, Search, X, ChevronDown, ChevronUp, Download, RotateCcw, RefreshCw } from "lucide-react";
+import { Loader2, Search, X, ChevronDown, ChevronUp, Download, RotateCcw, RefreshCw, Package } from "lucide-react";
+import ReposicionTab from "./ReposicionTab";
 
 /* ═══ CONSTANTS ═══ */
 const STORE_ORDER = ["GRAU 238 / GRAU 55", "GAMARRA 209", "GM218", "BOOSH", "GAMARRA 207", "TOTAL"];
