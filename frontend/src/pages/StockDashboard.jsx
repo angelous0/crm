@@ -304,6 +304,9 @@ export default function StockDashboard() {
   const [detalle, setDetalle] = useState({ items: [], total: 0 });
   const [detallePage, setDetallePage] = useState(1);
   const [detalleLoading, setDetalleLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+  const pollRef = useRef(null);
   const debounceRef = useRef(null);
   const optsVersionRef = useRef(0);
 
