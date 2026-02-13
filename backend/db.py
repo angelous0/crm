@@ -160,6 +160,18 @@ async def init_database():
             ON crm.tarea (cuenta_id);
         """)
 
+        # 2.7) cuenta_vinculo – manual partner linking to accounts
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS crm.cuenta_vinculo (
+                id BIGSERIAL PRIMARY KEY,
+                cuenta_id UUID NOT NULL REFERENCES crm.cuenta(id),
+                odoo_partner_id INT NOT NULL,
+                activo BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                UNIQUE(cuenta_id, odoo_partner_id)
+            );
+        """)
+
         logger.info("CRM tables created successfully")
 
         # 3) Views - these depend on odoo schema
