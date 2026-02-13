@@ -123,27 +123,35 @@ function FilterChips({ f, onRemove, onClear }) {
   );
 }
 
-/* ═══ SELECTION CHIPS (MULTI-SELECT) ═══ */
-function SelectionChips({ sel, onReset }) {
-  const chips = [];
-  sel.modelos.forEach(v => chips.push({ key: "modelos", value: v, label: `Modelo: ${v}` }));
-  sel.tallas.forEach(v => chips.push({ key: "tallas", value: v, label: `Talla: ${v}` }));
-  sel.colores.forEach(v => chips.push({ key: "colores", value: v, label: `Color: ${v}` }));
-  sel.tiendas.forEach(v => chips.push({ key: "tiendas", value: v, label: `Tienda: ${v}` }));
-  if (!chips.length) return null;
+/* ═══ SELECTION BAR (MULTI-SELECT) ═══ */
+function SelectionBar({ sel, onReset }) {
+  const active = hasSel(sel);
+  const axes = [
+    { key: "modelos", label: "Modelo", fem: false },
+    { key: "tallas", label: "Talla", fem: true },
+    { key: "colores", label: "Color", fem: false },
+    { key: "tiendas", label: "Tienda", fem: true },
+  ];
+  const chips = axes.filter(a => sel[a.key].size > 0).map(a => {
+    const n = sel[a.key].size;
+    const vals = [...sel[a.key]];
+    const text = n === 1 ? `${a.label}: ${vals[0]}` : `${a.label}: ${n} ${a.fem ? "seleccionadas" : "seleccionados"}`;
+    return { ...a, n, text };
+  });
+
   return (
-    <div className="bg-blue-900/80 px-3 py-1.5 flex items-center gap-1.5 flex-wrap shrink-0" data-testid="selection-chips">
-      <button className="flex items-center gap-1 bg-red-500 hover:bg-red-400 text-white rounded px-2.5 py-1 text-[10px] font-bold shadow transition-colors mr-1"
-        onClick={() => onReset("all")} data-testid="reset-selection">
+    <div className={`px-3 py-1 flex items-center gap-1.5 flex-wrap shrink-0 transition-colors ${active ? "bg-blue-900/80" : "bg-slate-800/60"}`} data-testid="selection-chips">
+      <button className={`flex items-center gap-1 rounded px-2.5 py-1 text-[10px] font-bold shadow transition-colors mr-1 ${active ? "bg-red-500 hover:bg-red-400 text-white" : "bg-slate-700 text-slate-500 cursor-default"}`}
+        onClick={() => active && onReset("all")} disabled={!active} data-testid="reset-selection">
         <RotateCcw size={11} /> Reset selección
       </button>
-      {chips.map((c, i) => (
-        <span key={`${c.key}-${c.value}-${i}`} className="inline-flex items-center gap-0.5 bg-blue-500/90 text-white rounded px-1.5 py-0.5 text-[9px] font-semibold">
-          {c.label}
-          <button className="hover:bg-blue-600 rounded-full p-0 ml-0.5" onClick={() => onReset(c.key, c.value)}><X size={9} /></button>
+      {chips.map(c => (
+        <span key={c.key} className="inline-flex items-center gap-0.5 bg-blue-500/90 text-white rounded px-1.5 py-0.5 text-[9px] font-semibold">
+          {c.text}
+          <button className="hover:bg-blue-600 rounded-full p-0 ml-0.5" onClick={() => onReset(c.key)} data-testid={`clear-sel-${c.key}`}><X size={9} /></button>
         </span>
       ))}
-      <span className="text-[9px] text-blue-300 ml-1">Ctrl+Click: multi | Shift+Click: rango tallas</span>
+      <span className="text-[9px] text-slate-400 ml-auto">Ctrl/Cmd+Click: multi · Shift+Click: rango tallas</span>
     </div>
   );
 }
