@@ -166,7 +166,121 @@ async def me(user=Depends(get_current_user)):
         return record_to_dict(row)
 
 
-# ─── PRODUCTOS ROUTES ─────────────────────────────────────────────────────────
+# ─── CATALOGO ROUTES (STOCK-BASED) ─────────────────────────────────────────────
+
+catalogo_router = APIRouter(prefix="/api/catalogo", tags=["catalogo"])
+
+
+@catalogo_router.get("")
+async def get_catalogo(
+    search: str = "", page: int = 1, limit: int = 50,
+    marca: str = "", tipo: str = "", tela: str = "", entalle: str = "",
+    stock_min: float = 0,
+    orden: str = "stock",
+    user=Depends(get_current_user)
+):
+    """Catalog: eligible products with stock from crm.v_catalogo_con_stock"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        offset = (page - 1) * limit
+        try:
+            view_exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_catalogo_con_stock')"
+            )
+            if not view_exists:
+                return {"items": [], "total": 0, "page": page, "message": "Vista de catalogo no disponible"}
+
+            where = "WHERE 1=1"
+            params = []
+
+            if search:
+                params.append(f"%{search}%")
+                idx = len(params)
+                where += f" AND (nombre ILIKE ${idx} OR COALESCE(marca::text,'') ILIKE ${idx} OR COALESCE(tipo::text,'') ILIKE ${idx} OR COALESCE(tela::text,'') ILIKE ${idx} OR COALESCE(entalle::text,'') ILIKE ${idx})"
+            if marca:
+                params.append(f"%{marca}%")
+                where += f" AND marca::text ILIKE ${len(params)}"
+            if tipo:
+                params.append(f"%{tipo}%")
+                where += f" AND tipo::text ILIKE ${len(params)}"
+            if tela:
+                params.append(f"%{tela}%")
+                where += f" AND tela::text ILIKE ${len(params)}"
+            if entalle:
+                params.append(f"%{entalle}%")
+                where += f" AND entalle::text ILIKE ${len(params)}"
+            if stock_min > 0:
+                params.append(stock_min)
+                where += f" AND stock_total_disponible >= ${len(params)}"
+
+            order_by = "stock_total_disponible DESC" if orden == "stock" else "nombre ASC"
+
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM crm.v_catalogo_con_stock {where}", *params
+            )
+
+            data_params = params.copy()
+            data_params.extend([limit, offset])
+            rows = await conn.fetch(
+                f"SELECT * FROM crm.v_catalogo_con_stock {where} ORDER BY {order_by} LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}",
+                *data_params
+            )
+            return {"items": records_to_list(rows), "total": count, "page": page}
+        except Exception as e:
+            logger.error(f"Error fetching catalogo: {e}")
+            return {"items": [], "total": 0, "page": page, "error": str(e)}
+
+
+@catalogo_router.get("/marcas")
+async def get_marcas(user=Depends(get_current_user)):
+    """Get distinct marcas from catalog for filter dropdowns"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                "SELECT DISTINCT marca::text as marca FROM crm.v_catalogo_con_stock WHERE marca IS NOT NULL ORDER BY marca"
+            )
+            return [r['marca'] for r in rows]
+        except Exception:
+            return []
+
+
+@catalogo_router.get("/tipos")
+async def get_tipos(user=Depends(get_current_user)):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                "SELECT DISTINCT tipo::text as tipo FROM crm.v_catalogo_con_stock WHERE tipo IS NOT NULL ORDER BY tipo"
+            )
+            return [r['tipo'] for r in rows]
+        except Exception:
+            return []
+
+
+@catalogo_router.get("/{tmpl_id}/variantes")
+async def get_variantes(tmpl_id: int, user=Depends(get_current_user)):
+    """Get variant-level stock detail for a product template"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            view_exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_catalogo_con_stock_variantes')"
+            )
+            if not view_exists:
+                return []
+
+            rows = await conn.fetch(
+                "SELECT * FROM crm.v_catalogo_con_stock_variantes WHERE product_tmpl_id = $1 ORDER BY talla, color",
+                tmpl_id
+            )
+            return records_to_list(rows)
+        except Exception as e:
+            logger.error(f"Error fetching variantes: {e}")
+            return []
+
+
+# ─── PRODUCTOS ROUTES (LEGACY - kept for ventas) ──────────────────────────────
 
 productos_router = APIRouter(prefix="/api/productos", tags=["productos"])
 
