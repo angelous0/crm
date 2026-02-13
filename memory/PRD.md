@@ -26,16 +26,21 @@ Build a B2B CRM application that integrates with an existing PostgreSQL database
 10. Price in Peruvian Soles "S/ 00.00"
 11. Stock matrix modal: Color x Talla with location filter + totals
 
-### Phase 3 - Stock Dashboard (Feb 2026)
-12. **Power BI-style dashboard** with main pivot: Modelo x Tienda (stores as columns)
-13. Multi-select filters: Tienda, Marca, Tipo, Entalle, Tela, Talla, Color
-14. Toggle filters: Es LQ (si/no), Es Negro (si/no)
-15. Text search: Modelo
-16. KPI cards: Total stock, Modelos, Variantes, Tiendas con stock
-17. Pivot by Tienda: Color x Talla matrix for selected store
-18. Expandable Modelo x Talla pivot
-19. Expandable Detail table with CSV export
-20. **Collapsible sidebar** (persists state in localStorage)
+### Phase 3 - Stock Dashboard (Feb 2026) - Power BI Layout
+12. **Power BI-style dashboard** with all panels visible simultaneously:
+    - Dark filter bar with slicers at top
+    - Left: Modelo x Talla pivot
+    - Center: 2x3 grid (GRAU 238/GRAU 55, GAMARRA 209, GM218, BOOSH, GAMARRA 207, TOTAL)
+    - Right: ALMACEN panel
+13. Tienda canonical mapping (TALLER→ALMACEN, GM209→GAMARRA 209, GR238+GR55→GRAU 238/GRAU 55, etc.)
+14. Multi-select filters: Tienda, Marca, Tipo, Entalle, Tela, Talla, Color
+15. Toggle filters: Es LQ, Es Negro, Por Arreglar (placeholder)
+16. KPIs in filter bar: Stock, Modelos, Variantes
+17. Each panel: Color x Talla matrix with amber total rows
+18. TOTAL panel = sum of all canonical stores
+19. PROBADOR models excluded
+20. Expandable detail table with CSV export
+21. **Collapsible sidebar** (persists in localStorage)
 
 ## Key DB Views
 - `crm.v_partner_account_final` - Maps contacts to accounts
@@ -43,12 +48,13 @@ Build a B2B CRM application that integrates with an existing PostgreSQL database
 - `crm.v_catalogo_con_stock` - Products with stock (tiendas only)
 - `crm.v_catalogo_con_stock_variantes` - Variant-level stock (tiendas only)
 - `crm.v_catalogo_con_stock_variantes_loc` - Variant stock by location
-- `crm.v_catalogo_stock_flat` - Flat denormalized view for Stock Dashboard (includes es_lq, es_negro flags)
+- `crm.v_catalogo_stock_flat` - Flat denormalized view for catalog/stock
+- `crm.v_stock_dashboard_base` - Dashboard base with tienda_canonica mapping, probador excluded
 
 ## Key API Endpoints
 - Auth: `POST /api/auth/login`, `POST /api/auth/register`
 - Catalogo: `GET /api/catalogo`, `/telas`, `/entalles`, `/{tmpl_id}/matriz`
-- Stock Dashboard: `GET /api/stock-dashboard/filtros`, `/kpis`, `/pivot-modelo`, `/pivot-modelo-tienda`, `/pivot-tienda`, `/detalle`
+- Stock Dashboard: `GET /api/stock-dashboard/filters`, `/panels`, `/modelo-talla`, `/detalle`
 - CRM: `GET /api/cuentas`, `/contactos`, `/cuentas/{odoo_id}`, `POST /cuentas/{odoo_id}/vincular-contacto`
 
 ## Tienda Rule
