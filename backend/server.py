@@ -303,28 +303,36 @@ async def get_cuentas(
 
 @cuentas_router.get("/{cuenta_id}")
 async def get_cuenta(cuenta_id: str, user=Depends(get_current_user)):
+    """Get cuenta by cuenta_partner_odoo_id (int). On-demand upsert crm.cuenta if not exists."""
     p = await get_pool()
     async with p.acquire() as conn:
-        row = await conn.fetchrow("SELECT * FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
+        try:
+            odoo_id = int(cuenta_id)
+        except ValueError:
+            raise HTTPException(400, "cuenta_id debe ser un entero (odoo_id del partner)")
+
+        # On-demand upsert: create crm.cuenta row if missing
+        await conn.execute("""
+            INSERT INTO crm.cuenta (cuenta_partner_odoo_id)
+            VALUES ($1)
+            ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
+        """, odoo_id)
+
+        row = await conn.fetchrow(
+            "SELECT * FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id
+        )
         if not row:
             raise HTTPException(404, "Cuenta no encontrada")
         result = record_to_dict(row)
 
         # Get partner info from odoo
         try:
-            rp_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='res_partner')")
-            if rp_exists:
-                rp_cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'")
-                rp_col_names = [r['column_name'] for r in rp_cols]
-                has_ck = 'company_key' in rp_col_names
-                ck_filter = "AND company_key = 'GLOBAL'" if has_ck else ""
-                partner = await conn.fetchrow(
-                    f"SELECT * FROM odoo.res_partner WHERE odoo_id = $1 {ck_filter} LIMIT 1",
-                    row['cuenta_partner_odoo_id']
-                )
-                if partner:
-                    pd = record_to_dict(partner)
-                    result['partner'] = pd
+            partner = await conn.fetchrow(
+                "SELECT * FROM odoo.res_partner WHERE odoo_id = $1 AND company_key = 'GLOBAL' LIMIT 1",
+                odoo_id
+            )
+            if partner:
+                result['partner'] = record_to_dict(partner)
         except Exception as e:
             logger.warning(f"Could not fetch partner info: {e}")
 
