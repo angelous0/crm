@@ -34,23 +34,34 @@ Build a B2B CRM application integrated with PostgreSQL (Odoo schema). CRM operat
 
 ### Phase 3.5 - Power BI Multi-Select & Attenuation (Feb 2026)
 13. Multi-select: Click (replace), Ctrl/Cmd+Click (toggle), Shift+Click (range tallas)
-14. Selection state: `Set<string>` per axis (modelos, tallas, colores, tiendas)
-15. Attenuation: opacity-based dimming for non-matching items (AND across axes)
-16. Selection bar always visible: summary chips ("Modelo: N seleccionados"), Reset button, hint text
-17. Filter dropdowns with counts from `/filter-options-v2` (Xm Yv format)
-18. KPIs update dynamically based on local selection
-19. All cross-filter 100% local, no backend calls on clicks
+14. Selection state per axis with Set<string>
+15. Attenuation: opacity-based dimming for non-matching items
+16. Selection bar always visible with summary chips and Reset button
+17. Filter dropdowns with counts (Xm Yv format)
+
+### Phase 3.6 - Reposición / Faltantes por Tienda (Feb 2026)
+18. **Backend `GET /api/stock-dashboard/reposicion`**:
+    - SKU = (marca_norm, tipo, entalle, tela, color, talla)
+    - Prevalencia: QEPO→BOOSH/GAMARRA207, BOOSH→BOOSH, ELEMENT PREMIUM→GAMARRA209/GM218/GRAU
+    - Prioriza ALMACEN como origen, fallback transferencia entre tiendas
+    - Umbral protección: no vaciar tiendas objetivo (umbral_origen configurable)
+    - Sort: stock_destino ASC, stock_total ASC, ALMACEN primero
+    - KPIs: total_faltantes, skus_unicos, qty_sugerida, desde_almacen, entre_tiendas
+19. **Backend `GET /api/stock-dashboard/reposicion-detalle`**: Distribución SKU por tienda
+20. **Frontend ReposicionTab**: Tab en Stock Dashboard con controles, tabla 14 columnas, drilldown expandible, paginación
 
 ## Key API Endpoints
 - Auth: POST /api/auth/login, /register
 - Dashboard: GET /api/stock-dashboard/cube, /detail, /filter-options-v2
+- Reposición: GET /api/stock-dashboard/reposicion, /reposicion-detalle
 - Sync: POST /api/odoo-sync/run, GET /api/odoo-sync/job-status
 - CRM: /api/cuentas, /contactos, /catalogo
 
 ## Backlog
 ### P1
 - Persist filter + selection state in URL query string
-- UI for paginated "Detalle de Stock" table (backend exists)
+- UI for paginated "Detalle de Stock" table improvements
 ### P2
 - "Por Arreglar" filter (pending data source)
 - Refactor `server.py` into multiple router files
+- CSV export for replenishment recommendations
