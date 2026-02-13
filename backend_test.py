@@ -392,7 +392,8 @@ class CRMAPITester:
                 self.log_result("Vincular Contacto", False, "No cuentas available for testing")
                 return False
             
-            cuenta_id = cuentas_data['items'][0]['id']
+            # Use cuenta_partner_odoo_id instead of id
+            cuenta_id = cuentas_data['items'][0]['cuenta_partner_odoo_id']
             
             # Get an unlinked partner to test with
             unlinked_response = requests.get(f"{self.base_url}/partners/unlinked", headers=headers, params={"q": "GARCIA", "pageSize": 1}, timeout=10)
