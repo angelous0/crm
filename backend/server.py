@@ -491,50 +491,61 @@ contactos_router = APIRouter(prefix="/api/contactos", tags=["contactos"])
 
 
 @contactos_router.get("")
-async def get_contactos(search: str = "", page: int = 1, limit: int = 50, user=Depends(get_current_user)):
+async def get_contactos(
+    search: str = "", page: int = 1, limit: int = 50,
+    solo_dni: bool = False, solo_telefono: bool = False,
+    user=Depends(get_current_user)
+):
+    """List ALL odoo.res_partner (GLOBAL, active) with 'cuenta asignada' from v_partner_account_final"""
     p = await get_pool()
     async with p.acquire() as conn:
         offset = (page - 1) * limit
         try:
-            rp_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='res_partner')")
-            if rp_exists:
-                rp_cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'")
-                rp_col_names = [r['column_name'] for r in rp_cols]
-                has_ck = 'company_key' in rp_col_names
-                ck_filter = "AND rp.company_key = 'GLOBAL'" if has_ck else ""
+            where = "WHERE rp.company_key = 'GLOBAL' AND COALESCE(rp.active, true) = true"
+            params = []
 
-                where = "WHERE 1=1"
-                params = []
-                if search:
-                    params.append(f"%{search}%")
-                    where += f" AND (rp.name ILIKE ${len(params)} OR c.whatsapp ILIKE ${len(params)})"
+            if search:
+                search_parts = [f"rp.name ILIKE ${len(params)+1}"]
+                params.append(f"%{search}%")
+                idx = len(params)
+                search_parts.append(f"COALESCE(rp.vat,'') ILIKE ${idx}")
+                search_parts.append(f"COALESCE(rp.phone::text,'') ILIKE ${idx}")
+                search_parts.append(f"COALESCE(rp.mobile::text,'') ILIKE ${idx}")
+                where += f" AND ({' OR '.join(search_parts)})"
 
-                count = await conn.fetchval(
-                    f"SELECT COUNT(*) FROM crm.contacto c LEFT JOIN odoo.res_partner rp ON rp.odoo_id = c.contacto_partner_odoo_id {ck_filter} {where}",
-                    *params
-                )
-                params.extend([limit, offset])
-                rows = await conn.fetch(
-                    f"""SELECT c.*, 
-                        COALESCE(rp.name, 'Sin nombre') as partner_nombre,
-                        COALESCE(rp.phone::text, '') as partner_phone,
-                        COALESCE(rp.mobile::text, '') as partner_mobile,
-                        '' as partner_email
-                    FROM crm.contacto c 
-                    LEFT JOIN odoo.res_partner rp ON rp.odoo_id = c.contacto_partner_odoo_id {ck_filter}
-                    {where}
-                    ORDER BY rp.name
-                    LIMIT ${len(params)-1} OFFSET ${len(params)}""",
-                    *params
-                )
-                return {"items": records_to_list(rows), "total": count, "page": page}
-            else:
-                count = await conn.fetchval("SELECT COUNT(*) FROM crm.contacto")
-                rows = await conn.fetch(
-                    "SELECT * FROM crm.contacto ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                    limit, offset
-                )
-                return {"items": records_to_list(rows), "total": count, "page": page}
+            if solo_dni:
+                where += " AND rp.vat IS NOT NULL AND rp.vat <> ''"
+            if solo_telefono:
+                where += " AND (rp.phone IS NOT NULL AND rp.phone::text <> '' OR rp.mobile IS NOT NULL AND rp.mobile::text <> '')"
+
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM odoo.res_partner rp {where}", *params
+            )
+
+            data_params = params.copy()
+            data_params.extend([limit, offset])
+            rows = await conn.fetch(
+                f"""SELECT
+                    rp.odoo_id,
+                    rp.name,
+                    COALESCE(rp.vat, '') as vat,
+                    COALESCE(rp.phone::text, '') as phone,
+                    COALESCE(rp.mobile::text, '') as mobile,
+                    COALESCE(rp.city::text, '') as city,
+                    m.cuenta_partner_odoo_id,
+                    CASE WHEN m.cuenta_partner_odoo_id = rp.odoo_id THEN NULL
+                         ELSE rp_cuenta.name END as cuenta_nombre
+                FROM odoo.res_partner rp
+                LEFT JOIN crm.v_partner_account_final m ON m.contacto_partner_odoo_id = rp.odoo_id
+                LEFT JOIN odoo.res_partner rp_cuenta
+                    ON rp_cuenta.odoo_id = m.cuenta_partner_odoo_id
+                    AND rp_cuenta.company_key = 'GLOBAL'
+                {where}
+                ORDER BY rp.name
+                LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
+                *data_params
+            )
+            return {"items": records_to_list(rows), "total": count, "page": page}
         except Exception as e:
             logger.error(f"Error fetching contactos: {e}")
             return {"items": [], "total": 0, "page": page, "error": str(e)}
