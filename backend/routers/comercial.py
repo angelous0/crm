@@ -179,6 +179,7 @@ async def comercial_detail(
     doc_tipo: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
+    user=Depends(_get_auth_dep()),
 ):
     pool = await get_pool()
     params = []
