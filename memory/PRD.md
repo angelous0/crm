@@ -13,35 +13,44 @@ Build a "Stock Dashboard" with a "Power BI Feel" for a B2B CRM application integ
 ```
 /app
 ├── backend/
-│   ├── server.py        # Main FastAPI app, auth, dashboard endpoints
-│   ├── db.py            # DB connection, views creation
+│   ├── server.py
+│   ├── db.py
 │   └── routers/
 │       ├── odoo_sync.py
-│       ├── stock_balance.py  # Balance de Tallas endpoints
-│       └── reposicion_v2.py  # Reposicion SKU endpoints
+│       ├── stock_balance.py
+│       ├── reposicion.py
+│       └── comercial.py       # NEW: Ventas y Reservas
 ├── frontend/
 │   ├── src/
 │   │   ├── App.js
 │   │   ├── lib/api.js
+│   │   ├── components/Layout.jsx
 │   │   └── pages/
 │   │       ├── StockDashboard.jsx
 │   │       ├── ReposicionTab.jsx
 │   │       ├── BalanceTallas.jsx
-│   │       └── ... (Dashboard, Login, Catalogo, etc.)
+│   │       └── ComercialPage.jsx  # NEW: Ventas y Reservas
 ```
 
+## Key Database Views
+- `crm.v_stock_dashboard_base` - Stock dashboard data
+- `crm.v_stock_balance_flat` - Balance de tallas
+- `crm.v_comercial_mov_flat` - NEW: Unified sales + unused reservations
+
 ## Completed Features
-1. **Stock Dashboard** - Interactive cross-filtering dashboard with store panels, modelo x talla matrix
-2. **Reposicion Module v2** - SKU-level summary with drill-down to models, allocation recommendations
-3. **Balance de Tallas** - Size matrix report with color drill-down, in-memory processing optimization
+1. **Stock Dashboard** - Interactive cross-filtering dashboard with store panels
+2. **Reposicion Module v2** - SKU-level summary with drill-down
+3. **Balance de Tallas** - Size matrix report with color drill-down
 4. **Authentication** - JWT-based login/register
 5. **Odoo Sync** - Stock quants synchronization
-
-## P0 Bug Investigation (Feb 2026)
-- User reported "stock dashboard not loading"
-- Investigation: Could NOT reproduce. All features working correctly
-- Testing: Backend 27/27 tests pass, Frontend all pages verified
-- Likely cause: transient issue (session expiry, network, or cache)
+6. **Ventas y Reservas** (Feb 2026) - NEW
+   - View: crm.v_comercial_mov_flat joining v_pos_line_full + res_partner + product_template
+   - SALE filter: non-cancelled, non-reservation
+   - RESERVA filter: non-cancelled, reservation=true, unused (reserva_use_id=0)
+   - 3 endpoints: /api/comercial/summary, /filter-options, /detail
+   - Parallel async queries with asyncio.gather
+   - Frontend: tabs, date/catalog filters, KPIs, top 10 tables, paginated detail
+   - Testing: Backend 15/15 (100%), Frontend 100%
 
 ## Backlog
 ### P1
@@ -52,3 +61,4 @@ Build a "Stock Dashboard" with a "Power BI Feel" for a B2B CRM application integ
 ### P2
 - Implement "Por Arreglar" filter
 - Fix recurring automated login test failure
+- Add tienda info to comercial view if pos_session/pos_config become available
