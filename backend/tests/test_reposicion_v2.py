@@ -7,7 +7,7 @@ import requests
 import os
 from collections import defaultdict
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://stock-attenuation.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://stock-reposicion.preview.emergentagent.com').rstrip('/')
 
 
 @pytest.fixture(scope="module")
