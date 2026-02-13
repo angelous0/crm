@@ -2193,6 +2193,204 @@ async def stock_detalle(
             return {"items": [], "total": 0, "page": page}
 
 
+# ─── ODOO SYNC ROUTER ────────────────────────────────────────────────────────
+
+sync_router = APIRouter(prefix="/api/odoo-sync", tags=["odoo-sync"])
+
+_sync_running = False
+
+
+def _xmlrpc_fetch_stock_quants(url, db, uid, password, last_cursor, chunk_size):
+    """Synchronous XML-RPC call to fetch stock.quant records (runs in thread)."""
+    models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object", allow_none=True)
+    domain = []
+    if last_cursor:
+        cursor_str = last_cursor.strftime('%Y-%m-%d %H:%M:%S')
+        domain.append(['write_date', '>', cursor_str])
+    records = models.execute_kw(
+        db, uid, password, 'stock.quant', 'search_read',
+        [domain],
+        {'fields': ['product_id', 'location_id', 'quantity', 'reserved_quantity',
+                     'in_date', 'create_date', 'create_uid', 'write_date', 'write_uid'],
+         'limit': chunk_size}
+    )
+    return records
+
+
+def _parse_dt(val):
+    if not val or val is False:
+        return None
+    return datetime.strptime(val, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+
+
+def _parse_m2o(val):
+    """Parse Odoo many2one field: [id, name] or False."""
+    if isinstance(val, (list, tuple)) and len(val) >= 1:
+        return val[0]
+    if isinstance(val, int):
+        return val
+    return None
+
+
+async def _do_stock_sync(pool, run_id):
+    """Background task: fetch from Odoo XML-RPC → upsert to PG."""
+    global _sync_running
+    try:
+        async with pool.acquire() as conn:
+            config = await conn.fetchrow("""
+                SELECT url, db_name, username, password
+                FROM finanzas3.x_odoo_config
+                WHERE config_key='ambission' AND activo=true LIMIT 1
+            """)
+            if not config:
+                raise Exception("No se encontró configuración Odoo activa")
+
+            job = await conn.fetchrow(
+                "SELECT last_cursor, chunk_size FROM odoo.sync_job WHERE job_code='STOCK_QUANTS'"
+            )
+            last_cursor = job['last_cursor']
+            chunk_size = job['chunk_size'] or 5000
+
+            url = config['url']
+            common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
+            uid = await asyncio.to_thread(
+                common.authenticate, config['db_name'], config['username'], config['password'], {}
+            )
+            if not uid:
+                raise Exception("Autenticación con Odoo falló")
+
+            records = await asyncio.to_thread(
+                _xmlrpc_fetch_stock_quants, url, config['db_name'], uid,
+                config['password'], last_cursor, chunk_size
+            )
+
+            rows_upserted = 0
+            max_wd = last_cursor
+            for rec in records:
+                wd = _parse_dt(rec.get('write_date'))
+                cd = _parse_dt(rec.get('create_date'))
+                ind = _parse_dt(rec.get('in_date'))
+                pid = _parse_m2o(rec.get('product_id'))
+                lid = _parse_m2o(rec.get('location_id'))
+                cuid = _parse_m2o(rec.get('create_uid'))
+                wuid = _parse_m2o(rec.get('write_uid'))
+
+                await conn.execute("""
+                    INSERT INTO odoo.stock_quant
+                        (company_key, odoo_id, product_id, location_id, qty, reserved_qty,
+                         in_date, odoo_create_date, odoo_create_uid, odoo_write_date, odoo_write_uid, synced_at)
+                    VALUES ('GLOBAL', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+                    ON CONFLICT (company_key, odoo_id) DO UPDATE SET
+                        product_id=EXCLUDED.product_id, location_id=EXCLUDED.location_id,
+                        qty=EXCLUDED.qty, reserved_qty=EXCLUDED.reserved_qty,
+                        in_date=EXCLUDED.in_date, odoo_write_date=EXCLUDED.odoo_write_date,
+                        odoo_write_uid=EXCLUDED.odoo_write_uid, synced_at=now()
+                """, rec['id'], pid, lid,
+                    rec.get('quantity', 0) or 0, rec.get('reserved_quantity', 0) or 0,
+                    ind, cd, cuid, wd, wuid)
+                rows_upserted += 1
+                if wd and (not max_wd or wd > max_wd):
+                    max_wd = wd
+
+            await conn.execute("""
+                UPDATE odoo.sync_run_log
+                SET ended_at=now(), status='OK', rows_upserted=$1, rows_updated=0
+                WHERE id=$2
+            """, rows_upserted, run_id)
+
+            if max_wd and max_wd != last_cursor:
+                await conn.execute("""
+                    UPDATE odoo.sync_job
+                    SET last_run_at=now(), last_success_at=now(), last_error=NULL, last_cursor=$1
+                    WHERE job_code='STOCK_QUANTS'
+                """, max_wd)
+            else:
+                await conn.execute("""
+                    UPDATE odoo.sync_job
+                    SET last_run_at=now(), last_success_at=now(), last_error=NULL
+                    WHERE job_code='STOCK_QUANTS'
+                """)
+
+            logger.info(f"STOCK_QUANTS sync done: {rows_upserted} rows")
+
+    except Exception as e:
+        logger.error(f"STOCK_QUANTS sync failed: {e}")
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    UPDATE odoo.sync_run_log SET ended_at=now(), status='FAILED', error_message=$1 WHERE id=$2
+                """, str(e)[:2000], run_id)
+                await conn.execute("""
+                    UPDATE odoo.sync_job SET last_run_at=now(), last_error=$1 WHERE job_code='STOCK_QUANTS'
+                """, str(e)[:2000])
+        except Exception:
+            pass
+    finally:
+        _sync_running = False
+
+
+class SyncRunInput(BaseModel):
+    job_code: str
+
+
+@sync_router.post("/run")
+async def odoo_sync_run(body: SyncRunInput, user=Depends(get_current_user)):
+    global _sync_running
+    if _sync_running:
+        raise HTTPException(409, "Ya hay un sync en progreso")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        job = await conn.fetchrow("SELECT * FROM odoo.sync_job WHERE job_code=$1", body.job_code)
+        if not job:
+            raise HTTPException(404, "Job no encontrado")
+        if not job['enabled']:
+            raise HTTPException(409, "Job deshabilitado")
+
+        run_id = await conn.fetchval("""
+            INSERT INTO odoo.sync_run_log (job_code, company_key, started_at, status)
+            VALUES ($1, $2, now(), 'RUNNING') RETURNING id
+        """, body.job_code, job.get('company_scope', 'GLOBAL') or 'GLOBAL')
+
+    _sync_running = True
+    asyncio.create_task(_do_stock_sync(pool, run_id))
+    return {"ok": True, "run_id": run_id, "status": "RUNNING"}
+
+
+@sync_router.get("/job-status")
+async def odoo_sync_status(job_code: str = "STOCK_QUANTS", user=Depends(get_current_user)):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        job = await conn.fetchrow("SELECT * FROM odoo.sync_job WHERE job_code=$1", job_code)
+        if not job:
+            raise HTTPException(404, "Job no encontrado")
+
+        last_run = await conn.fetchrow("""
+            SELECT id, started_at, ended_at, status, rows_upserted, rows_updated, error_message
+            FROM odoo.sync_run_log WHERE job_code=$1 ORDER BY started_at DESC LIMIT 1
+        """, job_code)
+
+        return {
+            "job": {
+                "job_code": job['job_code'],
+                "enabled": job['enabled'],
+                "last_run_at": job['last_run_at'].isoformat() if job['last_run_at'] else None,
+                "last_success_at": job['last_success_at'].isoformat() if job['last_success_at'] else None,
+                "last_error": job['last_error'],
+                "last_cursor": job['last_cursor'].isoformat() if job['last_cursor'] else None,
+            },
+            "last_run": {
+                "id": last_run['id'],
+                "started_at": last_run['started_at'].isoformat(),
+                "ended_at": last_run['ended_at'].isoformat() if last_run['ended_at'] else None,
+                "status": last_run['status'],
+                "rows_upserted": last_run['rows_upserted'],
+                "rows_updated": last_run['rows_updated'],
+                "error_message": last_run['error_message'],
+            } if last_run else None,
+        }
+
+
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 
 app.include_router(auth_router)
@@ -2205,3 +2403,4 @@ app.include_router(ventas_router)
 app.include_router(bootstrap_router)
 app.include_router(partners_router)
 app.include_router(stock_dash_router)
+app.include_router(sync_router)
