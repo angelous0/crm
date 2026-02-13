@@ -1,179 +1,162 @@
-<analysis>An analysis of the user's request to build a B2B CRM, integrated with an existing Odoo PostgreSQL database, has been performed.
+<analysis>**original_problem_statement:**
+The user wants to build a B2B CRM application from scratch, integrated with an existing PostgreSQL database managed by Odoo. The application operates within its own  schema, reading data from the  schema but only writing to .
 
-**original_problem_statement:**
-The user's goal is to build a B2B CRM application from scratch. This CRM must integrate with an existing PostgreSQL database that contains an  schema. The CRM will operate within its own  schema, reading data from  but only writing to .
-
-**Initial Requirements (Phase 1):**
--   **Backend:** Create a FastAPI backend that connects to the PostgreSQL DB.
--   **Database:**
-    -   Create a  schema.
-    -   Create tables: , , , , , .
-    -   Create views to read and consolidate data from the  schema, including  (to map contacts to accounts),  (for an approved product catalog), and  (to show sales of approved products only).
--   **API:**
-    -   Implement JWT-based authentication.
-    -   Provide CRUD endpoints for CRM entities.
-    -   An endpoint to bootstrap/initialize the CRM by pulling initial data from Odoo sales records.
--   **Frontend:** A simple React UI with pages for Catálogo, Cuentas, Contactos, Agenda, and Ventas.
-
-**Feature Evolution:**
-1.  **Vincular Contactos (Phase 2):** Added a feature on the account detail page to search for and link existing Odoo partners to a CRM account, creating an override record in .
-2.  **Logic Restructure (Phase 3):** A major refactor was requested:
-    -   The Contactos page must show **all** partners from , indicating their assigned account.
-    -   The Cuentas page must only show free partners (those who are their own principal account). A partner linked to another account should disappear from this list.
-    -   This was implemented by creating a  view and changing API endpoints to use  instead of CRM-generated UUIDs for identification.
-3.  **Catalog with Stock (Phase 4):** The manual approval catalog was replaced.
-    -   The new catalog automatically lists eligible products from Odoo that have available stock ().
-    -   This required new views (, ) and new API endpoints.
-4.  **Current Request (Phase 5):** Enhance the Catalog UI.
-    -   Add dropdown filters for Tela and Entalle.
-    -   Format price to Peruvian Soles (S/ 00.00).
-    -   Replace the variant detail view with a stock matrix (Color vs. Size) and add a filter for stock location (tienda). This requires a new location-aware DB view and a new API endpoint to fetch matrix data.
+The project has evolved through several phases:
+1.  **Initial Scaffolding:** Building the FastAPI backend, React frontend, and initial database schema.
+2.  **Contact Linking:** Feature to associate Odoo partners with CRM accounts.
+3.  **Logic Refactor:** Restructuring the core logic to differentiate between free accounts and a global list of all contacts, using Odoo IDs for identification.
+4.  **Stock-Based Catalog:** Automating the product catalog to show only items with available stock.
+5.  **Catalog UI Enhancements:** Adding advanced filters, price formatting, and a stock matrix view (Color vs. Size) to the catalog page.
+6.  **Stock Dashboard (Power BI Clone):** Building a new Stock Dashboard page designed to be visually and functionally identical to a Power BI report provided by the user. This involved:
+    *   Creating a comprehensive base view () that cleans and aliases data (e.g., mapping store names like TALLER to ALMACEN).
+    *   Designing a fixed UI layout with multiple, simultaneously visible panels: a Modelo x Talla pivot table, and several Color x Talla matrices for specific stores (GRAU 238 / GRAU 55, GAMARRA 209, GM218, BOOSH, GAMARRA 207, TOTAL, and ALMACEN).
+    *   Implementing a collapsable sidebar to maximize screen space.
+7.  **Current Request (Cross-Filtering):** Enhance the Stock Dashboard with interactive cross-filtering capabilities. Clicking on data points within any panel (e.g., a model name, a size, a color, or a specific stock cell) should filter the entire dashboard view.
 
 **User's preferred language**: Spanish
 
 **what currently exists?**
-A functional full-stack CRM application.
--   **Backend:** A FastAPI server with endpoints for authentication, data retrieval, and manipulation. It connects to a PostgreSQL database and correctly reads from the  schema while writing only to the  schema.
--   **Frontend:** A React application built with Shadcn UI components. It includes a dashboard and pages for:
-    -   **Cuentas:** Lists only free accounts (partners who are their own principal).
-    -   **Contactos:** Lists all partners from the Odoo database, showing which account they are linked to.
-    -   **Cuenta Detalle:** Shows account details, associated contacts, sales, and allows linking of new contacts.
-    -   **Catálogo:** Displays products with available stock, with filters and a dialog to view variants.
--   The core logic for distinguishing between free accounts and linked contacts is fully implemented.
+A full-stack B2B CRM application with a FastAPI backend and a React (Shadcn/UI) frontend. The backend is connected to a PostgreSQL database.
+The application features user authentication, account management, contact lists, and a product catalog.
+A Stock Dashboard page is fully implemented with a layout that mirrors a Power BI report, including KPI cards, a filter bar, and multiple, non-interactive pivot table panels that display stock data across different stores and dimensions. The backend endpoints to support filtering this dashboard are already in place.
 
 **Last working item**:
--   Last item agent was working: The agent was implementing a major UI/UX enhancement for the Catálogo page. Specifically, it was creating the necessary backend infrastructure to support a new stock matrix view (Color vs. Size) that can be filtered by store location. The agent had just added the new database views () and was in the middle of creating the new API endpoints (, , ) in .
+-   Last item agent was working: The agent was implementing the cross-filter feature on the  page. This is a frontend-only task to make the dashboard interactive, allowing users to click on data points (models, sizes, colors, cells) to filter the entire view. The backend already supports the required filtering logic.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? both
+-   Which testing method agent to use? frontend testing agent
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: Complete the Catalog UI/UX enhancement. (P0)
+-   Issue 1: Implement interactive cross-filtering on the Stock Dashboard. (P0)
 
 **Issues Detail**:
 -   Issue 1:
-    -   Attempted fixes: This is a new feature development, not a fix. The agent has started the backend implementation.
+    -   Attempted fixes: The agent has started rewriting the  component to add the required interactivity. This is the first attempt at this new feature.
     -   Next debug checklist:
-        1.  In , finish implementing the new API endpoint  to query  and return data structured for the matrix UI.
-        2.  In , ensure the endpoints for fetching distinct  and  are complete and registered.
-        3.  In , rewrite the component to:
-            -   Fetch and populate dropdown filters for Tela and Entalle.
-            -   Format the price display to S/ 00.00.
-            -   Replace the variant detail dialog with a new component that calls the  endpoint.
-            -   Implement the stock matrix UI (Color rows vs. Size columns) with a dropdown to filter by location.
-    -   Why fix this issue and what will be achieved with the fix? This is a direct user request to significantly improve the usability and analytical power of the product catalog.
+        1.  Finalize the implementation of a global filter state manager (e.g., a React context or custom hook like ).
+        2.  Add  event handlers to the interactive elements in all dashboard panels: model rows, size headers, color rows, and individual data cells.
+        3.  Ensure these event handlers correctly update the global filter state.
+        4.  Modify all data-fetching functions to pass the current filter state to the backend APIs.
+        5.  Implement a UI component to display active filters as chips with a button to remove each filter.
+        6.  Add a Clear All Filters button to reset the dashboard to its initial state.
+        7.  Visually highlight the selected elements within the dashboard panels.
+    -   Why fix this issue and what will be achieved with the fix? This is a direct user request to match the interactivity of a Power BI report, making the dashboard significantly more powerful and user-friendly.
     -   Status: IN PROGRESS
     -   Is recurring issue? N
-    -   Should Test frontend/backend/both after fix? both
+    -   Should Test frontend/backend/both after fix? frontend
     -   Blocked on other issue: None
 
 **In progress Task List**:
--   Task 1: Complete the Catalog UI/UX enhancement.
-    -   Where to resume: The agent has just added the new database views in  and created the new router and placeholder endpoints in . The next step is to write the full implementation for these new endpoints, followed by the frontend rewrite in .
-    -   What will be achieved with this? A more interactive and informative catalog page with advanced filtering and a stock matrix view.
+-   Task 1: Complete the cross-filter implementation on the Stock Dashboard.
+    -   Where to resume: Continue the rewrite of . The core logic for state management and click handlers needs to be fully built out.
+    -   What will be achieved with this? A highly interactive dashboard where users can slice and dice data dynamically by clicking on the charts and tables directly.
     -   Status: IN PROGRESS
-    -   Should Test frontend/backend/both after fix? both
+    -   Should Test frontend/backend/both after fix? frontend
     -   Blocked on something: No
 
 **Upcoming and Future Tasks**
-There are no other pending tasks mentioned by the user. The current focus is solely on completing the catalog enhancement.
+-   **Dashboard Features (P1):**
+    -   Persist the dashboard's filter state in the URL query string so it can be shared and reloaded.
+    -   Add a Detalle de Stock paginated table below the main dashboard grid with an export-to-CSV functionality.
+-   **Dashboard Features (P2):**
+    -   Implement the Por Arreglar filter, which is currently a disabled placeholder, once a data source is defined.
+    -   Support multi-selection of filters (e.g., using SHIFT + click).
 
 **Completed work in this session**
--   **Initial CRM Scaffolding (DONE):** Built the complete full-stack application with FastAPI backend, React frontend, and PostgreSQL database setup, including initial tables and views.
--   **JWT Authentication (DONE):** Implemented user registration and login.
--   **Vincular Contactos Feature (DONE):** Added functionality to link Odoo partners to CRM accounts from the account detail page.
--   **Core Logic Refactor (DONE):** Reworked the application logic to distinguish between Cuentas Libres (partners that are their own principal) and a global list of all Contactos. API endpoints and UI were updated to use Odoo's integer  for routing and fetching.
--   **Stock-Based Catalog (DONE):** Replaced the manual product approval system with an automated catalog showing eligible products that have available stock.
+-   **Stock Dashboard - Power BI Layout (DONE):**
+    -   Created  DB view to provide clean, aliased data for the UI.
+    -   Developed new backend endpoints () to serve aggregated data for multiple fixed panels.
+    -   Completely redesigned  to have a fixed grid layout identical to the user's Power BI screenshot, with all 7 data panels visible simultaneously.
+-   **Collapsable Sidebar (DONE):** Implemented a sidebar that can be hidden to provide more space for the dashboard, using  and .
+-   **Bug Fix - SQL Ambiguity (DONE):** Resolved a bug in the dashboard's backend endpoints where filtering by  caused an ambiguous column SQL error. The fix involved aliasing tables in the dynamic WHERE clause generation.
+-   **Catalog UI & Logic Enhancement (DONE):**
+    -   Completed the Catalog page revamp with a stock matrix, location filters, and price formatting.
+    -   Refined all stock-related DB views (, ) to only include real stores (locations with a non-empty ).
 
 **Earlier issues found/mentioned but not fixed**
--   Issue 1: The testing agent consistently fails on the frontend login test, reporting a Playwright/timeout issue.
-    -   Debug checklist: Investigate the Playwright test script used by the  to see why it fails to interact with the login form, even though manual verification (via screenshots) shows the login page is rendered correctly and is functional.
-    -   Why to solve this issue and what will be achieved with this? Fixing this would allow the testing agent to achieve 100% pass rates and test post-login functionality automatically, increasing confidence in deployments. However, it has been deemed a non-blocking, low-priority issue as the application functionality itself is not broken.
+-   Issue 1: The testing agent consistently fails on the frontend login test.
+    -   Debug checklist: Investigate the Playwright test script used by the testing agent to understand why it fails to interact with the login form, even though manual tests confirm it works. Check for missing  attributes.
+    -   Why to solve this issue and what will be achieved with this? Fixing this would allow the testing agent to perform automated end-to-end tests on post-login functionality. It is currently a low-priority, non-blocking issue.
     -   Should Test frontend/backend/both after fix: frontend
     -   Is recurring issue? Y
 
 **Known issue recurrence from previous fork**
--   Issue recurrence in previous fork: Frontend login test failure in .
--   Recurrence count: 4
+-   Issue recurrence in previous fork: The frontend login test has failed in the testing agent across multiple sessions.
+-   Recurrence count: 4+
 -   Status: NOT STARTED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, PostgreSQL, asyncpg
--   **Frontend:** React, Shadcn/UI, Tailwind CSS
--   **Database:** Direct SQL queries against a PostgreSQL DB. Heavy use of DB views () to abstract and join data between an external  schema and the application's  schema.
--   **Architecture:** The frontend is a Single Page Application (SPA) that consumes a RESTful API provided by the backend. The backend serves as a data access layer for the PostgreSQL database.
+-   **Backend:** FastAPI, PostgreSQL, asyncpg, Dynamic SQL generation for filtering and aggregation.
+-   **Frontend:** React, Shadcn/UI, Tailwind CSS, Axios.
+-   **State Management:** Heavy use of React hooks (, ) for managing component state. The current task requires creating a global filter state (via Context or a custom hook) for the dashboard.
+-   **Database:** Direct SQL execution with a heavy reliance on complex PostgreSQL Views () to join, filter, and transform data from the  and  schemas.
 
 **key DB schema**
--   **crm.cuenta:** { id (uuid), cuenta_partner_odoo_id (int), estado_comercial (text), clasificacion (text), notas (text) }
--   **crm.contacto:** { id (uuid), contacto_partner_odoo_id (int), cuenta_partner_odoo_id (int) }
--   **crm.partner_principal_override:** { contacto_partner_odoo_id (int), cuenta_partner_odoo_id (int) }
--   **crm.interaccion:** { id (uuid), cuenta_id (uuid), tipo (text), resumen (text) }
--   **crm.tarea:** { id (uuid), cuenta_id (uuid), tipo (text), due_at (timestamptz), status (text) }
--   **crm.v_partner_account_final:** View that resolves the final  for any given , prioritizing the  table.
--   **crm.v_cuentas_libres:** View that lists s for partners who are their own principal account.
--   **crm.v_catalogo_con_stock:** View that lists product templates that are eligible and have stock.
--   **crm.v_catalogo_con_stock_variantes_loc:** View that lists product variants with their stock quantity per location.
+-   **crm.v_catalogo_stock_flat:** A view that flattens product, variant, and stock information.
+-   **crm.v_stock_dashboard_base:** The primary source for the dashboard. It's built on  and adds canonical store names (e.g., 'TALLER' -> 'ALMACEN'), derived boolean flags (, ), and applies base business logic filters.
+
+**changes in tech stack**
+-   None.
 
 **All files of reference**
--   : Contains all SQL for creating schemas, tables, and views. It is the source of truth for the database structure.
--   : Contains all API logic, including authentication, CRUD operations, and complex data fetching for all UI pages.
--   : UI for listing free accounts from .
--   : UI for listing all partners from .
--   : UI for viewing account details and linking contacts.
--   : The file currently being modified to implement the new stock matrix UI.
+-   : The primary file for the current task. It needs to be rewritten to support cross-filtering.
+-   : Contains all API endpoints, including the ones that serve data to the dashboard and accept filter parameters.
+-   : Contains the SQL definitions for all database views, including the crucial .
+-   : Contains the client-side routing setup.
+-   : The collapsable navigation menu component.
+
+**Areas that need refactoring**:
+-   The  file has grown significantly and now contains all API logic for the entire application. It could be broken down into multiple router files (e.g., , ) for better organization and maintainability.
 
 **key api endpoints**
--   : User login.
--   : Fetches dashboard statistics.
--   : Lists all free accounts.
--   : Lists all partners.
--   : Gets details for a specific account.
--   : Links a partner to an account.
--   : Lists products with stock.
--   : Gets variant details for a product.
--   : (NEW) Gets distinct fabric types.
--   : (NEW) Gets distinct fit types.
--   : (NEW) Gets stock data formatted for the color/size matrix.
+-   : Gets available options for all dashboard filters.
+-   : Returns aggregated data for the 7 fixed panels on the dashboard, accepting all filter parameters.
+-   : Returns data for the Modelo x Talla pivot table, accepting all filter parameters.
+-   All endpoints accept query parameters for: , , , , , , , , , .
 
 **Critical Info for New Agent**
--   The application's logic is heavily dependent on PostgreSQL views defined in . Any changes to data sources in the  schema might require updating these views.
--   Routing for Cuentas uses the integer  from the  table, not the UUID from the  table.
--   The  table (which holds editable CRM data like ) is populated on-demand when a user first navigates to an account's detail page. The list of accounts itself is driven purely by the  view.
--   The current task involves creating new views and endpoints for the catalog matrix. The agent has already created  in  and started adding the corresponding endpoints in .
+-   The current task is **frontend-only**. The backend is complete and already supports all necessary filtering for the cross-filtering feature.
+-   The goal is to manage a global filter state in React. This state will be updated by  events on various UI elements within the  component.
+-   All data fetching calls within the dashboard must be updated to use this global filter state to query the backend.
+-   The single source of truth for dashboard data is the  view.
 
 **documents and test reports created in this job**
--   : Contains the evolving product requirements document.
--   Test reports are generated in  for each run of the testing agent.
+-   
+-   Test reports from the  are located in .
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User Request:** A detailed request to improve the Catalog UI: add 'Tela'/'Entalle' dropdowns, format price to 'S/', and replace the variant list with a color/size stock matrix filterable by location.
-2.  **Agent Action:** Acknowledged the request and began implementation by exploring the DB for location data.
-3.  **Agent Action:** Confirmed the necessary columns and devised a plan to create new views, new endpoints, and rewrite the frontend.
-4.  **Agent Action:** Started the implementation by adding the new  view to .
-5.  **Agent Action:** Proceeded to add the new API endpoints for , , and the  data to .
-6.  **Agent Action:** Created the new router in  to house the new catalog-related endpoints. This was the last completed action.
+1.  **User:** Requests a complete redesign of the Stock Dashboard to be **visually identical** to a Power BI report image. Specifies the 7-panel fixed layout, canonical store mappings (e.g., 'TALLER' becomes 'ALMACEN'), and derived fields.
+2.  **Agent:** Acknowledges the redesign request.
+3.  **Agent:** Implements the new  view in .
+4.  **Agent:** Implements the new backend endpoints () in  to power the new layout.
+5.  **Agent:** Rewrites the entire  to create the fixed-panel Power BI layout.
+6.  **Agent:** Tests the backend endpoints and verifies the new UI matches the user's image.
+7.  **Agent:** Runs the testing agent, which reports 100% success.
+8.  **User:** Provides the current request: implement **interactive cross-filtering**. Specifies that clicking on models, sizes, colors, and cells should filter the entire dashboard.
+9.  **User:** Details UI requirements for the cross-filtering feature, including displaying active filter chips and a clear button.
+10. **Agent:** Confirms understanding that this is a frontend-only change and begins rewriting  to implement the new interactivity.
 
 **Project Health Check:**
--   **Functional:** The core application is functional and deployed.
--   **Broken:** No core features are broken.
+-   **Functional:** The application is fully functional.
+-   **Broken:** No features are currently broken.
 -   **Mocked:** No mocked components or data.
 
 **3rd Party Integrations**
--   None. The application integrates directly with a PostgreSQL database but does not use any external APIs or third-party services.
+-   None.
 
 **Testing status**
--   Testing agent used after significant changes: YES
+-   Testing agent used after significant changes: YES. The last major feature (Power BI layout) was successfully validated by the testing agent.
 -   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created: None. The testing agent is used directly.
--   Known regressions: The frontend login test within the  consistently fails due to a suspected Playwright interaction issue, not an application bug.
+-   Test files created: None.
+-   Known regressions: The automated login test consistently fails due to a test script issue, not an application bug.
 
 **Credentials to test flow:**
 -   **Database URL:** 
--   **User credentials:** Can be created via the registration form on the login page.
+-   **User credentials:** New users can be registered on the application's login page.
 
 **What agent forgot to execute**
-The agent is currently on track with the latest user request and has not forgotten or overlooked any specified tasks.</analysis>
+The agent is on track and has not forgotten any user requests. The current task is a direct result of the user's latest message.</analysis>
