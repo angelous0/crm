@@ -311,22 +311,29 @@ async def _create_views(conn):
             logger.info(f"v_pos_line_full columns: {vpl_col_names[:20]}")
 
             # Build the view using v_pos_line_full
-            partner_col = 'partner_id' if 'partner_id' in vpl_col_names else 'NULL'
-            product_tmpl_col = 'product_tmpl_id' if 'product_tmpl_id' in vpl_col_names else 'NULL'
+            # Detect actual column names
+            partner_col = next((c for c in ['contacto_partner_id', 'partner_id'] if c in vpl_col_names), None)
+            tmpl_col = next((c for c in ['product_tmpl_id'] if c in vpl_col_names), None)
+            cuenta_col = next((c for c in ['cuenta_partner_id'] if c in vpl_col_names), None)
 
-            await conn.execute(f"""
-                CREATE OR REPLACE VIEW crm.v_ventas_pos_filtradas AS
-                SELECT 
-                    vpl.*,
-                    f.cuenta_partner_odoo_id as cuenta_partner_id_final
-                FROM odoo.v_pos_line_full vpl
-                LEFT JOIN crm.v_partner_account_final f 
-                    ON f.contacto_partner_odoo_id = vpl.{partner_col}
-                WHERE vpl.{product_tmpl_col} IN (
-                    SELECT product_tmpl_odoo_id FROM crm.producto_aprobado WHERE aprobado = true
-                );
-            """)
-            logger.info("View crm.v_ventas_pos_filtradas created (from v_pos_line_full)")
+            if not partner_col or not tmpl_col:
+                logger.warning(f"v_pos_line_full missing required columns. partner={partner_col}, tmpl={tmpl_col}")
+            else:
+                # Use COALESCE for cuenta: override > existing cuenta_partner_id > self
+                cuenta_expr = f"COALESCE(f.cuenta_partner_odoo_id, vpl.{cuenta_col})" if cuenta_col else "f.cuenta_partner_odoo_id"
+                await conn.execute(f"""
+                    CREATE OR REPLACE VIEW crm.v_ventas_pos_filtradas AS
+                    SELECT 
+                        vpl.*,
+                        {cuenta_expr} as cuenta_partner_id_final
+                    FROM odoo.v_pos_line_full vpl
+                    LEFT JOIN crm.v_partner_account_final f 
+                        ON f.contacto_partner_odoo_id = vpl.{partner_col}
+                    WHERE vpl.{tmpl_col} IN (
+                        SELECT product_tmpl_odoo_id FROM crm.producto_aprobado WHERE aprobado = true
+                    );
+                """)
+                logger.info("View crm.v_ventas_pos_filtradas created (from v_pos_line_full)")
 
         elif has_pos_order_line and has_pos_order:
             # Build from base tables
