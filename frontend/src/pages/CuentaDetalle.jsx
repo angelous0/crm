@@ -139,6 +139,26 @@ export default function CuentaDetalle() {
     }
   };
 
+  // ── Fetch ventas for this cuenta ──
+  const fetchVentas = useCallback(async (pg = 1, docTipo = ventasDocTipo) => {
+    setVentasLoading(true);
+    try {
+      const r = await api.get(`/cuentas/${id}/ventas`, {
+        params: { doc_tipo: docTipo, page: pg, limit: 50 }
+      });
+      setVentas(r.data || { items: [], kpis: {}, has_next: false, debug: {} });
+      setVentasPage(pg);
+    } catch {
+      toast.error("Error cargando ventas");
+    } finally {
+      setVentasLoading(false);
+    }
+  }, [id, ventasDocTipo]);
+
+  useEffect(() => {
+    if (!loading && cuenta) fetchVentas(1, ventasDocTipo);
+  }, [loading, cuenta, ventasDocTipo]); // eslint-disable-line
+
   // ── Vincular contacto logic ──
   const fetchUnlinked = useCallback(async (searchVal, pg, dni, tel) => {
     if (!searchVal || searchVal.length < 2) {
