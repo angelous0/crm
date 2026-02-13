@@ -507,13 +507,33 @@ export default function StockDashboard() {
         <ToggleFilter label="Por Arreglar" value="" onChange={() => {}} disabled />
         <ToggleFilter label="Negro" value={f.negro} onChange={v => sf("negro", v)} />
 
-        {backendKpis && (
-          <div className="ml-auto flex items-center gap-3 text-[10px]">
-            <span className="text-slate-400">Stock: <b className="text-white">{Number(hasSel ? dash.kpis.total_stock : backendKpis.total_stock).toLocaleString("es-PE")}</b></span>
-            <span className="text-slate-400">Modelos: <b className="text-white">{hasSel ? dash.kpis.modelos : backendKpis.modelos}</b></span>
-            <span className="text-slate-400">Variantes: <b className="text-white">{backendKpis.variantes}</b></span>
-          </div>
-        )}
+        <div className="ml-auto flex items-center gap-3 text-[10px]">
+          {lastSync && (
+            <span className="text-slate-500 text-[9px]" data-testid="last-sync-time">
+              Sync: {lastSync.toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          <button
+            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-semibold transition-all ${
+              syncing
+                ? "bg-amber-600 text-white cursor-wait"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+            }`}
+            onClick={startSync}
+            disabled={syncing}
+            data-testid="sync-stock-btn"
+          >
+            <RefreshCw size={11} className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Sincronizando..." : "Actualizar stock"}
+          </button>
+          {backendKpis && (
+            <>
+              <span className="text-slate-400">Stock: <b className="text-white">{Number(hasSel ? dash.kpis.total_stock : backendKpis.total_stock).toLocaleString("es-PE")}</b></span>
+              <span className="text-slate-400">Modelos: <b className="text-white">{hasSel ? dash.kpis.modelos : backendKpis.modelos}</b></span>
+              <span className="text-slate-400">Variantes: <b className="text-white">{backendKpis.variantes}</b></span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── FILTER CHIPS ── */}
