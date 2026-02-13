@@ -327,6 +327,40 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_catalogo_con_stock_variantes: {e}")
 
+    # 3.1f) v_catalogo_con_stock_variantes_loc - variant stock by location
+    try:
+        has_stock_loc = 'v_stock_by_product_location' in odoo_tables
+        if has_stock_loc and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
+            await conn.execute("""
+                CREATE OR REPLACE VIEW crm.v_catalogo_con_stock_variantes_loc AS
+                SELECT
+                    vv.product_tmpl_id,
+                    vv.product_product_id,
+                    vv.barcode,
+                    vv.talla,
+                    vv.color,
+                    s.location_id,
+                    s.available_qty,
+                    s.qty as stock_total,
+                    s.reserved_qty
+                FROM odoo.v_stock_by_product_location s
+                JOIN odoo.v_product_variant_flat vv
+                    ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
+                JOIN odoo.product_template pt
+                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
+                WHERE s.available_qty > 0
+                    AND pt.sale_ok = true
+                    AND pt.purchase_ok = false
+                    AND pt.name NOT ILIKE '%correa%'
+                    AND pt.name NOT ILIKE '%saco%'
+                    AND pt.name NOT ILIKE '%bolsa%';
+            """)
+            logger.info("View crm.v_catalogo_con_stock_variantes_loc created")
+        else:
+            logger.warning("Missing tables for v_catalogo_con_stock_variantes_loc")
+    except Exception as e:
+        logger.warning(f"Could not create v_catalogo_con_stock_variantes_loc: {e}")
+
     # 3.2) v_productos_elegibles
     try:
         if 'product_template' in odoo_tables:
