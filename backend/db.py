@@ -183,41 +183,80 @@ async def _create_views(conn):
         logger.warning(f"Could not query odoo schema: {e}")
         return
 
-    # 3.1) v_partner_account_final
+    # 3.1) v_partner_account_final - MUST cover ALL odoo partners
     try:
         if 'v_partner_account_map' in odoo_tables:
             await conn.execute("""
                 CREATE OR REPLACE VIEW crm.v_partner_account_final AS
                 SELECT 
-                    cp.cid as contacto_partner_odoo_id,
+                    p.odoo_id as contacto_partner_odoo_id,
                     COALESCE(
                         ov.cuenta_partner_odoo_id,
                         mp.cuenta_partner_id,
-                        cp.cid
+                        p.odoo_id
                     ) as cuenta_partner_odoo_id
-                FROM (
-                    SELECT contacto_partner_id as cid FROM odoo.v_partner_account_map
-                    UNION
-                    SELECT contacto_partner_odoo_id as cid FROM crm.partner_principal_override
-                ) cp
+                FROM odoo.res_partner p
                 LEFT JOIN crm.partner_principal_override ov 
-                    ON ov.contacto_partner_odoo_id = cp.cid
+                    ON ov.contacto_partner_odoo_id = p.odoo_id
                 LEFT JOIN odoo.v_partner_account_map mp 
-                    ON mp.contacto_partner_id = cp.cid;
+                    ON mp.contacto_partner_id = p.odoo_id
+                WHERE p.company_key = 'GLOBAL'
+                  AND COALESCE(p.active, true) = true;
             """)
-            logger.info("View crm.v_partner_account_final created")
+            logger.info("View crm.v_partner_account_final created (ALL odoo partners)")
         else:
-            # Fallback: just use overrides and self-mapping
             await conn.execute("""
                 CREATE OR REPLACE VIEW crm.v_partner_account_final AS
                 SELECT 
-                    contacto_partner_odoo_id,
-                    cuenta_partner_odoo_id
-                FROM crm.partner_principal_override;
+                    p.odoo_id as contacto_partner_odoo_id,
+                    COALESCE(
+                        ov.cuenta_partner_odoo_id,
+                        p.odoo_id
+                    ) as cuenta_partner_odoo_id
+                FROM odoo.res_partner p
+                LEFT JOIN crm.partner_principal_override ov 
+                    ON ov.contacto_partner_odoo_id = p.odoo_id
+                WHERE p.company_key = 'GLOBAL'
+                  AND COALESCE(p.active, true) = true;
             """)
-            logger.info("View crm.v_partner_account_final created (fallback, no odoo map)")
+            logger.info("View crm.v_partner_account_final created (no odoo map)")
     except Exception as e:
         logger.warning(f"Could not create v_partner_account_final: {e}")
+
+    # 3.1b) v_cuentas_libres - partners whose principal IS themselves
+    try:
+        await conn.execute("""
+            CREATE OR REPLACE VIEW crm.v_cuentas_libres AS
+            SELECT
+                p.odoo_id AS cuenta_partner_odoo_id
+            FROM odoo.res_partner p
+            JOIN crm.v_partner_account_final m
+                ON m.contacto_partner_odoo_id = p.odoo_id
+            WHERE p.company_key = 'GLOBAL'
+                AND COALESCE(p.active, true) = true
+                AND m.cuenta_partner_odoo_id = p.odoo_id;
+        """)
+        logger.info("View crm.v_cuentas_libres created")
+    except Exception as e:
+        logger.warning(f"Could not create v_cuentas_libres: {e}")
+
+    # 3.1c) v_contactos_vinculados - partners whose principal is NOT themselves
+    try:
+        await conn.execute("""
+            CREATE OR REPLACE VIEW crm.v_contactos_vinculados AS
+            SELECT
+                p.odoo_id AS contacto_partner_odoo_id,
+                m.cuenta_partner_odoo_id
+            FROM odoo.res_partner p
+            JOIN crm.v_partner_account_final m
+                ON m.contacto_partner_odoo_id = p.odoo_id
+            WHERE p.company_key = 'GLOBAL'
+                AND COALESCE(p.active, true) = true
+                AND m.cuenta_partner_odoo_id <> p.odoo_id;
+        """)
+        logger.info("View crm.v_contactos_vinculados created")
+    except Exception as e:
+        logger.warning(f"Could not create v_contactos_vinculados: {e}")
 
     # 3.2) v_productos_elegibles
     try:
