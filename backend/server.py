@@ -380,45 +380,28 @@ async def update_cuenta(cuenta_id: str, data: CuentaUpdateInput, user=Depends(ge
 
 @cuentas_router.get("/{cuenta_id}/contactos")
 async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
+    """Get all partners whose v_partner_account_final.cuenta = this cuenta"""
     p = await get_pool()
     async with p.acquire() as conn:
-        cuenta = await conn.fetchrow("SELECT cuenta_partner_odoo_id FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
-        if not cuenta:
-            raise HTTPException(404, "Cuenta no encontrada")
+        odoo_id = int(cuenta_id)
 
-        rows = await conn.fetch(
-            "SELECT * FROM crm.contacto WHERE cuenta_partner_odoo_id = $1 ORDER BY created_at",
-            cuenta['cuenta_partner_odoo_id']
-        )
-        items = records_to_list(rows)
+        rows = await conn.fetch("""
+            SELECT
+                rp.odoo_id as contacto_partner_odoo_id,
+                rp.name as partner_nombre,
+                COALESCE(rp.phone::text, '') as partner_phone,
+                COALESCE(rp.mobile::text, '') as partner_mobile,
+                COALESCE(c.whatsapp, '') as whatsapp,
+                COALESCE(c.rol, '') as rol
+            FROM crm.v_partner_account_final m
+            JOIN odoo.res_partner rp ON rp.odoo_id = m.contacto_partner_odoo_id AND rp.company_key='GLOBAL'
+            LEFT JOIN crm.contacto c ON c.contacto_partner_odoo_id = m.contacto_partner_odoo_id
+            WHERE m.cuenta_partner_odoo_id = $1
+              AND m.contacto_partner_odoo_id <> $1
+            ORDER BY rp.name
+        """, odoo_id)
 
-        # Enrich with odoo partner data
-        try:
-            rp_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='res_partner')")
-            if rp_exists:
-                rp_cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'")
-                rp_col_names = [r['column_name'] for r in rp_cols]
-                has_ck = 'company_key' in rp_col_names
-                # Build safe SELECT list based on available columns
-                select_cols = ['name']
-                if 'phone' in rp_col_names: select_cols.append('phone')
-                if 'mobile' in rp_col_names: select_cols.append('mobile')
-                select_str = ', '.join(select_cols)
-                for item in items:
-                    ck_filter = "AND company_key = 'GLOBAL'" if has_ck else ""
-                    partner = await conn.fetchrow(
-                        f"SELECT {select_str} FROM odoo.res_partner WHERE odoo_id = $1 {ck_filter} LIMIT 1",
-                        item['contacto_partner_odoo_id']
-                    )
-                    if partner:
-                        item['partner_nombre'] = partner.get('name', '')
-                        item['partner_phone'] = partner.get('phone', '')
-                        item['partner_mobile'] = partner.get('mobile', '')
-                        item['partner_email'] = ''
-        except Exception as e:
-            logger.warning(f"Could not enrich contactos: {e}")
-
-        return items
+        return records_to_list(rows)        return items
 
 
 @cuentas_router.get("/{cuenta_id}/ventas")
