@@ -824,6 +824,185 @@ async def inicializar_crm(user=Depends(get_current_user)):
             raise HTTPException(500, f"Error en inicializacion: {str(e)}")
 
 
+# ─── PARTNERS (UNLINKED) ROUTES ────────────────────────────────────────────────
+
+partners_router = APIRouter(prefix="/api/partners", tags=["partners"])
+
+
+@partners_router.get("/unlinked")
+async def get_unlinked_partners(
+    q: str = "", page: int = 1, pageSize: int = 20,
+    solo_dni: bool = False, solo_telefono: bool = False,
+    user=Depends(get_current_user)
+):
+    """Search odoo.res_partner (GLOBAL) NOT already in crm.contacto"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            rp_exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='res_partner')"
+            )
+            if not rp_exists:
+                return {"items": [], "total": 0, "page": page}
+
+            rp_cols = await conn.fetch(
+                "SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'"
+            )
+            col_names = [r['column_name'] for r in rp_cols]
+            has_ck = 'company_key' in col_names
+            has_vat = 'vat' in col_names
+            has_phone = 'phone' in col_names
+            has_mobile = 'mobile' in col_names
+            has_city = 'city' in col_names
+
+            offset = (page - 1) * pageSize
+            where = "WHERE 1=1"
+            params = []
+
+            # GLOBAL filter
+            if has_ck:
+                where += " AND rp.company_key = 'GLOBAL'"
+
+            # Exclude already-linked contacts
+            where += " AND rp.odoo_id NOT IN (SELECT contacto_partner_odoo_id FROM crm.contacto)"
+
+            # Exclude blanks and generic partners
+            where += " AND rp.name IS NOT NULL AND rp.name <> ''"
+            where += " AND rp.name NOT ILIKE '%cliente varios%'"
+            where += " AND rp.name NOT ILIKE '%publico general%'"
+
+            # Search query
+            if q:
+                search_parts = [f"rp.name ILIKE ${len(params)+1}"]
+                params.append(f"%{q}%")
+                idx = len(params)
+                if has_vat:
+                    search_parts.append(f"rp.vat ILIKE ${idx}")
+                if has_phone:
+                    search_parts.append(f"rp.phone::text ILIKE ${idx}")
+                if has_mobile:
+                    search_parts.append(f"rp.mobile::text ILIKE ${idx}")
+                where += f" AND ({' OR '.join(search_parts)})"
+
+            # Quick filters
+            if solo_dni and has_vat:
+                where += " AND rp.vat IS NOT NULL AND rp.vat <> ''"
+            if solo_telefono:
+                phone_parts = []
+                if has_phone:
+                    phone_parts.append("(rp.phone IS NOT NULL AND rp.phone::text <> '')")
+                if has_mobile:
+                    phone_parts.append("(rp.mobile IS NOT NULL AND rp.mobile::text <> '')")
+                if phone_parts:
+                    where += f" AND ({' OR '.join(phone_parts)})"
+
+            # Build SELECT columns
+            select_cols = ["rp.odoo_id", "rp.name"]
+            if has_vat:
+                select_cols.append("rp.vat")
+            else:
+                select_cols.append("NULL as vat")
+            if has_phone:
+                select_cols.append("rp.phone::text as phone")
+            else:
+                select_cols.append("NULL as phone")
+            if has_mobile:
+                select_cols.append("rp.mobile::text as mobile")
+            else:
+                select_cols.append("NULL as mobile")
+            if has_city:
+                select_cols.append("rp.city::text as city")
+            else:
+                select_cols.append("NULL as city")
+
+            select_str = ", ".join(select_cols)
+
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM odoo.res_partner rp {where}", *params
+            )
+
+            data_params = params.copy()
+            data_params.extend([pageSize, offset])
+            rows = await conn.fetch(
+                f"SELECT {select_str} FROM odoo.res_partner rp {where} ORDER BY rp.name LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}",
+                *data_params
+            )
+
+            return {"items": records_to_list(rows), "total": count, "page": page}
+        except Exception as e:
+            logger.error(f"Error fetching unlinked partners: {e}")
+            return {"items": [], "total": 0, "page": page, "error": str(e)}
+
+
+# ─── VINCULAR CONTACTO A CUENTA ───────────────────────────────────────────────
+
+@cuentas_router.post("/{cuenta_id}/vincular-contacto")
+async def vincular_contacto(cuenta_id: str, data: VincularContactoInput, user=Depends(get_current_user)):
+    """Link an odoo partner to a CRM cuenta: upserts override + contacto"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        # Verify cuenta exists
+        cuenta = await conn.fetchrow("SELECT * FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
+        if not cuenta:
+            raise HTTPException(404, "Cuenta no encontrada")
+
+        cuenta_odoo_id = cuenta['cuenta_partner_odoo_id']
+        contacto_odoo_id = data.contacto_partner_odoo_id
+
+        # Check this partner isn't already linked as contacto
+        existing = await conn.fetchrow(
+            "SELECT id FROM crm.contacto WHERE contacto_partner_odoo_id = $1",
+            contacto_odoo_id
+        )
+        if existing:
+            # Update to point to this cuenta instead
+            await conn.execute(
+                "UPDATE crm.contacto SET cuenta_partner_odoo_id = $1, updated_at = now() WHERE contacto_partner_odoo_id = $2",
+                cuenta_odoo_id, contacto_odoo_id
+            )
+        else:
+            # Try to get whatsapp from odoo
+            whatsapp_val = None
+            try:
+                rp_cols = await conn.fetch(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'"
+                )
+                col_names = [r['column_name'] for r in rp_cols]
+                has_ck = 'company_key' in col_names
+                ck_filter = "AND company_key = 'GLOBAL'" if has_ck else ""
+                mobile_col = 'mobile' if 'mobile' in col_names else ('phone' if 'phone' in col_names else None)
+                if mobile_col:
+                    val = await conn.fetchval(
+                        f"SELECT {mobile_col}::text FROM odoo.res_partner WHERE odoo_id = $1 {ck_filter} LIMIT 1",
+                        contacto_odoo_id
+                    )
+                    if val:
+                        whatsapp_val = str(val)
+            except Exception:
+                pass
+
+            # Insert new contacto
+            await conn.execute(
+                """INSERT INTO crm.contacto (contacto_partner_odoo_id, cuenta_partner_odoo_id, whatsapp)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (contacto_partner_odoo_id) DO UPDATE SET 
+                    cuenta_partner_odoo_id = $2, whatsapp = COALESCE(crm.contacto.whatsapp, $3), updated_at = now()""",
+                contacto_odoo_id, cuenta_odoo_id, whatsapp_val
+            )
+
+        # Upsert partner_principal_override
+        nota = data.nota or "Vinculado manualmente desde la cuenta"
+        await conn.execute(
+            """INSERT INTO crm.partner_principal_override (contacto_partner_odoo_id, cuenta_partner_odoo_id, nota)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (contacto_partner_odoo_id) DO UPDATE SET 
+                cuenta_partner_odoo_id = $2, nota = $3, updated_at = now()""",
+            contacto_odoo_id, cuenta_odoo_id, nota
+        )
+
+        return {"ok": True, "contacto_partner_odoo_id": contacto_odoo_id, "cuenta_partner_odoo_id": cuenta_odoo_id}
+
+
 # ─── STATS ENDPOINT ───────────────────────────────────────────────────────────
 
 @app.get("/api/stats")
