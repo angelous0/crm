@@ -408,9 +408,7 @@ async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
 async def get_cuenta_ventas(cuenta_id: str, page: int = 1, limit: int = 50, user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
-        cuenta = await conn.fetchrow("SELECT cuenta_partner_odoo_id FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
-        if not cuenta:
-            raise HTTPException(404, "Cuenta no encontrada")
+        odoo_id = int(cuenta_id)
 
         try:
             view_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_ventas_pos_filtradas')")
