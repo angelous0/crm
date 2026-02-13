@@ -1592,11 +1592,20 @@ async def dash_filter_options_v2(
             for resp_key, db_col in _CASCADE_FIELDS_V2:
                 where, params = _cascade_where_v2(all_f, exclude_col=db_col)
                 rows = await conn.fetch(
-                    f"SELECT DISTINCT {db_col}::text as v FROM {DASH_BASE} {where} AND {db_col} IS NOT NULL ORDER BY v LIMIT 500",
+                    f"""SELECT {db_col}::text as value,
+                               COUNT(DISTINCT product_tmpl_id) as count_modelos,
+                               COUNT(DISTINCT product_product_id) as count_variantes,
+                               COALESCE(SUM(available_qty),0)::bigint as sum_stock
+                        FROM {DASH_BASE} {where} AND {db_col} IS NOT NULL
+                        GROUP BY {db_col} ORDER BY value LIMIT 500""",
                     *params
                 )
-                result[resp_key] = [r['v'] for r in rows]
-            result['tallas'] = sorted(result['tallas'], key=_talla_sort_key)
+                result[resp_key] = [
+                    {"value": r['value'], "count_modelos": r['count_modelos'],
+                     "count_variantes": r['count_variantes'], "sum_stock": int(r['sum_stock'])}
+                    for r in rows
+                ]
+            result['tallas'] = sorted(result['tallas'], key=lambda x: _talla_sort_key(x['value']))
             _fopts_set(ck, result)
             return result
         except Exception as e:
