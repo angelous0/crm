@@ -282,23 +282,25 @@ export default function ComercialPage() {
                 <table className="w-full text-[10px] border-collapse">
                   <thead className="sticky top-0 bg-slate-100">
                     <tr>
-                      <th className="text-left px-2 py-1 font-semibold">Modelo</th>
                       <th className="text-left px-2 py-1 font-semibold">Marca</th>
                       <th className="text-left px-2 py-1 font-semibold">Tipo</th>
+                      <th className="text-left px-2 py-1 font-semibold">Entalle</th>
+                      <th className="text-left px-2 py-1 font-semibold">Tela</th>
+                      <th className="text-left px-2 py-1 font-semibold">Hilo</th>
                       <th className="text-right px-2 py-1 font-semibold">Qty</th>
                       <th className="text-right px-2 py-1 font-semibold">Ordenes</th>
-                      <th className="text-left px-2 py-1 font-semibold">IDs</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(summary?.top_productos || []).map((r, i) => (
                       <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
-                        <td className="px-2 py-0.5 font-medium truncate max-w-[140px]">{r.modelo_display || "-"}</td>
-                        <td className="px-2 py-0.5 text-slate-500">{r.marca || "-"}</td>
+                        <td className="px-2 py-0.5 font-medium">{r.marca || "-"}</td>
                         <td className="px-2 py-0.5 text-slate-500">{r.tipo || "-"}</td>
+                        <td className="px-2 py-0.5 text-slate-500">{r.entalle || "-"}</td>
+                        <td className="px-2 py-0.5 text-slate-500">{r.tela || "-"}</td>
+                        <td className="px-2 py-0.5 text-slate-500">{r.hilo || "-"}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.qty)}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.orders)}</td>
-                        <td className="px-2 py-0.5"><CopyIds tmplId={r.product_tmpl_id} /></td>
                       </tr>
                     ))}
                   </tbody>

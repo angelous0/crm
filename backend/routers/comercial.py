@@ -172,11 +172,11 @@ async def comercial_summary(
     async def _top_prod():
         async with pool.acquire() as conn:
             return records_to_list(await conn.fetch(f"""
-                SELECT modelo_display, product_tmpl_id, marca, tipo,
+                SELECT marca, tipo, entalle, tela, hilo,
                        SUM(qty) AS qty,
                        COUNT(DISTINCT order_id) AS orders
                 FROM {VIEW} {where}
-                GROUP BY modelo_display, product_tmpl_id, marca, tipo
+                GROUP BY marca, tipo, entalle, tela, hilo
                 ORDER BY SUM(qty) DESC LIMIT 10
             """, *params))
 
