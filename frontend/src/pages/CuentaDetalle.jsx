@@ -494,30 +494,20 @@ export default function CuentaDetalle() {
 
               {/* Ventas Tab */}
               <TabsContent value="ventas">
-                <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/50">
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Cant.</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ventas.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="h-20 text-center text-slate-500">Sin ventas filtradas</TableCell></TableRow>
-                      ) : ventas.map((v, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="text-sm">{v.date_order ? new Date(v.date_order).toLocaleDateString('es') : "-"}</TableCell>
-                          <TableCell className="font-medium">{v.barcode || v.product_id || "-"}</TableCell>
-                          <TableCell>{v.qty}</TableCell>
-                          <TableCell className="text-right font-mono">${Number(v.price_subtotal || 0).toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <VentasCuentaTab data={ventas} loading={ventasLoading} page={ventasPage}
+                  onPageChange={(pg) => fetchVentas(pg, "SALE")} docTipo="SALE" />
+              </TabsContent>
+
+              {/* Reservas Tab */}
+              <TabsContent value="reservas">
+                <VentasCuentaTab
+                  data={ventas}
+                  loading={ventasLoading}
+                  page={ventasPage}
+                  onPageChange={(pg) => fetchVentas(pg, "RESERVA")}
+                  docTipo="RESERVA"
+                  onMount={() => { setVentasDocTipo("RESERVA"); }}
+                />
               </TabsContent>
 
               {/* Interacciones Tab */}
