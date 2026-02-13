@@ -523,7 +523,7 @@ export default function StockDashboard() {
       </div>
 
       <FilterChips f={f} onRemove={removeFilter} onClear={clearAll} />
-      <SelectionChips sel={sel} onReset={resetSel} />
+      <SelectionBar sel={sel} onReset={resetSel} />
 
       {/* ── MAIN GRID ── */}
       {loading ? (
