@@ -137,6 +137,82 @@ export default function CuentaDetalle() {
     }
   };
 
+  // ── Vincular contacto logic ──
+  const fetchUnlinked = useCallback(async (searchVal, pg, dni, tel) => {
+    if (!searchVal || searchVal.length < 2) {
+      setUnlinkResults([]);
+      setUnlinkTotal(0);
+      return;
+    }
+    setUnlinkLoading(true);
+    try {
+      const res = await api.get("/partners/unlinked", {
+        params: { q: searchVal, page: pg, pageSize: unlinkPageSize, solo_dni: dni, solo_telefono: tel }
+      });
+      setUnlinkResults(res.data.items || []);
+      setUnlinkTotal(res.data.total || 0);
+    } catch (err) {
+      toast.error("Error buscando partners");
+    } finally {
+      setUnlinkLoading(false);
+    }
+  }, []);
+
+  const handleUnlinkSearchChange = (val) => {
+    setUnlinkSearch(val);
+    setUnlinkPage(1);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchUnlinked(val, 1, soloDni, soloTelefono);
+    }, 300);
+  };
+
+  const handleUnlinkFilterChange = (newDni, newTel) => {
+    setSoloDni(newDni);
+    setSoloTelefono(newTel);
+    setUnlinkPage(1);
+    if (unlinkSearch.length >= 2) {
+      fetchUnlinked(unlinkSearch, 1, newDni, newTel);
+    }
+  };
+
+  const handleUnlinkPageChange = (newPage) => {
+    setUnlinkPage(newPage);
+    fetchUnlinked(unlinkSearch, newPage, soloDni, soloTelefono);
+  };
+
+  const openVincularConfirm = (partner) => {
+    setVincularTarget(partner);
+    setVincularNota("");
+    setShowVincularConfirm(true);
+  };
+
+  const handleVincular = async () => {
+    if (!vincularTarget) return;
+    setVincularLoading(true);
+    try {
+      await api.post(`/cuentas/${id}/vincular-contacto`, {
+        contacto_partner_odoo_id: vincularTarget.odoo_id,
+        nota: vincularNota || null
+      });
+      toast.success(`${vincularTarget.name} vinculado exitosamente`);
+      setShowVincularConfirm(false);
+      setVincularTarget(null);
+      // Refresh contacts list
+      const ctRes = await api.get(`/cuentas/${id}/contactos`);
+      setContactos(ctRes.data || []);
+      // Remove from unlinked results
+      setUnlinkResults(prev => prev.filter(p => p.odoo_id !== vincularTarget.odoo_id));
+      setUnlinkTotal(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Error al vincular contacto");
+    } finally {
+      setVincularLoading(false);
+    }
+  };
+
+  const unlinkTotalPages = Math.ceil(unlinkTotal / unlinkPageSize);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
