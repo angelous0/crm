@@ -12,6 +12,7 @@ import CuentaDetalle from "@/pages/CuentaDetalle";
 import Contactos from "@/pages/Contactos";
 import Agenda from "@/pages/Agenda";
 import Ventas from "@/pages/Ventas";
+import StockDashboard from "@/pages/StockDashboard";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }) {
@@ -57,6 +58,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/stock-dashboard" element={<ProtectedRoute><StockDashboard /></ProtectedRoute>} />
           <Route path="/catalogo" element={<ProtectedRoute><Catalogo /></ProtectedRoute>} />
           <Route path="/cuentas" element={<ProtectedRoute><Cuentas /></ProtectedRoute>} />
           <Route path="/cuentas/:id" element={<ProtectedRoute><CuentaDetalle /></ProtectedRoute>} />

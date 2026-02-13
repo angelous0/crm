@@ -387,6 +387,63 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_catalogo_con_stock_variantes_loc: {e}")
 
+    # 3.1g) v_catalogo_stock_flat - flat view for Stock Dashboard
+    try:
+        has_sloc = 'v_stock_by_product_location' in odoo_tables
+        has_sl = 'stock_location' in odoo_tables
+        has_vf = 'v_product_variant_flat' in odoo_tables
+        has_pt = 'product_template' in odoo_tables
+        if has_sloc and has_sl and has_vf and has_pt:
+            await conn.execute("DROP VIEW IF EXISTS crm.v_catalogo_stock_flat;")
+            await conn.execute("""
+                CREATE VIEW crm.v_catalogo_stock_flat AS
+                SELECT
+                    sl.odoo_id as location_id,
+                    sl.x_nombre as tienda,
+                    vv.product_tmpl_id,
+                    pt.name as modelo,
+                    pt.marca,
+                    pt.tipo,
+                    pt.entalle,
+                    pt.tela,
+                    pt.hilo,
+                    vv.product_product_id,
+                    vv.barcode,
+                    vv.talla,
+                    vv.color,
+                    s.available_qty,
+                    (pt.name ILIKE '%LQ%') as es_lq,
+                    (
+                        (pt.hilo ILIKE '%negro%')
+                        OR (vv.color ILIKE '%negro%')
+                        OR (vv.color ILIKE '%plomo%')
+                        OR (vv.color ILIKE '%carbon%')
+                    ) as es_negro
+                FROM odoo.v_stock_by_product_location s
+                JOIN odoo.stock_location sl
+                    ON sl.odoo_id = s.location_id
+                    AND sl.usage = 'internal'
+                    AND COALESCE(sl.active, true) = true
+                    AND sl.x_nombre IS NOT NULL
+                    AND btrim(sl.x_nombre) <> ''
+                JOIN odoo.v_product_variant_flat vv
+                    ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
+                JOIN odoo.product_template pt
+                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
+                WHERE s.available_qty > 0
+                    AND pt.sale_ok = true
+                    AND pt.purchase_ok = false
+                    AND pt.name NOT ILIKE '%correa%'
+                    AND pt.name NOT ILIKE '%saco%'
+                    AND pt.name NOT ILIKE '%bolsa%';
+            """)
+            logger.info("View crm.v_catalogo_stock_flat created")
+        else:
+            logger.warning("Missing tables for v_catalogo_stock_flat")
+    except Exception as e:
+        logger.warning(f"Could not create v_catalogo_stock_flat: {e}")
+
+
     # 3.2) v_productos_elegibles
     try:
         if 'product_template' in odoo_tables:

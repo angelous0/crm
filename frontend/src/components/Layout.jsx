@@ -3,12 +3,13 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
-  CalendarClock, ShoppingCart, LogOut, ChevronRight
+  CalendarClock, ShoppingCart, LogOut, ChevronRight, BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/stock-dashboard", icon: BarChart3, label: "Stock Dashboard" },
   { to: "/catalogo", icon: Package, label: "Catalogo" },
   { to: "/cuentas", icon: Users, label: "Cuentas" },
   { to: "/contactos", icon: UserCircle, label: "Contactos" },

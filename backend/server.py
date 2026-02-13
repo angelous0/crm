@@ -1259,6 +1259,281 @@ async def health():
         return {"status": "error", "database": str(e)}
 
 
+# ─── STOCK DASHBOARD ROUTES ────────────────────────────────────────────────────
+
+stock_dash_router = APIRouter(prefix="/api/stock-dashboard", tags=["stock-dashboard"])
+
+STOCK_FLAT_VIEW = "crm.v_catalogo_stock_flat"
+
+
+def _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro):
+    """Build WHERE clause + params list for stock dashboard queries."""
+    parts = []
+    params = []
+
+    def _add_multi(col, val):
+        if not val:
+            return
+        vals = [v.strip() for v in val.split(',') if v.strip()]
+        if vals:
+            params.append(vals)
+            parts.append(f"{col} = ANY(${len(params)})")
+
+    _add_multi('tienda', tienda)
+    _add_multi('marca', marca)
+    _add_multi('tipo', tipo)
+    _add_multi('entalle', entalle)
+    _add_multi('tela', tela)
+    _add_multi('talla', talla)
+    _add_multi('color', color)
+
+    if modelo:
+        params.append(f"%{modelo}%")
+        parts.append(f"modelo ILIKE ${len(params)}")
+    if es_lq == 'si':
+        parts.append("es_lq = true")
+    elif es_lq == 'no':
+        parts.append("es_lq = false")
+    if es_negro == 'si':
+        parts.append("es_negro = true")
+    elif es_negro == 'no':
+        parts.append("es_negro = false")
+
+    where = "WHERE " + (" AND ".join(parts) if parts else "1=1")
+    return where, params
+
+
+def _talla_sort_key(t):
+    order_map = {'XXS': 1, 'XS': 2, 'S': 3, 'M': 4, 'L': 5, 'XL': 6, 'XXL': 7, 'XXXL': 8}
+    if t in order_map:
+        return (1, order_map[t])
+    try:
+        return (0, int(t))
+    except (ValueError, TypeError):
+        return (2, t)
+
+
+@stock_dash_router.get("/filtros")
+async def stock_filtros(user=Depends(get_current_user)):
+    """Get distinct filter values for dropdowns."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            cols = ['tienda', 'marca', 'tipo', 'entalle', 'tela', 'talla', 'color']
+            result = {}
+            for col in cols:
+                rows = await conn.fetch(
+                    f"SELECT DISTINCT {col}::text as val FROM {STOCK_FLAT_VIEW} WHERE {col} IS NOT NULL ORDER BY val"
+                )
+                result[col + 's'] = [r['val'] for r in rows]
+            # Sort tallas intelligently
+            result['tallas'] = sorted(result['tallas'], key=_talla_sort_key)
+            # Modelos separately (name-based)
+            mrows = await conn.fetch(
+                f"SELECT DISTINCT modelo as val FROM {STOCK_FLAT_VIEW} WHERE modelo IS NOT NULL ORDER BY val"
+            )
+            result['modelos'] = [r['val'] for r in mrows]
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching stock filtros: {e}")
+            return {}
+
+
+@stock_dash_router.get("/kpis")
+async def stock_kpis(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+            row = await conn.fetchrow(f"""
+                SELECT
+                    COALESCE(SUM(available_qty), 0) as total_stock,
+                    COUNT(DISTINCT product_tmpl_id) as modelos,
+                    COUNT(DISTINCT product_product_id) as variantes,
+                    COUNT(DISTINCT tienda) as tiendas_con_stock
+                FROM {STOCK_FLAT_VIEW} {where}
+            """, *params)
+            return {
+                "total_stock": float(row['total_stock']),
+                "modelos": row['modelos'],
+                "variantes": row['variantes'],
+                "tiendas_con_stock": row['tiendas_con_stock']
+            }
+        except Exception as e:
+            logger.error(f"Error fetching stock KPIs: {e}")
+            return {"total_stock": 0, "modelos": 0, "variantes": 0, "tiendas_con_stock": 0}
+
+
+@stock_dash_router.get("/pivot-modelo")
+async def stock_pivot_modelo(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    limit: int = 50, page: int = 1,
+    user=Depends(get_current_user)
+):
+    """Pivot: rows=modelo+marca, cols=talla, values=SUM(available_qty)."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+            offset = (page - 1) * limit
+
+            # Get distinct tallas for columns
+            t_rows = await conn.fetch(
+                f"SELECT DISTINCT talla::text as t FROM {STOCK_FLAT_VIEW} {where} AND talla IS NOT NULL", *params
+            )
+            tallas = sorted([r['t'] for r in t_rows], key=_talla_sort_key)
+
+            # Get total count of distinct modelos
+            total_modelos = await conn.fetchval(
+                f"SELECT COUNT(DISTINCT (modelo, COALESCE(marca::text,''))) FROM {STOCK_FLAT_VIEW} {where}", *params
+            )
+
+            # Get pivot data: modelo, marca, talla, qty - top N by total stock
+            piv_params = list(params)
+            piv_params.extend([limit, offset])
+            rows = await conn.fetch(f"""
+                WITH modelo_totals AS (
+                    SELECT modelo, COALESCE(marca::text,'') as marca, SUM(available_qty) as total
+                    FROM {STOCK_FLAT_VIEW} {where}
+                    GROUP BY modelo, marca
+                    ORDER BY total DESC
+                    LIMIT ${len(piv_params)-1} OFFSET ${len(piv_params)}
+                )
+                SELECT f.modelo, COALESCE(f.marca::text,'') as marca, f.talla::text as talla, SUM(f.available_qty) as qty
+                FROM {STOCK_FLAT_VIEW} f
+                JOIN modelo_totals mt ON mt.modelo = f.modelo AND COALESCE(f.marca::text,'') = mt.marca
+                {where.replace('WHERE', 'AND' if 'WHERE' not in '' else 'WHERE')}
+                GROUP BY f.modelo, f.marca, f.talla
+            """, *piv_params)
+
+            # Build matrix
+            modelo_map = {}
+            for r in rows:
+                key = f"{r['modelo']}||{r['marca']}"
+                if key not in modelo_map:
+                    modelo_map[key] = {"modelo": r['modelo'], "marca": r['marca'], "values": {}, "total": 0}
+                qty = float(r['qty'])
+                modelo_map[key]["values"][r['talla']] = qty
+                modelo_map[key]["total"] += qty
+
+            result_rows = sorted(modelo_map.values(), key=lambda x: -x['total'])
+
+            totals_by_talla = {}
+            grand_total = 0
+            for row_data in result_rows:
+                for t in tallas:
+                    v = row_data["values"].get(t, 0)
+                    totals_by_talla[t] = totals_by_talla.get(t, 0) + v
+                grand_total += row_data["total"]
+
+            return {
+                "tallas": tallas,
+                "rows": result_rows,
+                "totals_by_talla": totals_by_talla,
+                "grand_total": grand_total,
+                "total_modelos": total_modelos,
+                "page": page
+            }
+        except Exception as e:
+            logger.error(f"Error fetching stock pivot modelo: {e}")
+            return {"tallas": [], "rows": [], "totals_by_talla": {}, "grand_total": 0, "total_modelos": 0, "page": page}
+
+
+@stock_dash_router.get("/pivot-tienda")
+async def stock_pivot_tienda(
+    pivot_tienda: str = "",
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    user=Depends(get_current_user)
+):
+    """Pivot for a specific tienda: rows=color, cols=talla, values=SUM(available_qty)."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+
+            if pivot_tienda:
+                params.append(pivot_tienda)
+                extra = f" AND tienda = ${len(params)}"
+            else:
+                extra = ""
+
+            rows = await conn.fetch(f"""
+                SELECT COALESCE(color, 'Sin color') as color, COALESCE(talla::text, 'Sin talla') as talla,
+                       SUM(available_qty) as qty
+                FROM {STOCK_FLAT_VIEW} {where}{extra}
+                GROUP BY color, talla
+            """, *params)
+
+            colors_set = set()
+            sizes_set = set()
+            matrix = {}
+            for r in rows:
+                c, t, q = r['color'], r['talla'], float(r['qty'])
+                colors_set.add(c)
+                sizes_set.add(t)
+                matrix.setdefault(c, {})[t] = q
+
+            tallas = sorted(sizes_set, key=_talla_sort_key)
+            colores = sorted(colors_set)
+            by_color = {c: sum(matrix.get(c, {}).get(t, 0) for t in tallas) for c in colores}
+            by_size = {t: sum(matrix.get(c, {}).get(t, 0) for c in colores) for t in tallas}
+            grand_total = sum(by_color.values())
+
+            return {
+                "tallas": tallas, "colores": colores, "matrix": matrix,
+                "totals": {"byColor": by_color, "bySize": by_size, "grandTotal": grand_total}
+            }
+        except Exception as e:
+            logger.error(f"Error fetching stock pivot tienda: {e}")
+            return {"tallas": [], "colores": [], "matrix": {}, "totals": {"byColor": {}, "bySize": {}, "grandTotal": 0}}
+
+
+@stock_dash_router.get("/detalle")
+async def stock_detalle(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    page: int = 1, limit: int = 50, orden: str = "qty_desc",
+    user=Depends(get_current_user)
+):
+    """Paginated detail rows."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+            offset = (page - 1) * limit
+
+            order_map = {"qty_desc": "available_qty DESC", "qty_asc": "available_qty ASC",
+                         "modelo": "modelo ASC", "tienda": "tienda ASC"}
+            order_by = order_map.get(orden, "available_qty DESC")
+
+            count = await conn.fetchval(f"SELECT COUNT(*) FROM {STOCK_FLAT_VIEW} {where}", *params)
+
+            d_params = list(params)
+            d_params.extend([limit, offset])
+            rows = await conn.fetch(f"""
+                SELECT tienda, modelo, marca::text as marca, talla::text as talla, color, barcode,
+                       available_qty, es_lq, es_negro
+                FROM {STOCK_FLAT_VIEW} {where}
+                ORDER BY {order_by}
+                LIMIT ${len(d_params)-1} OFFSET ${len(d_params)}
+            """, *d_params)
+
+            return {"items": records_to_list(rows), "total": count, "page": page}
+        except Exception as e:
+            logger.error(f"Error fetching stock detalle: {e}")
+            return {"items": [], "total": 0, "page": page}
+
+
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 
 app.include_router(auth_router)
@@ -1270,3 +1545,4 @@ app.include_router(tareas_router)
 app.include_router(ventas_router)
 app.include_router(bootstrap_router)
 app.include_router(partners_router)
+app.include_router(stock_dash_router)
