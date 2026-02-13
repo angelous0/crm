@@ -1723,6 +1723,210 @@ async def dash_detail(
         except Exception as e:
             logger.error(f"dash_detail error: {e}")
             return {"items": [], "total": 0}
+
+
+# ── Reposición / Faltantes por tienda ─────────────────────────────────────────
+
+MARCA_PREVALENCIA = {
+    'QEPO': ['BOOSH', 'GAMARRA 207'],
+    'BOOSH': ['BOOSH'],
+    'ELEMENT PREMIUM': ['GAMARRA 209', 'GM218', 'GRAU 238 / GRAU 55'],
+}
+TIENDAS_DESTINO_ALL = ['GRAU 238 / GRAU 55', 'GAMARRA 209', 'GM218', 'BOOSH', 'GAMARRA 207']
+
+
+@stock_dash_router.get("/reposicion")
+async def dash_reposicion(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    lq: str = "", negro: str = "",
+    umbral_destino: int = 0,
+    umbral_origen: int = 2,
+    objetivo_destino: int = 2,
+    solo_objetivo: bool = True,
+    tienda_destino: str = "",
+    marca_repo: str = "",
+    page: int = 1, limit: int = 100,
+    user=Depends(get_current_user)
+):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            where, params = _cube_where(tienda, marca, tipo, entalle, tela, modelo, talla, color, lq, negro)
+
+            if marca_repo:
+                vals = [v.strip().upper() for v in marca_repo.split(',') if v.strip()]
+                if vals:
+                    params.append(vals)
+                    where += f" AND UPPER(TRIM(COALESCE(marca,''))) = ANY(${len(params)})"
+
+            rows = await conn.fetch(f"""
+                SELECT
+                    UPPER(TRIM(COALESCE(marca,''))) as marca_norm,
+                    COALESCE(marca,'') as marca_display,
+                    COALESCE(tipo,'') as tipo,
+                    COALESCE(entalle,'') as entalle,
+                    COALESCE(tela,'') as tela,
+                    color, talla::text as talla,
+                    tienda_canonica as tienda,
+                    SUM(available_qty)::int as stock
+                FROM {DASH_BASE} {where}
+                GROUP BY 1,2,3,4,5,6,7,8
+            """, *params)
+
+            skus = {}
+            for r in rows:
+                key = (r['marca_norm'], r['tipo'], r['entalle'], r['tela'], r['color'], r['talla'])
+                if key not in skus:
+                    skus[key] = {
+                        'stores': {},
+                        'marca_norm': r['marca_norm'], 'marca': r['marca_display'],
+                        'tipo': r['tipo'], 'entalle': r['entalle'], 'tela': r['tela'],
+                        'color': r['color'], 'talla': r['talla'],
+                    }
+                skus[key]['stores'][r['tienda']] = skus[key]['stores'].get(r['tienda'], 0) + r['stock']
+
+            dest_filter = [v.strip() for v in tienda_destino.split(',') if v.strip()] if tienda_destino else None
+            recs = []
+
+            for key, sku in skus.items():
+                stores = sku['stores']
+                stock_total = sum(stores.values())
+                stock_almacen = stores.get('ALMACEN', 0)
+                if stock_total <= 0:
+                    continue
+
+                marca_n = sku['marca_norm']
+                if solo_objetivo and marca_n in MARCA_PREVALENCIA:
+                    targets = MARCA_PREVALENCIA[marca_n]
+                else:
+                    targets = TIENDAS_DESTINO_ALL
+
+                if dest_filter:
+                    targets = [t for t in targets if t in dest_filter]
+
+                for dest in targets:
+                    stock_dest = stores.get(dest, 0)
+                    if stock_dest > umbral_destino:
+                        continue
+
+                    origen = None
+                    stock_origen = 0
+                    motivo = ''
+
+                    if stock_almacen > 0:
+                        origen = 'ALMACEN'
+                        stock_origen = stock_almacen
+                        motivo = 'Desde ALMACEN'
+                    else:
+                        best_store, best_stock = None, 0
+                        for st, stk in stores.items():
+                            if st == dest or st == 'ALMACEN':
+                                continue
+                            if marca_n in MARCA_PREVALENCIA and st in MARCA_PREVALENCIA.get(marca_n, []):
+                                if stk <= umbral_origen:
+                                    continue
+                            if stk > best_stock:
+                                best_stock = stk
+                                best_store = st
+                        if best_store:
+                            origen = best_store
+                            stock_origen = best_stock
+                            motivo = 'Transferencia entre tiendas'
+                        else:
+                            continue
+
+                    is_brand_target = marca_n in MARCA_PREVALENCIA and dest in MARCA_PREVALENCIA.get(marca_n, [])
+                    if is_brand_target:
+                        motivo += ' · Prioridad marca'
+
+                    qty_sug = max(0, objetivo_destino - stock_dest)
+
+                    recs.append({
+                        'tienda_destino': dest,
+                        'marca': sku['marca'], 'tipo': sku['tipo'],
+                        'entalle': sku['entalle'], 'tela': sku['tela'],
+                        'color': sku['color'], 'talla': sku['talla'],
+                        'stock_destino': stock_dest,
+                        'stock_almacen': stock_almacen,
+                        'stock_total': stock_total,
+                        'origen_recomendado': origen,
+                        'stock_origen': stock_origen,
+                        'qty_sugerida': qty_sug,
+                        'motivo': motivo,
+                    })
+
+            recs.sort(key=lambda r: (
+                r['stock_destino'],
+                r['stock_total'],
+                -(1 if r['stock_almacen'] > 0 else 0),
+                r['marca'], r['tipo'], r['entalle'], r['tela'], r['color'],
+                _talla_sort_key(r['talla']),
+            ))
+
+            total = len(recs)
+            offset = (page - 1) * limit
+            page_recs = recs[offset:offset + limit]
+
+            kpis = {
+                'total_faltantes': total,
+                'total_qty_sugerida': sum(r['qty_sugerida'] for r in recs),
+                'desde_almacen': sum(1 for r in recs if r['origen_recomendado'] == 'ALMACEN'),
+                'entre_tiendas': sum(1 for r in recs if r['origen_recomendado'] != 'ALMACEN'),
+                'skus_unicos': len(set((r['marca'], r['tipo'], r['entalle'], r['tela'], r['color'], r['talla']) for r in recs)),
+            }
+            return {"items": page_recs, "total": total, "kpis": kpis}
+        except Exception as e:
+            logger.error(f"dash_reposicion error: {e}")
+            import traceback; traceback.print_exc()
+            return {"items": [], "total": 0, "kpis": {}}
+
+
+@stock_dash_router.get("/reposicion-detalle")
+async def dash_reposicion_detalle(
+    marca_norm: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", color: str = "", talla: str = "",
+    tienda: str = "", marca_f: str = "", tipo_f: str = "", entalle_f: str = "",
+    tela_f: str = "", modelo: str = "", talla_f: str = "", color_f: str = "",
+    lq: str = "", negro: str = "",
+    user=Depends(get_current_user)
+):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            where, params = _cube_where(tienda, marca_f, tipo_f, entalle_f, tela_f, modelo, talla_f, color_f, lq, negro)
+
+            if marca_norm:
+                params.append(marca_norm.upper().strip())
+                where += f" AND UPPER(TRIM(COALESCE(marca,''))) = ${len(params)}"
+            if tipo:
+                params.append(tipo)
+                where += f" AND COALESCE(tipo,'') = ${len(params)}"
+            if entalle:
+                params.append(entalle)
+                where += f" AND COALESCE(entalle,'') = ${len(params)}"
+            if tela:
+                params.append(tela)
+                where += f" AND COALESCE(tela,'') = ${len(params)}"
+            if color:
+                params.append(color)
+                where += f" AND color = ${len(params)}"
+            if talla:
+                params.append(talla)
+                where += f" AND talla::text = ${len(params)}"
+
+            rows = await conn.fetch(f"""
+                SELECT tienda_canonica as tienda, SUM(available_qty)::int as stock
+                FROM {DASH_BASE} {where}
+                GROUP BY tienda_canonica ORDER BY tienda_canonica
+            """, *params)
+
+            return {"distribucion": [{"tienda": r['tienda'], "stock": r['stock']} for r in rows]}
+        except Exception as e:
+            logger.error(f"dash_reposicion_detalle error: {e}")
+            return {"distribucion": []}
+
+
 async def dash_modelo_talla(
     tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
     tela: str = "", modelo: str = "", talla: str = "", color: str = "",
