@@ -1313,6 +1313,211 @@ def _talla_sort_key(t):
         return (2, t)
 
 
+DASH_BASE = "crm.v_stock_dashboard_base"
+STORE_ORDER = ["GRAU 238 / GRAU 55", "GAMARRA 209", "GM218", "BOOSH", "GAMARRA 207", "TOTAL", "ALMACEN"]
+STORE_REAL = ["GRAU 238 / GRAU 55", "GAMARRA 209", "GM218", "BOOSH", "GAMARRA 207", "ALMACEN"]
+
+
+def _dash_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro):
+    """Build WHERE for dashboard base view (uses tienda_canonica)."""
+    parts = ["tienda_canonica IS NOT NULL"]
+    params = []
+
+    def _add(col, val):
+        if not val:
+            return
+        vals = [v.strip() for v in val.split(',') if v.strip()]
+        if vals:
+            params.append(vals)
+            parts.append(f"{col} = ANY(${len(params)})")
+
+    _add('tienda_canonica', tienda)
+    _add('marca', marca)
+    _add('tipo', tipo)
+    _add('entalle', entalle)
+    _add('tela', tela)
+    _add('talla', talla)
+    _add('color', color)
+
+    if modelo:
+        params.append(f"%{modelo}%")
+        parts.append(f"modelo ILIKE ${len(params)}")
+    if es_lq == 'si':
+        parts.append("es_lq = true")
+    elif es_lq == 'no':
+        parts.append("es_lq = false")
+    if es_negro == 'si':
+        parts.append("es_negro = true")
+    elif es_negro == 'no':
+        parts.append("es_negro = false")
+
+    return "WHERE " + " AND ".join(parts), params
+
+
+@stock_dash_router.get("/filters")
+async def dash_filters(user=Depends(get_current_user)):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            cols = {'tienda_canonicas': 'tienda_canonica', 'marcas': 'marca', 'tipos': 'tipo',
+                    'entalles': 'entalle', 'telas': 'tela', 'tallas': 'talla', 'colores': 'color'}
+            result = {}
+            for key, col in cols.items():
+                rows = await conn.fetch(
+                    f"SELECT DISTINCT {col}::text as v FROM {DASH_BASE} WHERE tienda_canonica IS NOT NULL AND {col} IS NOT NULL ORDER BY v"
+                )
+                result[key] = [r['v'] for r in rows]
+            result['tallas'] = sorted(result['tallas'], key=_talla_sort_key)
+            return result
+        except Exception as e:
+            logger.error(f"dash_filters error: {e}")
+            return {}
+
+
+@stock_dash_router.get("/modelo-talla")
+async def dash_modelo_talla(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "", limit: int = 50,
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _dash_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+            rows = await conn.fetch(f"""
+                SELECT modelo, talla::text as talla, SUM(available_qty) as qty
+                FROM {DASH_BASE} {where}
+                GROUP BY modelo, talla
+            """, *params)
+
+            # Build modelo totals, pick top N
+            modelo_totals = {}
+            for r in rows:
+                m = r['modelo']
+                modelo_totals[m] = modelo_totals.get(m, 0) + float(r['qty'])
+            top_modelos = sorted(modelo_totals.keys(), key=lambda m: -modelo_totals[m])[:limit]
+            top_set = set(top_modelos)
+
+            tallas_set = set()
+            modelo_map = {}
+            for r in rows:
+                m, t, q = r['modelo'], r['talla'], float(r['qty'])
+                if m not in top_set:
+                    continue
+                tallas_set.add(t)
+                modelo_map.setdefault(m, {})[t] = q
+
+            tallas = sorted(tallas_set, key=_talla_sort_key)
+            result_rows = []
+            totals_by_talla = {}
+            grand_total = 0
+            for m in top_modelos:
+                cells = modelo_map.get(m, {})
+                total = sum(cells.values())
+                result_rows.append({"modelo": m, "cells": cells, "total": round(total)})
+                grand_total += total
+                for t in tallas:
+                    totals_by_talla[t] = totals_by_talla.get(t, 0) + cells.get(t, 0)
+
+            return {"tallas": tallas, "rows": result_rows,
+                    "totals_by_talla": {t: round(v) for t, v in totals_by_talla.items()},
+                    "grand_total": round(grand_total), "total_modelos": len(modelo_totals)}
+        except Exception as e:
+            logger.error(f"dash_modelo_talla error: {e}")
+            return {"tallas": [], "rows": [], "totals_by_talla": {}, "grand_total": 0, "total_modelos": 0}
+
+
+@stock_dash_router.get("/panels")
+async def dash_panels(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    user=Depends(get_current_user)
+):
+    """Return Color x Talla matrices for ALL store panels + TOTAL."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _dash_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+
+            # KPIs
+            kpi = await conn.fetchrow(f"""
+                SELECT COALESCE(SUM(available_qty),0) as total_stock,
+                       COUNT(DISTINCT product_tmpl_id) as modelos,
+                       COUNT(DISTINCT product_product_id) as variantes,
+                       COUNT(DISTINCT tienda_canonica) as tiendas
+                FROM {DASH_BASE} {where}
+            """, *params)
+
+            # One query for all panels
+            rows = await conn.fetch(f"""
+                SELECT tienda_canonica, COALESCE(color,'Sin color') as color,
+                       COALESCE(talla::text,'?') as talla, SUM(available_qty) as qty
+                FROM {DASH_BASE} {where}
+                GROUP BY tienda_canonica, color, talla
+            """, *params)
+
+            # Build per-store data
+            store_data = {}
+            all_tallas = set()
+            for r in rows:
+                s, c, t, q = r['tienda_canonica'], r['color'], r['talla'], float(r['qty'])
+                all_tallas.add(t)
+                store_data.setdefault(s, {}).setdefault(c, {})[t] = \
+                    store_data.get(s, {}).get(c, {}).get(t, 0) + q
+
+            tallas = sorted(all_tallas, key=_talla_sort_key)
+
+            def build_panel(data):
+                colores = sorted(data.keys())
+                matrix = {}
+                by_color = {}
+                by_size = {}
+                gt = 0
+                for c in colores:
+                    matrix[c] = {}
+                    row_total = 0
+                    for t in tallas:
+                        v = data.get(c, {}).get(t, 0)
+                        matrix[c][t] = round(v)
+                        by_size[t] = by_size.get(t, 0) + v
+                        row_total += v
+                    by_color[c] = round(row_total)
+                    gt += row_total
+                return {"colores": colores, "matrix": matrix,
+                        "totals": {"byColor": by_color,
+                                   "bySize": {t: round(v) for t, v in by_size.items()},
+                                   "grandTotal": round(gt)}}
+
+            # Build individual store panels
+            stores = {}
+            for s in STORE_REAL:
+                stores[s] = build_panel(store_data.get(s, {}))
+
+            # Build TOTAL (sum all real stores)
+            total_data = {}
+            for s in STORE_REAL:
+                for c, sizes in store_data.get(s, {}).items():
+                    for t, q in sizes.items():
+                        total_data.setdefault(c, {})[t] = total_data.get(c, {}).get(t, 0) + q
+            stores["TOTAL"] = build_panel(total_data)
+
+            return {
+                "tallas": tallas, "stores": stores,
+                "kpis": {
+                    "total_stock": float(kpi['total_stock']),
+                    "modelos": kpi['modelos'],
+                    "variantes": kpi['variantes'],
+                    "tiendas": kpi['tiendas']
+                }
+            }
+        except Exception as e:
+            logger.error(f"dash_panels error: {e}")
+            return {"tallas": [], "stores": {}, "kpis": {"total_stock": 0, "modelos": 0, "variantes": 0, "tiendas": 0}}
+
+
+
 def _stock_filters_aliased(alias, tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro):
     """Build WHERE clause with table alias prefix for JOIN queries."""
     parts = []
