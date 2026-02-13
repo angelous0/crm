@@ -1,68 +1,58 @@
-# Stock Dashboard CRM B2B - PRD
+# PRD - CRM B2B Stock Dashboard
 
 ## Original Problem Statement
-Build a "Stock Dashboard" with a "Power BI Feel" for a B2B CRM application integrated with Odoo.
+Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sales, and reservations from Odoo POS data.
 
 ## Architecture
-- **Frontend:** React + Shadcn/UI + Tailwind CSS (port 3000)
-- **Backend:** FastAPI + PostgreSQL (asyncpg) (port 8001)
-- **Database:** PostgreSQL with `crm` and `odoo` schemas
-- **Integration:** Odoo XML-RPC for stock sync
+- **Frontend:** React + Shadcn/UI + Tailwind CSS
+- **Backend:** FastAPI + PostgreSQL (asyncpg)
+- **Database:** PostgreSQL with Odoo schema + CRM schema views
 
-## Code Structure
-```
-/app
-├── backend/
-│   ├── server.py
-│   ├── db.py
-│   └── routers/
-│       ├── odoo_sync.py
-│       ├── stock_balance.py
-│       ├── reposicion.py
-│       └── comercial.py       # Ventas y Reservas + Owner mapping
-├── frontend/
-│   ├── src/
-│   │   ├── App.js
-│   │   ├── lib/api.js
-│   │   ├── components/Layout.jsx
-│   │   └── pages/
-│   │       ├── StockDashboard.jsx
-│   │       ├── ReposicionTab.jsx
-│   │       ├── BalanceTallas.jsx
-│   │       └── ComercialPage.jsx  # Ventas y Reservas
-```
+## Modules
 
-## Key Database Views
-- `crm.v_stock_dashboard_base` - Stock dashboard data
+### 1. Stock Dashboard (DONE)
+- Interactive dashboard with cube aggregation
+- Cascading filters with counts (tienda, marca, tipo, entalle, tela, hilo, talla, color)
+- KPIs, charts, detail table
+
+### 2. Balance de Tallas (DONE)
+- Tallas report with pivot-style display
+
+### 3. Reposicion v2 (DONE)
+- Replenishment module
+
+### 4. Ventas y Reservas (DONE - Feb 2026)
+**Features implemented:**
+- Tabs: Ventas (SALE) / Reservas (RESERVA)
+- KPIs: Cantidad Total, Ordenes, Clientes (distinct owner_partner_id)
+- Top 10 Productos: grouped by Marca+Tipo+Entalle+Tela+Hilo with Qty and Ordenes
+- Top 10 Clientes: by owner_partner_name with Qty and Ordenes
+- Detail table: Fecha, Orden, Cliente, Modelo, Marca, Tipo, Entalle, Tela, Hilo, Talla, Color, Qty, P.Unit, IDs
+- Cascade filters with counts (marca, tipo, entalle, tela, hilo, talla, color)
+- Modelo search (typeahead)
+- Cliente search (by owner_partner_name / cuenta principal)
+- "Excluir Clientes Varios" toggle
+- modelo_display field with fallback for null product names
+- IDs column (tmpl_id/var_id) with copy-to-clipboard in detail table
+- CSV export
+- Cursor-based pagination
+- Owner/Account linking via crm.v_partner_account_final
+- NULL product_id rows excluded from view
+
+**NOT available:** Tienda filter (POS data lacks session/location info)
+
+### 5. CRM Module (DONE)
+- Cuentas, Contactos, Interacciones, Tareas, Agenda
+
+## Key Views
+- `crm.v_comercial_mov_flat` - Unified SALE+RESERVA view with owner mapping and modelo_display
+- `crm.v_stock_dashboard_base` - Stock dashboard base
+- `crm.v_partner_account_final` - Partner account linking
 - `crm.v_stock_balance_flat` - Balance de tallas
-- `crm.v_comercial_mov_flat` - Unified sales + unused reservations with OWNER mapping
-- `crm.v_partner_account_final` - Partner → cuenta principal mapping (used by comercial)
-
-## Completed Features
-1. **Stock Dashboard** - Interactive cross-filtering dashboard with store panels
-2. **Reposicion Module v2** - SKU-level summary with drill-down
-3. **Balance de Tallas** - Size matrix report with color drill-down
-4. **Authentication** - JWT-based login/register
-5. **Odoo Sync** - Stock quants synchronization
-6. **Ventas y Reservas** (Feb 2026)
-   - View crm.v_comercial_mov_flat with SALE/RESERVA filters
-   - 3 endpoints: /api/comercial/summary, /filter-options, /detail
-   - Parallel async queries with asyncio.gather
-   - Frontend: tabs, filters, KPIs, top 10 tables, paginated detail
-7. **Owner Mapping** (Feb 2026)
-   - Uses crm.v_partner_account_final for contacto → cuenta principal
-   - owner_partner_id = COALESCE(paf.cuenta_partner_odoo_id, contacto_partner_id)
-   - Top clientes groups by owner, detail shows Cuenta + Contacto columns
-   - 87K+ rows have different owner vs contact
-   - Testing: Backend 13/13 (100%), Frontend 100%
 
 ## Backlog
-### P1
-- Refactor dashboard endpoints from server.py to dedicated router
-- Persist filter state in URL for sharing
-- Implement "Detalle de Stock" paginated table UI
-
-### P2
-- Implement "Por Arreglar" filter
-- Fix recurring automated login test failure
-- Add tienda info if pos_session/pos_config become available
+- P1: Refactor stock dashboard endpoints from server.py to own router
+- P1: Persist dashboard filter state in URL
+- P1: Frontend UI for "Detalle de Stock" paginated table
+- P2: "Por Arreglar" filter implementation
+- P2: Fix automated login test (recurring)
