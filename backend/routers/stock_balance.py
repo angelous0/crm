@@ -70,7 +70,7 @@ async def stock_balance_matrix(
         try:
             where, params = _build_where(tienda, marca, tipo, entalle, tela, hilo, color, talla, modelo)
 
-            # Single aggregation query - group by item + talla
+            # Single aggregation query
             rows = await conn.fetch(f"""
                 SELECT
                     COALESCE(marca::text,'') as marca,
@@ -82,9 +82,9 @@ async def stock_balance_matrix(
                     SUM(available_qty) as qty
                 FROM {VIEW} {where}
                 GROUP BY marca, tipo, entalle, tela, hilo, talla
-            """, *params, timeout=60)
+            """, *params, timeout=120)
 
-            # Build item map in Python (fast for 15K source rows)
+            # Build item map in Python
             item_map = {}
             tallas_set = set()
             for r in rows:
@@ -105,7 +105,7 @@ async def stock_balance_matrix(
 
             tallas = sorted(tallas_set, key=_talla_sort_key)
 
-            # Sort by total desc, paginate
+            # Sort by total desc, paginate in Python
             all_items = sorted(item_map.values(), key=lambda x: -x['total'])
             total_items = len(all_items)
             offset = (page - 1) * limit
@@ -114,7 +114,7 @@ async def stock_balance_matrix(
             for row in page_items:
                 row["total"] = round(row["total"])
 
-            # Totals for this page
+            # Totals for current page
             totals_by_talla = {}
             grand_total = 0
             for row in page_items:
@@ -122,33 +122,15 @@ async def stock_balance_matrix(
                 for t in tallas:
                     totals_by_talla[t] = totals_by_talla.get(t, 0) + row["values"].get(t, 0)
 
-            # Filter options from source data
-            filter_opts = {}
-            opt_rows = await conn.fetch(f"""
-                SELECT
-                    'tienda' as dim, tienda::text as v FROM {VIEW} {where} AND tienda IS NOT NULL
-                UNION ALL SELECT
-                    'marca', marca::text FROM {VIEW} {where} AND marca IS NOT NULL
-                UNION ALL SELECT
-                    'tipo', tipo::text FROM {VIEW} {where} AND tipo IS NOT NULL
-                UNION ALL SELECT
-                    'entalle', entalle::text FROM {VIEW} {where} AND entalle IS NOT NULL
-                UNION ALL SELECT
-                    'tela', tela::text FROM {VIEW} {where} AND tela IS NOT NULL
-                UNION ALL SELECT
-                    'hilo', hilo::text FROM {VIEW} {where} AND hilo IS NOT NULL
-                UNION ALL SELECT
-                    'color', color::text FROM {VIEW} {where} AND color IS NOT NULL
-            """, *(params * 7), timeout=60)
-
-            for r in opt_rows:
-                dim = r['dim']
-                if dim not in filter_opts:
-                    filter_opts[dim] = set()
-                filter_opts[dim].add(r['v'])
-
-            for k in filter_opts:
-                filter_opts[k] = sorted(filter_opts[k])
+            # Extract filter options from source aggregation
+            filter_opts = {"tienda": set(), "marca": set(), "tipo": set(),
+                           "entalle": set(), "tela": set(), "hilo": set(), "color": set()}
+            for col in filter_opts:
+                col_rows = await conn.fetch(
+                    f"SELECT DISTINCT {col}::text as v FROM {VIEW} {where} AND {col} IS NOT NULL ORDER BY v",
+                    *params, timeout=60
+                )
+                filter_opts[col] = [r['v'] for r in col_rows]
             filter_opts['talla'] = tallas
 
             return {
