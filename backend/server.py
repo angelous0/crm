@@ -419,7 +419,7 @@ async def get_cuenta_ventas(cuenta_id: str, page: int = 1, limit: int = 50, user
             offset = (page - 1) * limit
             rows = await conn.fetch(
                 "SELECT * FROM crm.v_ventas_pos_filtradas WHERE cuenta_partner_id = $1 ORDER BY date_order DESC LIMIT $2 OFFSET $3",
-                cuenta['cuenta_partner_odoo_id'], limit, offset
+                odoo_id, limit, offset
             )
             count = len(rows) if len(rows) < limit else offset + limit + 1
             await conn.execute("SET statement_timeout = '0'")
