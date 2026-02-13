@@ -775,12 +775,15 @@ async def _create_views(conn):
                     vpl.pos_order_line_id AS line_id,
                     vpl.date_order AS fecha,
                     vpl.contacto_partner_id AS partner_id,
-                    rp_contact.name         AS partner_name,
                     COALESCE(paf.cuenta_partner_odoo_id, vpl.contacto_partner_id) AS owner_partner_id,
                     rp_owner.name           AS owner_partner_name,
                     vpl.product_id          AS product_product_id,
                     vpl.product_tmpl_id,
                     pt.name                 AS modelo,
+                    CASE
+                        WHEN NULLIF(TRIM(pt.name), '') IS NOT NULL THEN pt.name
+                        ELSE CONCAT('[TMPL ', vpl.product_tmpl_id, ' | VAR ', vpl.product_id, ']')
+                    END AS modelo_display,
                     vpl.marca,
                     vpl.tipo,
                     vpl.entalle,
@@ -791,21 +794,18 @@ async def _create_views(conn):
                     vpl.barcode,
                     vpl.qty,
                     vpl.price_unit,
-                    vpl.price_subtotal      AS subtotal,
-                    vpl.is_cancelled,
-                    vpl.reserva,
-                    COALESCE(vpl.reserva_use_id, 0) AS reserva_use_id
+                    vpl.price_subtotal      AS subtotal
                 FROM odoo.v_pos_line_full vpl
                 LEFT JOIN crm.v_partner_account_final paf
                     ON paf.contacto_partner_odoo_id = vpl.contacto_partner_id
-                LEFT JOIN odoo.res_partner rp_contact
-                    ON rp_contact.company_key = 'GLOBAL' AND rp_contact.odoo_id = vpl.contacto_partner_id
                 LEFT JOIN odoo.res_partner rp_owner
                     ON rp_owner.company_key = 'GLOBAL'
                     AND rp_owner.odoo_id = COALESCE(paf.cuenta_partner_odoo_id, vpl.contacto_partner_id)
                 LEFT JOIN odoo.product_template pt
                     ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vpl.product_tmpl_id
                 WHERE vpl.is_cancelled = false
+                  AND vpl.product_id IS NOT NULL
+                  AND vpl.product_tmpl_id IS NOT NULL
                   AND (
                       COALESCE(vpl.reserva, false) = false
                       OR
