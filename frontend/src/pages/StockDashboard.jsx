@@ -683,7 +683,7 @@ export default function StockDashboard() {
       </div>
       </>
       ) : (
-        <ReposicionTab dashFilters={f} buildParams={buildParams} />
+        <ReposicionTab />
       )}
     </div>
   );
