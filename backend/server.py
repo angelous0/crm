@@ -258,6 +258,136 @@ async def get_tipos(user=Depends(get_current_user)):
             return []
 
 
+@catalogo_router.get("/telas")
+async def get_telas(user=Depends(get_current_user)):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                "SELECT DISTINCT tela::text as tela FROM crm.v_catalogo_con_stock WHERE tela IS NOT NULL ORDER BY tela"
+            )
+            return [r['tela'] for r in rows]
+        except Exception:
+            return []
+
+
+@catalogo_router.get("/entalles")
+async def get_entalles(user=Depends(get_current_user)):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            rows = await conn.fetch(
+                "SELECT DISTINCT entalle::text as entalle FROM crm.v_catalogo_con_stock WHERE entalle IS NOT NULL ORDER BY entalle"
+            )
+            return [r['entalle'] for r in rows]
+        except Exception:
+            return []
+
+
+@catalogo_router.get("/{tmpl_id}/matriz")
+async def get_matriz(tmpl_id: int, location_id: str = "ALL", user=Depends(get_current_user)):
+    """Get color x talla matrix with stock, optionally filtered by location"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            # Determine which view to use
+            loc_view_exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_catalogo_con_stock_variantes_loc')"
+            )
+
+            # Get locations for the dropdown
+            locations = []
+            try:
+                loc_rows = await conn.fetch("""
+                    SELECT odoo_id as id, COALESCE(x_nombre, name) as nombre
+                    FROM odoo.stock_location
+                    WHERE usage = 'internal' AND COALESCE(active, true) = true
+                    ORDER BY COALESCE(x_nombre, name)
+                """)
+                locations = [{"id": r['id'], "nombre": r['nombre']} for r in loc_rows]
+            except Exception:
+                pass
+
+            # Build matrix query
+            if loc_view_exists and location_id != "ALL":
+                loc_id = int(location_id)
+                rows = await conn.fetch("""
+                    SELECT COALESCE(color, 'Sin color') as color, COALESCE(talla, 'Sin talla') as talla,
+                           SUM(available_qty) as qty
+                    FROM crm.v_catalogo_con_stock_variantes_loc
+                    WHERE product_tmpl_id = $1 AND location_id = $2
+                    GROUP BY color, talla
+                """, tmpl_id, loc_id)
+            elif loc_view_exists:
+                rows = await conn.fetch("""
+                    SELECT COALESCE(color, 'Sin color') as color, COALESCE(talla, 'Sin talla') as talla,
+                           SUM(available_qty) as qty
+                    FROM crm.v_catalogo_con_stock_variantes_loc
+                    WHERE product_tmpl_id = $1
+                    GROUP BY color, talla
+                """, tmpl_id)
+            else:
+                rows = await conn.fetch("""
+                    SELECT COALESCE(color, 'Sin color') as color, COALESCE(talla, 'Sin talla') as talla,
+                           SUM(available_qty) as qty
+                    FROM crm.v_catalogo_con_stock_variantes
+                    WHERE product_tmpl_id = $1
+                    GROUP BY color, talla
+                """, tmpl_id)
+
+            # Build matrix structure
+            colors_set = set()
+            sizes_set = set()
+            matrix = {}
+            for r in rows:
+                c = r['color']
+                t = r['talla']
+                q = float(r['qty'])
+                colors_set.add(c)
+                sizes_set.add(t)
+                if c not in matrix:
+                    matrix[c] = {}
+                matrix[c][t] = q
+
+            # Smart talla ordering
+            def talla_sort_key(t):
+                order_map = {'XXS': 1, 'XS': 2, 'S': 3, 'M': 4, 'L': 5, 'XL': 6, 'XXL': 7, 'XXXL': 8}
+                if t in order_map:
+                    return (1, order_map[t])
+                try:
+                    return (0, int(t))
+                except (ValueError, TypeError):
+                    return (2, t)
+
+            tallas = sorted(sizes_set, key=talla_sort_key)
+            colores = sorted(colors_set)
+
+            # Compute totals
+            by_color = {}
+            by_size = {}
+            grand_total = 0
+            for c in colores:
+                by_color[c] = sum(matrix.get(c, {}).get(t, 0) for t in tallas)
+                grand_total += by_color[c]
+            for t in tallas:
+                by_size[t] = sum(matrix.get(c, {}).get(t, 0) for c in colores)
+
+            return {
+                "tallas": tallas,
+                "colores": colores,
+                "matrix": matrix,
+                "totals": {
+                    "byColor": by_color,
+                    "bySize": by_size,
+                    "grandTotal": grand_total
+                },
+                "locations": locations
+            }
+        except Exception as e:
+            logger.error(f"Error fetching matriz: {e}")
+            return {"tallas": [], "colores": [], "matrix": {}, "totals": {"byColor": {}, "bySize": {}, "grandTotal": 0}, "locations": []}
+
+
 @catalogo_router.get("/{tmpl_id}/variantes")
 async def get_variantes(tmpl_id: int, user=Depends(get_current_user)):
     """Get variant-level stock detail for a product template"""
