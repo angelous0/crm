@@ -122,15 +122,26 @@ async def stock_balance_matrix(
                 for t in tallas:
                     totals_by_talla[t] = totals_by_talla.get(t, 0) + row["values"].get(t, 0)
 
-            # Extract filter options from source aggregation
-            filter_opts = {"tienda": set(), "marca": set(), "tipo": set(),
-                           "entalle": set(), "tela": set(), "hilo": set(), "color": set()}
-            for col in filter_opts:
-                col_rows = await conn.fetch(
-                    f"SELECT DISTINCT {col}::text as v FROM {VIEW} {where} AND {col} IS NOT NULL ORDER BY v",
-                    *params, timeout=60
-                )
-                filter_opts[col] = [r['v'] for r in col_rows]
+            # Filter options from a single query
+            opt_row = await conn.fetchrow(f"""
+                SELECT
+                    ARRAY(SELECT DISTINCT tienda::text FROM {VIEW} {where} AND tienda IS NOT NULL ORDER BY 1) as tiendas,
+                    ARRAY(SELECT DISTINCT marca::text FROM {VIEW} {where} AND marca IS NOT NULL ORDER BY 1) as marcas,
+                    ARRAY(SELECT DISTINCT tipo::text FROM {VIEW} {where} AND tipo IS NOT NULL ORDER BY 1) as tipos,
+                    ARRAY(SELECT DISTINCT entalle::text FROM {VIEW} {where} AND entalle IS NOT NULL ORDER BY 1) as entalles,
+                    ARRAY(SELECT DISTINCT tela::text FROM {VIEW} {where} AND tela IS NOT NULL ORDER BY 1) as telas,
+                    ARRAY(SELECT DISTINCT hilo::text FROM {VIEW} {where} AND hilo IS NOT NULL ORDER BY 1) as hilos,
+                    ARRAY(SELECT DISTINCT color::text FROM {VIEW} {where} AND color IS NOT NULL ORDER BY 1) as colores
+            """, *(params * 7), timeout=60)
+            filter_opts = {
+                "tienda": list(opt_row['tiendas']),
+                "marca": list(opt_row['marcas']),
+                "tipo": list(opt_row['tipos']),
+                "entalle": list(opt_row['entalles']),
+                "tela": list(opt_row['telas']),
+                "hilo": list(opt_row['hilos']),
+                "color": list(opt_row['colores']),
+            }
             filter_opts['talla'] = tallas
 
             return {
