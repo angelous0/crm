@@ -418,6 +418,8 @@ async def _create_views(conn):
                         OR (vv.color ILIKE '%negro%')
                         OR (vv.color ILIKE '%plomo%')
                         OR (vv.color ILIKE '%carbon%')
+                        OR (vv.color ILIKE '%carbón%')
+                        OR (vv.color ILIKE '%grafito%')
                     ) as es_negro
                 FROM odoo.v_stock_by_product_location s
                 JOIN odoo.stock_location sl
@@ -458,7 +460,14 @@ async def _create_views(conn):
                     WHEN tienda ILIKE 'BOOSH' THEN 'BOOSH'
                     ELSE NULL
                 END AS tienda_canonica,
-                modelo, marca, tipo, entalle, tela, hilo,
+                modelo,
+                CASE
+                    WHEN modelo ~* '\mLQ\d*\M' THEN
+                        btrim(upper(regexp_replace(modelo, '[\s\-\(]*\mLQ\d*\M[\)\s]*.*$', '', 'i')))
+                    ELSE btrim(upper(modelo))
+                END AS modelo_base,
+                (modelo ~* '\mLQ\d*\M') AS flag_lq,
+                marca, tipo, entalle, tela, hilo,
                 talla, color, barcode, available_qty,
                 es_lq, es_negro,
                 product_tmpl_id, product_product_id
