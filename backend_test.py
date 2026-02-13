@@ -770,7 +770,16 @@ class CRMAPITester:
             self.test_partners_unlinked,
             self.test_partners_unlinked_solo_dni,
             self.test_partners_unlinked_solo_telefono,
-            self.test_vincular_contacto
+            self.test_vincular_contacto,
+            # NEW CATALOG TESTS
+            self.test_catalogo_basic,
+            self.test_catalogo_search_pulsar,
+            self.test_catalogo_filter_marca_space,
+            self.test_catalogo_stock_min_filter,
+            self.test_catalogo_order_nombre,
+            self.test_catalogo_marcas,
+            self.test_catalogo_tipos,
+            self.test_catalogo_variantes
         ]
         
         for test in tests:
