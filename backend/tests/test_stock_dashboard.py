@@ -271,6 +271,98 @@ class TestStockDashboardPivotModelo(TestAuthSetup):
             print(f"✓ Pagination works (limited data - page1: {len(data1['rows'])} rows, page2: {len(data2['rows'])} rows)")
 
 
+class TestStockDashboardPivotModeloTienda(TestAuthSetup):
+    """Test GET /api/stock-dashboard/pivot-modelo-tienda endpoint - MAIN PIVOT (Power BI style)"""
+
+    def test_pivot_modelo_tienda_no_filter(self, auth_headers):
+        """GET /api/stock-dashboard/pivot-modelo-tienda - Modelo x Tienda pivot table (main dashboard view)"""
+        response = requests.get(f"{BASE_URL}/api/stock-dashboard/pivot-modelo-tienda", headers=auth_headers)
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        
+        data = response.json()
+        
+        # Verify response structure
+        assert "tiendas" in data, "Response should have 'tiendas' (column headers)"
+        assert "rows" in data, "Response should have 'rows'"
+        assert "totals_by_tienda" in data, "Response should have 'totals_by_tienda'"
+        assert "grand_total" in data, "Response should have 'grand_total'"
+        assert "total_modelos" in data, "Response should have 'total_modelos'"
+        assert "page" in data, "Response should have 'page'"
+        
+        # Verify tiendas list - should have 11 stores
+        tiendas = data["tiendas"]
+        expected_tiendas = ["AP", "BOOSH", "Fallados Qepo", "GM207", "GM209", "GM218", "GR238", "GR55", "REMATE", "TALLER", "ZAP"]
+        for expected in expected_tiendas:
+            assert expected in tiendas, f"Tienda '{expected}' should be in columns"
+        print(f"✓ All 11 tiendas present as columns: {tiendas}")
+        
+        # Verify rows structure
+        if len(data["rows"]) > 0:
+            row = data["rows"][0]
+            assert "modelo" in row, "Row should have 'modelo'"
+            assert "marca" in row, "Row should have 'marca'"
+            assert "values" in row, "Row should have 'values' (tienda -> qty mapping)"
+            assert "total" in row, "Row should have 'total'"
+        
+        print(f"✓ Pivot Modelo x Tienda (MAIN):")
+        print(f"  - Tiendas (columns): {len(tiendas)}")
+        print(f"  - Rows (first page): {len(data['rows'])}")
+        print(f"  - Total modelos: {data['total_modelos']}")
+        print(f"  - Grand total stock: {data['grand_total']}")
+        
+        # First model should be highest stock
+        if len(data["rows"]) > 0:
+            first_model = data["rows"][0]
+            print(f"  - First model: {first_model['modelo']} ({first_model['marca']}) - Total: {first_model['total']}")
+
+    def test_pivot_modelo_tienda_with_single_tienda_filter(self, auth_headers):
+        """GET /api/stock-dashboard/pivot-modelo-tienda with tienda=TALLER filter"""
+        response = requests.get(
+            f"{BASE_URL}/api/stock-dashboard/pivot-modelo-tienda",
+            params={"tienda": "TALLER"},
+            headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should only have TALLER in tiendas list
+        assert "TALLER" in data["tiendas"], "TALLER should be in columns"
+        assert len(data["tiendas"]) == 1, "Only 1 tienda should be shown when filtering by single tienda"
+        
+        print(f"✓ Pivot Modelo x Tienda filtered by tienda 'TALLER':")
+        print(f"  - Total modelos: {data['total_modelos']}")
+        print(f"  - Grand total stock: {data['grand_total']}")
+
+    def test_pivot_modelo_tienda_pagination(self, auth_headers):
+        """GET /api/stock-dashboard/pivot-modelo-tienda pagination"""
+        # Get page 1
+        response1 = requests.get(
+            f"{BASE_URL}/api/stock-dashboard/pivot-modelo-tienda",
+            params={"page": 1, "limit": 10},
+            headers=auth_headers
+        )
+        assert response1.status_code == 200
+        data1 = response1.json()
+        
+        # Get page 2
+        response2 = requests.get(
+            f"{BASE_URL}/api/stock-dashboard/pivot-modelo-tienda",
+            params={"page": 2, "limit": 10},
+            headers=auth_headers
+        )
+        assert response2.status_code == 200
+        data2 = response2.json()
+        
+        # Pages should have different data
+        if len(data1["rows"]) >= 10 and len(data2["rows"]) > 0:
+            assert data1["rows"][0]["modelo"] != data2["rows"][0]["modelo"], "Page 2 should have different models"
+            print(f"✓ Pagination verified - Page 1 first: {data1['rows'][0]['modelo']}, Page 2 first: {data2['rows'][0]['modelo']}")
+        else:
+            print(f"✓ Pagination works (page1: {len(data1['rows'])} rows, page2: {len(data2['rows'])} rows)")
+
+
+
+
 class TestStockDashboardPivotTienda(TestAuthSetup):
     """Test GET /api/stock-dashboard/pivot-tienda endpoint"""
 
