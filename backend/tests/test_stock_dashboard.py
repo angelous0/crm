@@ -6,9 +6,11 @@ Tests:
 3. GET /api/stock-dashboard/kpis with filters - filtered KPIs
 4. GET /api/stock-dashboard/pivot-modelo - Modelo x Talla pivot table
 5. GET /api/stock-dashboard/pivot-modelo with filters - filtered pivot
-6. GET /api/stock-dashboard/pivot-tienda?pivot_tienda=X - Color x Talla matrix for a tienda
-7. GET /api/stock-dashboard/detalle - paginated detail rows
-8. GET /api/stock-dashboard/detalle with filters - filtered detail
+6. GET /api/stock-dashboard/pivot-modelo-tienda - MAIN: Modelo x Tienda pivot (Power BI style)
+7. GET /api/stock-dashboard/pivot-modelo-tienda with filters - filtered pivot  
+8. GET /api/stock-dashboard/pivot-tienda?pivot_tienda=X - Color x Talla matrix for a tienda
+9. GET /api/stock-dashboard/detalle - paginated detail rows
+10. GET /api/stock-dashboard/detalle with filters - filtered detail
 """
 
 import pytest
