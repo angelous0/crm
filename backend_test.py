@@ -435,6 +435,322 @@ class CRMAPITester:
             self.log_result("Vincular Contacto", False, f"Request error: {str(e)}")
             return False
 
+    # ────── NEW CATALOG TESTS ──────────────────────────────────────────────────
+
+    def test_catalogo_basic(self):
+        """Test /catalogo endpoint - should return products with stock (~759-788 expected)"""
+        if not self.token:
+            self.log_result("Catalogo Basic", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"page": 1, "limit": 10}
+            response = requests.get(f"{self.base_url}/catalogo", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    total_products = data['total']
+                    items_count = len(data['items'])
+                    
+                    # Verify expected product count range
+                    if 759 <= total_products <= 788:
+                        count_status = "✓ Expected range"
+                    else:
+                        count_status = f"⚠ Outside expected range (759-788)"
+                    
+                    # Check required fields in first product
+                    if items_count > 0:
+                        first_item = data['items'][0]
+                        required_fields = ['product_tmpl_id', 'nombre', 'stock_total_disponible']
+                        missing_fields = [field for field in required_fields if field not in first_item]
+                        if missing_fields:
+                            self.log_result("Catalogo Basic", False, f"Missing required fields: {missing_fields}")
+                            return False
+                    
+                    self.log_result("Catalogo Basic", True, f"Retrieved {items_count} items (total: {total_products}) {count_status}")
+                    return True
+                else:
+                    self.log_result("Catalogo Basic", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Basic", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Basic", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_search_pulsar(self):
+        """Test /catalogo search for PULSAR products"""
+        if not self.token:
+            self.log_result("Catalogo Search PULSAR", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"search": "PULSAR", "page": 1, "limit": 10}
+            response = requests.get(f"{self.base_url}/catalogo", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    total = data['total']
+                    
+                    # Verify search works - should have results mentioning PULSAR
+                    if total > 0 and items:
+                        found_pulsar = any("PULSAR" in str(item.get('nombre', '')).upper() for item in items)
+                        if found_pulsar:
+                            self.log_result("Catalogo Search PULSAR", True, f"Found {total} PULSAR products")
+                            return True
+                        else:
+                            self.log_result("Catalogo Search PULSAR", False, f"No PULSAR products in results but total={total}")
+                            return False
+                    else:
+                        # No results is also valid if there are genuinely no PULSAR products
+                        self.log_result("Catalogo Search PULSAR", True, f"Search returned 0 results (no PULSAR products)")
+                        return True
+                else:
+                    self.log_result("Catalogo Search PULSAR", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Search PULSAR", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Search PULSAR", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_filter_marca_space(self):
+        """Test /catalogo filter by marca=SPACE"""
+        if not self.token:
+            self.log_result("Catalogo Filter SPACE", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"marca": "SPACE", "page": 1, "limit": 10}
+            response = requests.get(f"{self.base_url}/catalogo", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    total = data['total']
+                    
+                    # Verify filter works - all results should be SPACE marca
+                    if items:
+                        for item in items:
+                            if item.get('marca') != 'SPACE':
+                                self.log_result("Catalogo Filter SPACE", False, f"Non-SPACE product found: {item.get('marca')}")
+                                return False
+                        
+                        self.log_result("Catalogo Filter SPACE", True, f"Found {total} SPACE products - all correctly filtered")
+                        return True
+                    else:
+                        # No results might be valid if no SPACE products exist
+                        self.log_result("Catalogo Filter SPACE", True, f"No SPACE products found (total: {total})")
+                        return True
+                else:
+                    self.log_result("Catalogo Filter SPACE", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Filter SPACE", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Filter SPACE", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_stock_min_filter(self):
+        """Test /catalogo filter by stock_min=50"""
+        if not self.token:
+            self.log_result("Catalogo Stock Min 50", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"stock_min": 50, "page": 1, "limit": 10}
+            response = requests.get(f"{self.base_url}/catalogo", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    total = data['total']
+                    
+                    # Verify filter works - all results should have stock >= 50
+                    if items:
+                        for item in items:
+                            stock = float(item.get('stock_total_disponible', 0))
+                            if stock < 50:
+                                self.log_result("Catalogo Stock Min 50", False, f"Product with stock {stock} < 50 found")
+                                return False
+                        
+                        self.log_result("Catalogo Stock Min 50", True, f"Found {total} products with stock >= 50 - all correctly filtered")
+                        return True
+                    else:
+                        self.log_result("Catalogo Stock Min 50", True, f"No products with stock >= 50 found")
+                        return True
+                else:
+                    self.log_result("Catalogo Stock Min 50", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Stock Min 50", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Stock Min 50", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_order_nombre(self):
+        """Test /catalogo ordering by nombre (alphabetical)"""
+        if not self.token:
+            self.log_result("Catalogo Order Nombre", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"orden": "nombre", "page": 1, "limit": 5}
+            response = requests.get(f"{self.base_url}/catalogo", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    
+                    # Verify ordering - names should be in alphabetical order
+                    if len(items) > 1:
+                        names = [item.get('nombre', '') for item in items]
+                        sorted_names = sorted(names)
+                        
+                        if names == sorted_names:
+                            self.log_result("Catalogo Order Nombre", True, f"Products correctly sorted alphabetically: {names[:2]}...")
+                            return True
+                        else:
+                            self.log_result("Catalogo Order Nombre", False, f"Not sorted: {names} vs expected {sorted_names}")
+                            return False
+                    else:
+                        self.log_result("Catalogo Order Nombre", True, f"Ordering test passed (only {len(items)} items)")
+                        return True
+                else:
+                    self.log_result("Catalogo Order Nombre", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Order Nombre", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Order Nombre", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_marcas(self):
+        """Test /catalogo/marcas endpoint - should return list of marca strings"""
+        if not self.token:
+            self.log_result("Catalogo Marcas", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = requests.get(f"{self.base_url}/catalogo/marcas", headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    # Expected marcas from context: AMBISSION, BOOSH, ELEMENT PREMIUM, QEPO, SPACE
+                    expected_marcas = ['AMBISSION', 'BOOSH', 'ELEMENT PREMIUM', 'QEPO', 'SPACE']
+                    found_expected = [marca for marca in expected_marcas if marca in data]
+                    
+                    self.log_result("Catalogo Marcas", True, f"Retrieved {len(data)} marcas including: {found_expected}")
+                    return True
+                else:
+                    self.log_result("Catalogo Marcas", False, f"Expected list but got: {type(data)} - {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Marcas", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Marcas", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_tipos(self):
+        """Test /catalogo/tipos endpoint - should return list of tipo strings"""
+        if not self.token:
+            self.log_result("Catalogo Tipos", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = requests.get(f"{self.base_url}/catalogo/tipos", headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_result("Catalogo Tipos", True, f"Retrieved {len(data)} tipos: {data[:5]}...")
+                    return True
+                else:
+                    self.log_result("Catalogo Tipos", False, f"Expected list but got: {type(data)} - {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Tipos", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Tipos", False, f"Request error: {str(e)}")
+            return False
+
+    def test_catalogo_variantes(self):
+        """Test /catalogo/{tmpl_id}/variantes endpoint - get variant-level stock detail"""
+        if not self.token:
+            self.log_result("Catalogo Variantes", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            
+            # First get a product to test variants for
+            catalog_response = requests.get(f"{self.base_url}/catalogo", headers=headers, params={"page": 1, "limit": 1}, timeout=15)
+            if catalog_response.status_code != 200:
+                self.log_result("Catalogo Variantes", False, "Could not get catalog for testing variants")
+                return False
+            
+            catalog_data = catalog_response.json()
+            if not catalog_data.get('items'):
+                self.log_result("Catalogo Variantes", False, "No catalog items available for variant testing")
+                return False
+            
+            tmpl_id = catalog_data['items'][0]['product_tmpl_id']
+            product_name = catalog_data['items'][0]['nombre']
+            
+            # Test variants endpoint
+            response = requests.get(f"{self.base_url}/catalogo/{tmpl_id}/variantes", headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    if data:
+                        # Check required fields in first variant
+                        first_variant = data[0]
+                        required_fields = ['product_tmpl_id', 'product_product_id', 'available_qty']
+                        optional_fields = ['barcode', 'talla', 'color']
+                        
+                        missing_required = [field for field in required_fields if field not in first_variant]
+                        if missing_required:
+                            self.log_result("Catalogo Variantes", False, f"Missing required variant fields: {missing_required}")
+                            return False
+                        
+                        variant_count = len(data)
+                        self.log_result("Catalogo Variantes", True, f"Retrieved {variant_count} variants for {product_name} (ID: {tmpl_id})")
+                        return True
+                    else:
+                        self.log_result("Catalogo Variantes", True, f"No variants found for product {product_name} (ID: {tmpl_id})")
+                        return True
+                else:
+                    self.log_result("Catalogo Variantes", False, f"Expected list but got: {type(data)} - {data}")
+                    return False
+            else:
+                self.log_result("Catalogo Variantes", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Catalogo Variantes", False, f"Request error: {str(e)}")
+            return False
+
     def run_all_tests(self):
         """Run comprehensive API test suite"""
         print("🚀 Starting CRM API Test Suite")
