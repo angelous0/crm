@@ -145,7 +145,7 @@ export default function ComercialPage() {
     setDetailLoading(true);
     try {
       const r = await api.get("/comercial/detail", { params: { ...buildParams(), page: pg, limit: LIMIT } });
-      setDetail({ items: r.data.items || [], total: r.data.total || 0 });
+      setDetail({ items: r.data.items || [], has_next: r.data.has_next || false });
       setPage(pg);
     } catch { toast.error("Error cargando detalle"); }
     finally { setDetailLoading(false); }
