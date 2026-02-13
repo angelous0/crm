@@ -334,6 +334,135 @@ export default function CuentaDetalle() {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Vincular contacto existente */}
+                <div className="mt-6 bg-white rounded-lg border border-border shadow-sm" data-testid="vincular-contacto-section">
+                  <div className="p-4 border-b border-border">
+                    <div className="flex items-center gap-2 mb-1">
+                      <UserPlus size={18} className="text-slate-600" strokeWidth={1.5} />
+                      <h4 className="font-heading font-medium text-base text-slate-900">Vincular contacto existente</h4>
+                    </div>
+                    <p className="text-xs text-slate-500">Busca personas del ODS (Odoo) que aun no estan vinculadas al CRM</p>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {/* Search + Filters */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="relative flex-1 min-w-[220px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                        <Input
+                          data-testid="vincular-search"
+                          placeholder="Buscar por nombre, DNI/RUC, telefono... (min 2 caracteres)"
+                          className="pl-9 text-sm"
+                          value={unlinkSearch}
+                          onChange={(e) => handleUnlinkSearchChange(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
+                        <Switch
+                          id="solo-dni"
+                          data-testid="vincular-solo-dni"
+                          checked={soloDni}
+                          onCheckedChange={(v) => handleUnlinkFilterChange(v, soloTelefono)}
+                          className="scale-[0.85]"
+                        />
+                        <Label htmlFor="solo-dni" className="text-xs text-slate-600 cursor-pointer whitespace-nowrap">Solo con DNI/RUC</Label>
+                      </div>
+                      <div className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
+                        <Switch
+                          id="solo-tel"
+                          data-testid="vincular-solo-telefono"
+                          checked={soloTelefono}
+                          onCheckedChange={(v) => handleUnlinkFilterChange(soloDni, v)}
+                          className="scale-[0.85]"
+                        />
+                        <Label htmlFor="solo-tel" className="text-xs text-slate-600 cursor-pointer whitespace-nowrap">Solo con telefono</Label>
+                      </div>
+                    </div>
+
+                    {/* Results table */}
+                    {unlinkSearch.length >= 2 && (
+                      <>
+                        <div className="rounded-md border border-border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-50/50">
+                                <TableHead>Nombre</TableHead>
+                                <TableHead>DNI/RUC</TableHead>
+                                <TableHead>Telefono</TableHead>
+                                <TableHead>WhatsApp</TableHead>
+                                <TableHead>Ciudad</TableHead>
+                                <TableHead className="w-[100px]">Accion</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {unlinkLoading ? (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="h-24 text-center">
+                                    <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />
+                                  </TableCell>
+                                </TableRow>
+                              ) : unlinkResults.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="h-20 text-center text-slate-500 text-sm">
+                                    No se encontraron partners sin vincular
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                unlinkResults.map((p) => (
+                                  <TableRow key={p.odoo_id} data-testid={`unlinked-partner-${p.odoo_id}`}>
+                                    <TableCell className="font-medium text-sm text-slate-900">{p.name}</TableCell>
+                                    <TableCell className="text-sm text-slate-600 font-mono">{p.vat || "-"}</TableCell>
+                                    <TableCell className="text-sm text-slate-600">{p.phone || "-"}</TableCell>
+                                    <TableCell className="text-sm text-slate-600">{p.mobile || "-"}</TableCell>
+                                    <TableCell className="text-sm text-slate-600">{p.city || "-"}</TableCell>
+                                    <TableCell>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs"
+                                        onClick={() => openVincularConfirm(p)}
+                                        data-testid={`vincular-btn-${p.odoo_id}`}
+                                      >
+                                        <Link2 size={14} className="mr-1" /> Vincular
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        {/* Pagination */}
+                        {unlinkTotalPages > 0 && (
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-slate-500">
+                              {unlinkTotal} resultado{unlinkTotal !== 1 ? "s" : ""} | Pagina {unlinkPage} de {unlinkTotalPages || 1}
+                            </p>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="outline" size="sm"
+                                disabled={unlinkPage <= 1}
+                                onClick={() => handleUnlinkPageChange(unlinkPage - 1)}
+                                data-testid="vincular-prev-page"
+                              >
+                                <ChevronLeft size={14} />
+                              </Button>
+                              <Button
+                                variant="outline" size="sm"
+                                disabled={unlinkPage >= unlinkTotalPages}
+                                onClick={() => handleUnlinkPageChange(unlinkPage + 1)}
+                                data-testid="vincular-next-page"
+                              >
+                                <ChevronRight size={14} />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
 
               {/* Ventas Tab */}
