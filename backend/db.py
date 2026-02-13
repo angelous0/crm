@@ -753,3 +753,60 @@ async def _create_views(conn):
             logger.warning("Required POS tables not found, skipping v_ventas_pos_filtradas")
     except Exception as e:
         logger.warning(f"Could not create v_ventas_pos_filtradas: {e}")
+
+
+    # 3.5) v_comercial_mov_flat – unified SALE + RESERVA view
+    try:
+        has_vpl = 'v_pos_line_full' in odoo_tables
+        has_rp = 'res_partner' in odoo_tables
+        has_pt_cm = 'product_template' in odoo_tables
+        if has_vpl and has_rp and has_pt_cm:
+            await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_mov_flat;")
+            await conn.execute("""
+                CREATE VIEW crm.v_comercial_mov_flat AS
+                SELECT
+                    CASE
+                        WHEN COALESCE(vpl.reserva, false) = true
+                             AND COALESCE(vpl.reserva_use_id, 0) = 0
+                        THEN 'RESERVA'
+                        ELSE 'SALE'
+                    END AS doc_tipo,
+                    vpl.order_id,
+                    vpl.pos_order_line_id AS line_id,
+                    vpl.date_order AS fecha,
+                    vpl.cuenta_partner_id  AS partner_id,
+                    rp.name                AS partner_name,
+                    vpl.product_id         AS product_product_id,
+                    vpl.product_tmpl_id,
+                    pt.name                AS modelo,
+                    vpl.marca,
+                    vpl.tipo,
+                    vpl.entalle,
+                    vpl.tela,
+                    COALESCE(pt.hilo::text, '') AS hilo,
+                    vpl.talla,
+                    vpl.color,
+                    vpl.barcode,
+                    vpl.qty,
+                    vpl.price_unit,
+                    vpl.price_subtotal     AS subtotal,
+                    vpl.is_cancelled,
+                    vpl.reserva,
+                    COALESCE(vpl.reserva_use_id, 0) AS reserva_use_id
+                FROM odoo.v_pos_line_full vpl
+                LEFT JOIN odoo.res_partner rp
+                    ON rp.company_key = 'GLOBAL' AND rp.odoo_id = vpl.cuenta_partner_id
+                LEFT JOIN odoo.product_template pt
+                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vpl.product_tmpl_id
+                WHERE vpl.is_cancelled = false
+                  AND (
+                      COALESCE(vpl.reserva, false) = false
+                      OR
+                      (COALESCE(vpl.reserva, false) = true AND COALESCE(vpl.reserva_use_id, 0) = 0)
+                  );
+            """)
+            logger.info("View crm.v_comercial_mov_flat created")
+        else:
+            logger.warning("Missing tables for v_comercial_mov_flat")
+    except Exception as e:
+        logger.warning(f"Could not create v_comercial_mov_flat: {e}")
