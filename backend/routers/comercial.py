@@ -1,5 +1,5 @@
-"""Comercial (Ventas y Reservas) router – optimized."""
-from fastapi import APIRouter, Depends, Query
+"""Comercial (Ventas y Reservas) router – with owner mapping."""
+from fastapi import APIRouter, Depends
 from typing import Optional
 import asyncio
 import logging
@@ -55,7 +55,7 @@ def _build_where(params_list, fecha_desde, fecha_hasta, marca, tipo,
 
     if cliente:
         params_list.append(f"%{cliente}%")
-        parts.append(f"partner_name ILIKE ${len(params_list)}")
+        parts.append(f"owner_partner_name ILIKE ${len(params_list)}")
 
     return ("WHERE " + " AND ".join(parts)) if parts else "WHERE 1=1"
 
@@ -105,11 +105,11 @@ async def comercial_summary(
     async def _top_cli():
         async with pool.acquire() as conn:
             return records_to_list(await conn.fetch(f"""
-                SELECT partner_id, partner_name,
+                SELECT owner_partner_id, owner_partner_name,
                        SUM(qty) AS qty, SUM(subtotal) AS subtotal,
                        COUNT(DISTINCT order_id) AS orders
                 FROM {VIEW} {where}
-                GROUP BY partner_id, partner_name
+                GROUP BY owner_partner_id, owner_partner_name
                 ORDER BY SUM(subtotal) DESC LIMIT 10
             """, *params))
 
@@ -133,7 +133,6 @@ async def comercial_filter_options(
     fecha_hasta: Optional[str] = None,
     user=Depends(_get_auth_dep()),
 ):
-    """Lightweight endpoint: only filters by doc_tipo + dates for speed."""
     pool = await get_pool()
     params = []
     parts = []
@@ -190,10 +189,11 @@ async def comercial_detail(
 
     async with pool.acquire() as conn:
         p = list(params)
-        p.append(limit + 1)  # fetch one extra to detect next page
+        p.append(limit + 1)
         p.append(offset)
         rows = records_to_list(await conn.fetch(f"""
             SELECT doc_tipo, order_id, line_id, fecha,
+                   owner_partner_id, owner_partner_name,
                    partner_id, partner_name,
                    product_product_id, product_tmpl_id, modelo,
                    marca, tipo, entalle, tela, hilo,
