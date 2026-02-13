@@ -689,11 +689,14 @@ async def get_ventas(
             if not view_exists:
                 return {"items": [], "total": 0, "page": page, "message": "Vista de ventas no disponible"}
 
+            # Set query timeout for slow external DB
+            await conn.execute("SET statement_timeout = '15s'")
+
             offset = (page - 1) * limit
             where = "WHERE 1=1"
             params = []
 
-            # Get available columns
+            # Get available columns (cached-like, fast query)
             vcols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='crm' AND table_name='v_ventas_pos_filtradas'")
             available_cols = [r['column_name'] for r in vcols]
 
@@ -722,12 +725,23 @@ async def get_ventas(
                 where += f" AND entalle::text ILIKE ${len(params)}"
 
             order_col = 'date_order' if 'date_order' in available_cols else '1'
-            count = await conn.fetchval(f"SELECT COUNT(*) FROM crm.v_ventas_pos_filtradas {where}", *params)
-            params.extend([limit, offset])
+
+            # Fetch data first (with LIMIT), then estimate count
+            data_params = params.copy()
+            data_params.extend([limit, offset])
             rows = await conn.fetch(
-                f"SELECT * FROM crm.v_ventas_pos_filtradas {where} ORDER BY {order_col} DESC LIMIT ${len(params)-1} OFFSET ${len(params)}",
-                *params
+                f"SELECT * FROM crm.v_ventas_pos_filtradas {where} ORDER BY {order_col} DESC LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}",
+                *data_params
             )
+
+            # Get count - use a faster approach if no filters
+            try:
+                count = await conn.fetchval(f"SELECT COUNT(*) FROM crm.v_ventas_pos_filtradas {where}", *params)
+            except Exception:
+                # If count times out, estimate from rows returned
+                count = offset + len(rows) + (limit if len(rows) == limit else 0)
+
+            await conn.execute("SET statement_timeout = '0'")
             return {"items": records_to_list(rows), "total": count, "page": page}
         except Exception as e:
             logger.error(f"Error fetching ventas: {e}")
