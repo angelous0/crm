@@ -215,7 +215,7 @@ async def _create_views(conn):
         """)
         logger.info("View crm.v_cuenta_partners created")
     except Exception as e:
-        logger.warning(f"Could not create v_cuenta_partners: {e}")        return
+        logger.warning(f"Could not create v_cuenta_partners: {e}")
 
     # 3.1) v_partner_account_final - MUST cover ALL odoo partners
     try:
