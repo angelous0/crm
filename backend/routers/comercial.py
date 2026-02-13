@@ -1,6 +1,7 @@
-"""Comercial (Ventas y Reservas) router."""
-from fastapi import APIRouter, Depends, Query
+"""Comercial (Ventas y Reservas) router – optimized."""
+from fastapi import APIRouter, Query
 from typing import Optional
+import asyncio
 import logging
 from db import get_pool, records_to_list
 
@@ -11,9 +12,8 @@ router = APIRouter(prefix="/api/comercial", tags=["comercial"])
 VIEW = "crm.v_comercial_mov_flat"
 
 
-def _build_where(params_list, fecha_desde, fecha_hasta, tienda, marca, tipo,
+def _build_where(params_list, fecha_desde, fecha_hasta, marca, tipo,
                  entalle, tela, hilo, modelo, talla, color, cliente, doc_tipo):
-    """Build WHERE clause dynamically. params_list is mutated (appended)."""
     parts = []
 
     def _add_arr(col, val):
@@ -52,8 +52,7 @@ def _build_where(params_list, fecha_desde, fecha_hasta, tienda, marca, tipo,
         params_list.append(f"%{cliente}%")
         parts.append(f"partner_name ILIKE ${len(params_list)}")
 
-    where = "WHERE " + (" AND ".join(parts)) if parts else "WHERE 1=1"
-    return where
+    return ("WHERE " + " AND ".join(parts)) if parts else "WHERE 1=1"
 
 
 @router.get("/summary")
@@ -72,83 +71,89 @@ async def comercial_summary(
     doc_tipo: Optional[str] = None,
 ):
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        params = []
-        where = _build_where(params, fecha_desde, fecha_hasta, None, marca,
-                             tipo, entalle, tela, hilo, modelo, talla, color,
-                             cliente, doc_tipo)
+    params = []
+    where = _build_where(params, fecha_desde, fecha_hasta, marca,
+                         tipo, entalle, tela, hilo, modelo, talla, color,
+                         cliente, doc_tipo)
 
-        # KPIs
-        kpi_sql = f"""
-            SELECT
-                COALESCE(SUM(qty), 0) AS total_qty,
-                COALESCE(SUM(subtotal), 0) AS total_subtotal,
-                COUNT(DISTINCT order_id) AS count_orders
-            FROM {VIEW} {where}
-        """
-        kpi = await conn.fetchrow(kpi_sql, *params)
-
-        # Top 10 productos
-        top_prod_sql = f"""
-            SELECT modelo, marca, tipo, talla, color,
-                   SUM(qty) AS qty, SUM(subtotal) AS subtotal,
-                   COUNT(DISTINCT order_id) AS orders
-            FROM {VIEW} {where}
-            GROUP BY modelo, marca, tipo, talla, color
-            ORDER BY SUM(qty) DESC
-            LIMIT 10
-        """
-        top_productos = records_to_list(await conn.fetch(top_prod_sql, *params))
-
-        # Top 10 clientes
-        top_cli_sql = f"""
-            SELECT partner_id, partner_name,
-                   SUM(qty) AS qty, SUM(subtotal) AS subtotal,
-                   COUNT(DISTINCT order_id) AS orders
-            FROM {VIEW} {where}
-            GROUP BY partner_id, partner_name
-            ORDER BY SUM(subtotal) DESC
-            LIMIT 10
-        """
-        top_clientes = records_to_list(await conn.fetch(top_cli_sql, *params))
-
-        # Filter options (for dynamic slicers)
-        opts = {}
-        for col in ['marca', 'tipo', 'entalle', 'tela', 'hilo', 'talla', 'color']:
-            opt_sql = f"""
-                SELECT {col} AS value, COUNT(*) AS cnt
+    async def _kpis():
+        async with pool.acquire() as conn:
+            return await conn.fetchrow(f"""
+                SELECT COALESCE(SUM(qty),0) AS total_qty,
+                       COALESCE(SUM(subtotal),0) AS total_subtotal,
+                       COUNT(DISTINCT order_id) AS count_orders
                 FROM {VIEW} {where}
-                WHERE {col} IS NOT NULL AND {col} <> ''
-                GROUP BY {col} ORDER BY {col}
-            """.replace(f"{where}\n", f"{where} AND ", 1) if where != "WHERE 1=1" else f"""
-                SELECT {col} AS value, COUNT(*) AS cnt
-                FROM {VIEW}
-                WHERE {col} IS NOT NULL AND {col} <> ''
-                GROUP BY {col} ORDER BY {col}
-            """
-            # Simpler: just query distinct values with the same filters
-            opt_params = list(params)
-            opt_sql2 = f"""
-                SELECT DISTINCT {col} AS value
+            """, *params)
+
+    async def _top_prod():
+        async with pool.acquire() as conn:
+            return records_to_list(await conn.fetch(f"""
+                SELECT modelo, marca, tipo, talla, color,
+                       SUM(qty) AS qty, SUM(subtotal) AS subtotal,
+                       COUNT(DISTINCT order_id) AS orders
                 FROM {VIEW} {where}
+                GROUP BY modelo, marca, tipo, talla, color
+                ORDER BY SUM(qty) DESC LIMIT 10
+            """, *params))
+
+    async def _top_cli():
+        async with pool.acquire() as conn:
+            return records_to_list(await conn.fetch(f"""
+                SELECT partner_id, partner_name,
+                       SUM(qty) AS qty, SUM(subtotal) AS subtotal,
+                       COUNT(DISTINCT order_id) AS orders
+                FROM {VIEW} {where}
+                GROUP BY partner_id, partner_name
+                ORDER BY SUM(subtotal) DESC LIMIT 10
+            """, *params))
+
+    kpi, top_p, top_c = await asyncio.gather(_kpis(), _top_prod(), _top_cli())
+
+    return {
+        "kpis": {
+            "total_qty": float(kpi['total_qty']),
+            "total_subtotal": float(kpi['total_subtotal']),
+            "count_orders": kpi['count_orders'],
+        },
+        "top_productos": top_p,
+        "top_clientes": top_c,
+    }
+
+
+@router.get("/filter-options")
+async def comercial_filter_options(
+    doc_tipo: Optional[str] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+):
+    """Lightweight endpoint: only filters by doc_tipo + dates for speed."""
+    pool = await get_pool()
+    params = []
+    parts = []
+    if doc_tipo:
+        params.append(doc_tipo)
+        parts.append(f"doc_tipo = ${len(params)}")
+    if fecha_desde:
+        params.append(fecha_desde)
+        parts.append(f"fecha >= ${len(params)}::text::timestamptz")
+    if fecha_hasta:
+        params.append(fecha_hasta + "T23:59:59")
+        parts.append(f"fecha <= ${len(params)}::text::timestamptz")
+    where = ("WHERE " + " AND ".join(parts)) if parts else "WHERE 1=1"
+
+    cols = ['marca', 'tipo', 'entalle', 'tela', 'hilo', 'talla', 'color']
+
+    async def _fetch_col(col):
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(f"""
+                SELECT DISTINCT {col} AS value FROM {VIEW}
+                {where} AND {col} IS NOT NULL AND {col} <> ''
                 ORDER BY {col}
-            """
-            try:
-                rows = await conn.fetch(opt_sql2, *opt_params)
-                opts[col] = [r['value'] for r in rows if r['value']]
-            except Exception:
-                opts[col] = []
+            """, *params)
+            return col, [r['value'] for r in rows]
 
-        return {
-            "kpis": {
-                "total_qty": float(kpi['total_qty']),
-                "total_subtotal": float(kpi['total_subtotal']),
-                "count_orders": kpi['count_orders'],
-            },
-            "top_productos": top_productos,
-            "top_clientes": top_clientes,
-            "filter_opts": opts,
-        }
+    results = await asyncio.gather(*[_fetch_col(c) for c in cols])
+    return {col: vals for col, vals in results}
 
 
 @router.get("/detail")
@@ -169,36 +174,31 @@ async def comercial_detail(
     limit: int = 50,
 ):
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        params = []
-        where = _build_where(params, fecha_desde, fecha_hasta, None, marca,
-                             tipo, entalle, tela, hilo, modelo, talla, color,
-                             cliente, doc_tipo)
+    params = []
+    where = _build_where(params, fecha_desde, fecha_hasta, marca,
+                         tipo, entalle, tela, hilo, modelo, talla, color,
+                         cliente, doc_tipo)
+    offset = (page - 1) * limit
 
-        # Count
-        cnt_sql = f"SELECT COUNT(*) FROM {VIEW} {where}"
-        total = await conn.fetchval(cnt_sql, *params)
+    async def _count():
+        async with pool.acquire() as conn:
+            return await conn.fetchval(f"SELECT COUNT(*) FROM {VIEW} {where}", *params)
 
-        # Paginated rows
-        offset = (page - 1) * limit
-        params.append(limit)
-        params.append(offset)
-        detail_sql = f"""
-            SELECT doc_tipo, order_id, line_id, fecha,
-                   partner_id, partner_name,
-                   product_product_id, product_tmpl_id, modelo,
-                   marca, tipo, entalle, tela, hilo,
-                   talla, color, barcode,
-                   qty, price_unit, subtotal
-            FROM {VIEW} {where}
-            ORDER BY fecha DESC, order_id DESC, line_id DESC
-            LIMIT ${len(params) - 1} OFFSET ${len(params)}
-        """
-        rows = records_to_list(await conn.fetch(detail_sql, *params))
+    async def _rows():
+        async with pool.acquire() as conn:
+            p = list(params)
+            p.append(limit)
+            p.append(offset)
+            return records_to_list(await conn.fetch(f"""
+                SELECT doc_tipo, order_id, line_id, fecha,
+                       partner_id, partner_name,
+                       product_product_id, product_tmpl_id, modelo,
+                       marca, tipo, entalle, tela, hilo,
+                       talla, color, barcode, qty, price_unit, subtotal
+                FROM {VIEW} {where}
+                ORDER BY fecha DESC, order_id DESC, line_id DESC
+                LIMIT ${len(p)-1} OFFSET ${len(p)}
+            """, *p))
 
-        return {
-            "items": rows,
-            "total": total,
-            "page": page,
-            "limit": limit,
-        }
+    total, rows = await asyncio.gather(_count(), _rows())
+    return {"items": rows, "total": total, "page": page, "limit": limit}
