@@ -1,11 +1,13 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
-  CalendarClock, ShoppingCart, LogOut, ChevronRight, BarChart3
+  CalendarClock, ShoppingCart, LogOut, ChevronRight, BarChart3,
+  PanelLeftClose, PanelLeftOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -20,79 +22,116 @@ const navItems = [
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("sidebar_collapsed") === "true"; } catch { return false; }
+  });
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+  useEffect(() => {
+    try { localStorage.setItem("sidebar_collapsed", collapsed); } catch {}
+  }, [collapsed]);
+
+  const handleLogout = () => { logout(); navigate("/login"); };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50/50">
-      {/* Sidebar */}
-      <aside className="w-[250px] flex-shrink-0 bg-white border-r border-border flex flex-col" data-testid="sidebar">
-        {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-slate-900 rounded-md flex items-center justify-center">
-              <span className="text-white font-heading font-bold text-sm">C</span>
-            </div>
-            <span className="font-heading font-semibold text-lg tracking-tight text-slate-900">CRM B2B</span>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-1" data-testid="sidebar-nav">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors duration-200 group ${
-                  isActive
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`
-              }
-              data-testid={`nav-${label.toLowerCase()}`}
+    <TooltipProvider delayDuration={200}>
+      <div className="flex h-screen overflow-hidden bg-slate-50/50">
+        {/* Sidebar */}
+        <aside
+          className={`flex-shrink-0 bg-white border-r border-border flex flex-col transition-all duration-200 ${collapsed ? "w-[60px]" : "w-[220px]"}`}
+          data-testid="sidebar"
+        >
+          {/* Logo + Toggle */}
+          <div className="h-14 flex items-center justify-between px-3 border-b border-border">
+            {!collapsed && (
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-slate-900 rounded-md flex items-center justify-center">
+                  <span className="text-white font-heading font-bold text-xs">C</span>
+                </div>
+                <span className="font-heading font-semibold text-sm tracking-tight text-slate-900">CRM B2B</span>
+              </div>
+            )}
+            <Button
+              variant="ghost" size="sm"
+              className={`h-7 w-7 p-0 text-slate-400 hover:text-slate-700 ${collapsed ? "mx-auto" : ""}`}
+              onClick={() => setCollapsed(c => !c)}
+              data-testid="sidebar-toggle"
             >
-              <Icon size={18} strokeWidth={1.5} />
-              <span>{label}</span>
-              <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* User section */}
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-              <span className="text-xs font-semibold text-slate-600">
-                {user?.nombre?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">{user?.nombre || user?.email}</p>
-              <p className="text-xs text-slate-500 truncate">{user?.rol || "vendedor"}</p>
-            </div>
+              {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-slate-500 hover:text-slate-900"
-            onClick={handleLogout}
-            data-testid="logout-btn"
-          >
-            <LogOut size={16} className="mr-2" />
-            Cerrar sesion
-          </Button>
-        </div>
-      </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        {children}
-      </main>
-    </div>
+          {/* Navigation */}
+          <nav className="flex-1 py-3 px-2 space-y-0.5" data-testid="sidebar-nav">
+            {navItems.map(({ to, icon: Icon, label }) => {
+              const link = (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === "/"}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 group ${
+                      isActive
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    } ${collapsed ? "justify-center px-0" : ""}`
+                  }
+                  data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
+                >
+                  <Icon size={17} strokeWidth={1.5} />
+                  {!collapsed && <span className="truncate">{label}</span>}
+                  {!collapsed && <ChevronRight size={13} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />}
+                </NavLink>
+              );
+
+              if (collapsed) {
+                return (
+                  <Tooltip key={to}>
+                    <TooltipTrigger asChild>{link}</TooltipTrigger>
+                    <TooltipContent side="right" className="text-xs">{label}</TooltipContent>
+                  </Tooltip>
+                );
+              }
+              return link;
+            })}
+          </nav>
+
+          {/* User section */}
+          <div className={`p-3 border-t border-border ${collapsed ? "flex flex-col items-center" : ""}`}>
+            {!collapsed && (
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center">
+                  <span className="text-[10px] font-semibold text-slate-600">
+                    {user?.nombre?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-900 truncate">{user?.nombre || user?.email}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{user?.rol || "vendedor"}</p>
+                </div>
+              </div>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost" size="sm"
+                  className={`text-slate-500 hover:text-slate-900 ${collapsed ? "h-8 w-8 p-0" : "w-full justify-start text-xs h-8"}`}
+                  onClick={handleLogout}
+                  data-testid="logout-btn"
+                >
+                  <LogOut size={15} className={collapsed ? "" : "mr-2"} />
+                  {!collapsed && "Cerrar sesion"}
+                </Button>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right" className="text-xs">Cerrar sesion</TooltipContent>}
+            </Tooltip>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+      </div>
+    </TooltipProvider>
   );
 }
