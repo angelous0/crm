@@ -1129,6 +1129,7 @@ async def health():
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 
 app.include_router(auth_router)
+app.include_router(catalogo_router)
 app.include_router(productos_router)
 app.include_router(cuentas_router)
 app.include_router(contactos_router)
