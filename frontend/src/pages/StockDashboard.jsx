@@ -525,6 +525,21 @@ export default function StockDashboard() {
       </div>
 
       <FilterChips f={f} onRemove={removeFilter} onClear={clearAll} />
+
+      {/* ── TAB BAR ── */}
+      <div className="bg-slate-800 px-3 flex items-center gap-0 shrink-0 border-b border-slate-700" data-testid="dashboard-tabs">
+        <button className={`px-4 py-1.5 text-[10px] font-semibold transition-colors border-b-2 ${activeTab === "dashboard" ? "text-white border-amber-500" : "text-slate-400 border-transparent hover:text-white hover:border-slate-500"}`}
+          onClick={() => setActiveTab("dashboard")} data-testid="tab-dashboard">
+          Stock Dashboard
+        </button>
+        <button className={`px-4 py-1.5 text-[10px] font-semibold transition-colors border-b-2 flex items-center gap-1 ${activeTab === "reposicion" ? "text-white border-amber-500" : "text-slate-400 border-transparent hover:text-white hover:border-slate-500"}`}
+          onClick={() => setActiveTab("reposicion")} data-testid="tab-reposicion">
+          <Package size={10} /> Reposición
+        </button>
+      </div>
+
+      {activeTab === "dashboard" ? (
+      <>
       <SelectionBar sel={sel} onReset={resetSel} />
 
       {/* ── MAIN GRID ── */}
