@@ -657,6 +657,45 @@ export default function CuentaDetalle() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Vincular Contacto Confirmation Dialog */}
+      <Dialog open={showVincularConfirm} onOpenChange={setShowVincularConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vincular contacto</DialogTitle>
+            <DialogDescription>
+              Vincular <strong>{vincularTarget?.name}</strong> a la cuenta <strong>{partnerName}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {vincularTarget && (
+              <div className="bg-slate-50 rounded-md p-3 space-y-1 text-sm">
+                <p><span className="text-slate-500">Nombre:</span> <span className="font-medium text-slate-900">{vincularTarget.name}</span></p>
+                {vincularTarget.vat && <p><span className="text-slate-500">DNI/RUC:</span> <span className="font-mono">{vincularTarget.vat}</span></p>}
+                {vincularTarget.phone && <p><span className="text-slate-500">Telefono:</span> {vincularTarget.phone}</p>}
+                {vincularTarget.mobile && <p><span className="text-slate-500">Mobile:</span> {vincularTarget.mobile}</p>}
+                {vincularTarget.city && <p><span className="text-slate-500">Ciudad:</span> {vincularTarget.city}</p>}
+              </div>
+            )}
+            <div>
+              <Label className="text-xs uppercase tracking-wider font-semibold text-slate-500">Nota (opcional)</Label>
+              <Input
+                data-testid="vincular-nota"
+                value={vincularNota}
+                onChange={e => setVincularNota(e.target.value)}
+                placeholder="Vinculado manualmente desde la cuenta"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVincularConfirm(false)}>Cancelar</Button>
+            <Button onClick={handleVincular} disabled={vincularLoading} data-testid="confirm-vincular-btn">
+              {vincularLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Vincular
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
