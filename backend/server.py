@@ -1420,6 +1420,7 @@ async def stock_pivot_modelo(
     async with p.acquire() as conn:
         try:
             where, params = _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+            where_f, params_f = _stock_filters_aliased("f", tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
             offset = (page - 1) * limit
 
             # Get distinct tallas for columns
@@ -1434,7 +1435,7 @@ async def stock_pivot_modelo(
             )
 
             # Get pivot data: modelo, marca, talla, qty - top N by total stock
-            piv_params = list(params)
+            piv_params = list(params_f)
             piv_params.extend([limit, offset])
             rows = await conn.fetch(f"""
                 WITH modelo_totals AS (
@@ -1447,7 +1448,7 @@ async def stock_pivot_modelo(
                 SELECT f.modelo, COALESCE(f.marca::text,'') as marca, f.talla::text as talla, SUM(f.available_qty) as qty
                 FROM {STOCK_FLAT_VIEW} f
                 JOIN modelo_totals mt ON mt.modelo = f.modelo AND COALESCE(f.marca::text,'') = mt.marca
-                {where.replace('WHERE', 'AND' if 'WHERE' not in '' else 'WHERE')}
+                {where_f.replace("WHERE", "AND") if where_f != "WHERE 1=1" else ""}
                 GROUP BY f.modelo, f.marca, f.talla
             """, *piv_params)
 
