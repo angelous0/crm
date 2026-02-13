@@ -4,63 +4,52 @@
 Build a B2B CRM application integrated with PostgreSQL (Odoo schema). CRM operates in `crm` schema, reading from `odoo`, writing only to `crm`.
 
 ## Architecture
-- **Backend:** FastAPI + asyncpg → PostgreSQL
+- **Backend:** FastAPI + asyncpg → PostgreSQL + Odoo XML-RPC
 - **Frontend:** React + Shadcn/UI + Tailwind CSS
 - **Auth:** JWT-based
 
 ## Core Features Implemented
 
 ### Phase 1 - CRM Base
-1. JWT Auth (login/register)
-2. Cuentas, Contactos, Cuenta Detalle, Vincular Contactos
-3. Agenda (Tareas), Ventas
+1. JWT Auth, Cuentas, Contactos, Cuenta Detalle, Vincular, Agenda, Ventas
 
 ### Phase 2 - Catalogo con Stock
-4. Auto-list products with stock, filters (Tela, Entalle, Marca, Tipo)
-5. Price formatting S/, Stock matrix modal (Color x Talla)
+2. Auto-list products with stock, filters, S/ prices, stock matrix modal
 
 ### Phase 3 - Stock Dashboard - Power BI Style (Feb 2026)
-6. Fixed 7-panel layout: Modelo x Talla (left), 2x3 store grid (center), ALMACEN (right)
-7. Tienda canonical mapping, multi-select/toggle filters, KPIs
-8. Collapsible sidebar
+3. 7-panel layout, tienda canonical mapping, collapsible sidebar
+4. Cross-filtering (click modelo/talla/color/cell)
+5. Cascade/dependent filters (`/filter-options-v2`)
 
-### Phase 3.1 - Cross-Filtering ✅
-9. Click modelo/talla/color/cell → filter entire dashboard
-10. Filter chips + "Limpiar todo"
+### Phase 3.3 - Cube-Based Dashboard ✅
+6. modelo_base normalization (LQ stripped), flag_lq
+7. `/cube` endpoint with TOP 300 modelos, local cross-filter
+8. `/detail` endpoint with pagination + selection params
+9. Negro rule expanded (carbón/grafito)
 
-### Phase 3.2 - Cascade/Dependent Filters ✅
-11. `/filter-options-v2` endpoint: each field excludes itself from cascade
-12. Auto-clean invalid filters + toast
-
-### Phase 3.3 - Cube-Based Dashboard (Power BI Feel) ✅ (Feb 2026)
-13. **modelo_base normalization**: Strip LQ suffixes (regex `\mLQ\d*\M`), flag_lq
-    - VANDROS-LQ → modelo_base=VANDROS, flag_lq=true
-    - 879 raw models → 700 modelo_base (179 LQ consolidated)
-14. **`/cube` endpoint**: Pre-aggregated cube (tienda, modelo_base, lq, color, talla, qty)
-    - TOP 300 modelos by stock when no modelo filter
-    - ~11K rows, compact keys {t,m,lq,c,z,q}
-15. **Local cross-filter**: Frontend stores cube in memory, selections filter locally (INSTANT)
-    - selection state: {modelo, talla, color, tienda} - separate from bar filters
-    - "Reset selección" button clears selection only
-    - Blue selection chips bar
-16. **`/detail` endpoint**: Paginated detail with both bar filters + selection params
-17. **Negro rule expanded**: hilo ILIKE negro + color includes plomo/carbon/carbón/grafito
-18. **Tested**: 100% backend (19/19), 100% frontend
-
-## Key DB Views
-- `crm.v_catalogo_stock_flat`: Flat denormalized (improved es_negro with carbón/grafito)
-- `crm.v_stock_dashboard_base`: +modelo_base, +flag_lq, tienda_canonica mapping
+### Phase 3.4 - Odoo Stock Sync Button ✅ (Feb 2026)
+10. **`POST /api/odoo-sync/run`**: Triggers STOCK_QUANTS sync job
+    - Validates job exists + enabled
+    - Creates sync_run_log entry (RUNNING)
+    - Background task: XML-RPC to Odoo → upsert odoo.stock_quant
+    - Updates sync_run_log (OK/FAILED) + sync_job (cursor, timestamps)
+    - Global _sync_running flag prevents concurrent syncs
+11. **`GET /api/odoo-sync/job-status`**: Returns job + last_run info
+12. **Frontend**: Green "Actualizar stock" button in filter bar
+    - Click → POST /run → polling every 3s → toast result → refresh cube
+    - Shows "Sync: dd/mm, hh:mm" last sync time
+    - Button disabled + spinner during sync
+    - Tested: 100% backend (9/9), 100% frontend
 
 ## Key API Endpoints
 - Auth: POST /api/auth/login, /register
-- Catalogo: GET /api/catalogo, /telas, /entalles, /{tmpl_id}/matriz
-- **Dashboard v2**: GET /api/stock-dashboard/cube, /detail, /filter-options-v2
-- Dashboard legacy: /filters, /filter-options, /panels, /modelo-talla (unused)
-- CRM: GET /api/cuentas, /contactos, /cuentas/{odoo_id}
+- Dashboard: GET /api/stock-dashboard/cube, /detail, /filter-options-v2
+- **Sync**: POST /api/odoo-sync/run, GET /api/odoo-sync/job-status
+- CRM: /api/cuentas, /contactos, /catalogo
 
 ## Backlog
 ### P1
-- Persist filter + selection state in URL query string (shareable)
+- Persist filter + selection state in URL query string
 ### P2
 - "Por Arreglar" filter (pending data source)
 - Multi-selection (SHIFT + click)
