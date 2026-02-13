@@ -1725,7 +1725,7 @@ async def dash_detail(
             return {"items": [], "total": 0}
 
 
-# ── Reposición / Faltantes por tienda ─────────────────────────────────────────
+# ── Reposición / Faltantes por tienda (v2 - Pool Capping + Tallado) ───────────
 
 MARCA_PREVALENCIA = {
     'QEPO': ['BOOSH', 'GAMARRA 207'],
@@ -1733,6 +1733,42 @@ MARCA_PREVALENCIA = {
     'ELEMENT PREMIUM': ['GAMARRA 209', 'GM218', 'GRAU 238 / GRAU 55'],
 }
 TIENDAS_DESTINO_ALL = ['GRAU 238 / GRAU 55', 'GAMARRA 209', 'GM218', 'BOOSH', 'GAMARRA 207']
+
+
+def _sort_dests_by_priority(dests, marca_n, tallado_map, sku_key):
+    """Sort destination list by brand-specific priority + tallado."""
+    import hashlib
+
+    def _tallado(d):
+        return tallado_map.get(d['dest'], 0)
+
+    if marca_n == 'ELEMENT PREMIUM':
+        g209 = next((d for d in dests if d['dest'] == 'GAMARRA 209'), None)
+        grau = next((d for d in dests if d['dest'] == 'GRAU 238 / GRAU 55'), None)
+        gm218 = next((d for d in dests if d['dest'] == 'GM218'), None)
+        others = [d for d in dests if d['dest'] not in ('GAMARRA 209', 'GRAU 238 / GRAU 55', 'GM218')]
+
+        competitors = [x for x in [g209, grau] if x]
+        if len(competitors) == 2:
+            t0, t1 = _tallado(competitors[0]), _tallado(competitors[1])
+            if t0 != t1:
+                competitors.sort(key=lambda d: -_tallado(d))
+            else:
+                h = hashlib.md5(str(sku_key).encode()).hexdigest()
+                if int(h, 16) % 2 == 0:
+                    competitors = [competitors[0], competitors[1]]
+                else:
+                    competitors = [competitors[1], competitors[0]]
+
+        ordered = competitors + ([gm218] if gm218 else []) + others
+        return ordered
+
+    objetivo_set = set(MARCA_PREVALENCIA.get(marca_n, []))
+    obj = [d for d in dests if d['dest'] in objetivo_set]
+    non_obj = [d for d in dests if d['dest'] not in objetivo_set]
+    obj.sort(key=lambda d: -_tallado(d))
+    non_obj.sort(key=lambda d: -_tallado(d))
+    return obj + non_obj
 
 
 @stock_dash_router.get("/reposicion")
@@ -1767,29 +1803,43 @@ async def dash_reposicion(
                     COALESCE(tipo,'') as tipo,
                     COALESCE(entalle,'') as entalle,
                     COALESCE(tela,'') as tela,
+                    COALESCE(hilo,'') as hilo,
                     color, talla::text as talla,
                     tienda_canonica as tienda,
                     SUM(available_qty)::int as stock
                 FROM {DASH_BASE} {where}
-                GROUP BY 1,2,3,4,5,6,7,8
+                GROUP BY 1,2,3,4,5,6,7,8,9
             """, *params)
 
-            skus = {}
+            # --- Build data structures ---
+            skus = {}          # sku_key -> {stores, meta}
+            tallado_sets = {}  # (item_base_key, tienda) -> set of (color,talla)
+
             for r in rows:
-                key = (r['marca_norm'], r['tipo'], r['entalle'], r['tela'], r['color'], r['talla'])
-                if key not in skus:
-                    skus[key] = {
+                sku_key = (r['marca_norm'], r['tipo'], r['entalle'], r['tela'], r['hilo'], r['color'], r['talla'])
+                if sku_key not in skus:
+                    skus[sku_key] = {
                         'stores': {},
                         'marca_norm': r['marca_norm'], 'marca': r['marca_display'],
                         'tipo': r['tipo'], 'entalle': r['entalle'], 'tela': r['tela'],
-                        'color': r['color'], 'talla': r['talla'],
+                        'hilo': r['hilo'], 'color': r['color'], 'talla': r['talla'],
                     }
-                skus[key]['stores'][r['tienda']] = skus[key]['stores'].get(r['tienda'], 0) + r['stock']
+                skus[sku_key]['stores'][r['tienda']] = skus[sku_key]['stores'].get(r['tienda'], 0) + r['stock']
+
+                if r['stock'] > 0:
+                    ib_key = (r['marca_norm'], r['tipo'], r['entalle'], r['tela'], r['hilo'], r['tienda'])
+                    if ib_key not in tallado_sets:
+                        tallado_sets[ib_key] = set()
+                    tallado_sets[ib_key].add((r['color'], r['talla']))
+
+            # Pre-compute tallado counts
+            tallado = {k: len(v) for k, v in tallado_sets.items()}
+            del tallado_sets
 
             dest_filter = [v.strip() for v in tienda_destino.split(',') if v.strip()] if tienda_destino else None
             recs = []
 
-            for key, sku in skus.items():
+            for sku_key, sku in skus.items():
                 stores = sku['stores']
                 stock_total = sum(stores.values())
                 stock_almacen = stores.get('ALMACEN', 0)
@@ -1797,70 +1847,126 @@ async def dash_reposicion(
                     continue
 
                 marca_n = sku['marca_norm']
-                if solo_objetivo and marca_n in MARCA_PREVALENCIA:
-                    targets = MARCA_PREVALENCIA[marca_n]
-                else:
-                    targets = TIENDAS_DESTINO_ALL
+                item_base = (marca_n, sku['tipo'], sku['entalle'], sku['tela'], sku['hilo'])
 
+                if solo_objetivo and marca_n in MARCA_PREVALENCIA:
+                    targets = list(MARCA_PREVALENCIA[marca_n])
+                else:
+                    targets = list(TIENDAS_DESTINO_ALL)
                 if dest_filter:
                     targets = [t for t in targets if t in dest_filter]
 
+                # Collect destinations needing replenishment
+                dests_needing = []
                 for dest in targets:
                     stock_dest = stores.get(dest, 0)
                     if stock_dest > umbral_destino:
                         continue
-
-                    origen = None
-                    stock_origen = 0
-                    motivo = ''
-
-                    if stock_almacen > 0:
-                        origen = 'ALMACEN'
-                        stock_origen = stock_almacen
-                        motivo = 'Desde ALMACEN'
-                    else:
-                        best_store, best_stock = None, 0
-                        for st, stk in stores.items():
-                            if st == dest or st == 'ALMACEN':
-                                continue
-                            if marca_n in MARCA_PREVALENCIA and st in MARCA_PREVALENCIA.get(marca_n, []):
-                                if stk <= umbral_origen:
-                                    continue
-                            if stk > best_stock:
-                                best_stock = stk
-                                best_store = st
-                        if best_store:
-                            origen = best_store
-                            stock_origen = best_stock
-                            motivo = 'Transferencia entre tiendas'
-                        else:
-                            continue
-
-                    is_brand_target = marca_n in MARCA_PREVALENCIA and dest in MARCA_PREVALENCIA.get(marca_n, [])
-                    if is_brand_target:
-                        motivo += ' · Prioridad marca'
-
-                    qty_sug = max(0, objetivo_destino - stock_dest)
-
-                    recs.append({
-                        'tienda_destino': dest,
-                        'marca': sku['marca'], 'tipo': sku['tipo'],
-                        'entalle': sku['entalle'], 'tela': sku['tela'],
-                        'color': sku['color'], 'talla': sku['talla'],
-                        'stock_destino': stock_dest,
-                        'stock_almacen': stock_almacen,
-                        'stock_total': stock_total,
-                        'origen_recomendado': origen,
-                        'stock_origen': stock_origen,
-                        'qty_sugerida': qty_sug,
-                        'motivo': motivo,
+                    tall = tallado.get((*item_base, dest), 0)
+                    dests_needing.append({
+                        'dest': dest, 'stock_dest': stock_dest,
+                        'tallado': tall, 'need': max(0, objetivo_destino - stock_dest),
                     })
 
+                if not dests_needing:
+                    continue
+
+                # Build tallado map for priority sorting
+                tall_map = {t: tallado.get((*item_base, t), 0) for t in targets}
+                dests_sorted = _sort_dests_by_priority(dests_needing, marca_n, tall_map, sku_key)
+
+                # --- Phase 1: ALMACEN allocation ---
+                if stock_almacen > 0:
+                    remaining = stock_almacen
+                    for d in dests_sorted:
+                        assign = min(d['need'], remaining)
+                        remaining -= assign
+                        is_target = marca_n in MARCA_PREVALENCIA and d['dest'] in MARCA_PREVALENCIA.get(marca_n, [])
+                        motivo_parts = ['Desde ALMACEN']
+                        if is_target:
+                            motivo_parts.append('Prioridad marca')
+                        if assign < d['need'] and assign > 0:
+                            motivo_parts.append('Cap por stock')
+                        if assign == 0:
+                            motivo_parts = ['Sin stock para asignar']
+                        recs.append({
+                            'tienda_destino': d['dest'],
+                            'marca': sku['marca'], 'tipo': sku['tipo'],
+                            'entalle': sku['entalle'], 'tela': sku['tela'],
+                            'hilo': sku['hilo'], 'color': sku['color'], 'talla': sku['talla'],
+                            'stock_destino': d['stock_dest'],
+                            'stock_almacen': stock_almacen,
+                            'stock_total': stock_total,
+                            'origen_recomendado': 'ALMACEN',
+                            'stock_origen': stock_almacen,
+                            'qty_sugerida': assign,
+                            'tallado_destino': d['tallado'],
+                            'motivo': ' · '.join(motivo_parts),
+                        })
+                else:
+                    # --- Phase 2: Inter-store allocation ---
+                    dest_names = set(d['dest'] for d in dests_sorted)
+                    best_store, best_stock = None, 0
+                    for st, stk in stores.items():
+                        if st == 'ALMACEN' or st in dest_names:
+                            continue
+                        if marca_n in MARCA_PREVALENCIA and st in MARCA_PREVALENCIA.get(marca_n, []):
+                            if stk <= umbral_origen:
+                                continue
+                        if stk > best_stock:
+                            best_stock = stk
+                            best_store = st
+
+                    if not best_store:
+                        for d in dests_sorted:
+                            is_target = marca_n in MARCA_PREVALENCIA and d['dest'] in MARCA_PREVALENCIA.get(marca_n, [])
+                            recs.append({
+                                'tienda_destino': d['dest'],
+                                'marca': sku['marca'], 'tipo': sku['tipo'],
+                                'entalle': sku['entalle'], 'tela': sku['tela'],
+                                'hilo': sku['hilo'], 'color': sku['color'], 'talla': sku['talla'],
+                                'stock_destino': d['stock_dest'],
+                                'stock_almacen': 0, 'stock_total': stock_total,
+                                'origen_recomendado': '-',
+                                'stock_origen': 0, 'qty_sugerida': 0,
+                                'tallado_destino': d['tallado'],
+                                'motivo': 'Sin stock para asignar' + (' · Prioridad marca' if is_target else ''),
+                            })
+                        continue
+
+                    remaining = best_stock
+                    for d in dests_sorted:
+                        assign = min(d['need'], remaining)
+                        remaining -= assign
+                        is_target = marca_n in MARCA_PREVALENCIA and d['dest'] in MARCA_PREVALENCIA.get(marca_n, [])
+                        motivo_parts = [f'Transferencia ({best_store})']
+                        if is_target:
+                            motivo_parts.append('Prioridad marca')
+                        if assign < d['need'] and assign > 0:
+                            motivo_parts.append('Cap por stock')
+                        if assign == 0:
+                            motivo_parts = ['Sin stock para asignar']
+                        recs.append({
+                            'tienda_destino': d['dest'],
+                            'marca': sku['marca'], 'tipo': sku['tipo'],
+                            'entalle': sku['entalle'], 'tela': sku['tela'],
+                            'hilo': sku['hilo'], 'color': sku['color'], 'talla': sku['talla'],
+                            'stock_destino': d['stock_dest'],
+                            'stock_almacen': 0, 'stock_total': stock_total,
+                            'origen_recomendado': best_store,
+                            'stock_origen': best_stock,
+                            'qty_sugerida': assign,
+                            'tallado_destino': d['tallado'],
+                            'motivo': ' · '.join(motivo_parts),
+                        })
+
+            # --- Sort final list ---
             recs.sort(key=lambda r: (
                 r['stock_destino'],
                 r['stock_total'],
                 -(1 if r['stock_almacen'] > 0 else 0),
-                r['marca'], r['tipo'], r['entalle'], r['tela'], r['color'],
+                -(r['tallado_destino']),
+                r['marca'], r['tipo'], r['entalle'], r['tela'], r['hilo'], r['color'],
                 _talla_sort_key(r['talla']),
             ))
 
@@ -1868,12 +1974,15 @@ async def dash_reposicion(
             offset = (page - 1) * limit
             page_recs = recs[offset:offset + limit]
 
+            with_qty = [r for r in recs if r['qty_sugerida'] > 0]
             kpis = {
                 'total_faltantes': total,
+                'con_asignacion': len(with_qty),
                 'total_qty_sugerida': sum(r['qty_sugerida'] for r in recs),
-                'desde_almacen': sum(1 for r in recs if r['origen_recomendado'] == 'ALMACEN'),
-                'entre_tiendas': sum(1 for r in recs if r['origen_recomendado'] != 'ALMACEN'),
-                'skus_unicos': len(set((r['marca'], r['tipo'], r['entalle'], r['tela'], r['color'], r['talla']) for r in recs)),
+                'desde_almacen': sum(1 for r in with_qty if r['origen_recomendado'] == 'ALMACEN'),
+                'entre_tiendas': sum(1 for r in with_qty if r['origen_recomendado'] not in ('ALMACEN', '-')),
+                'sin_stock': sum(1 for r in recs if r['qty_sugerida'] == 0),
+                'skus_unicos': len(set((r['marca'], r['tipo'], r['entalle'], r['tela'], r['hilo'], r['color'], r['talla']) for r in recs)),
             }
             return {"items": page_recs, "total": total, "kpis": kpis}
         except Exception as e:
@@ -1885,7 +1994,7 @@ async def dash_reposicion(
 @stock_dash_router.get("/reposicion-detalle")
 async def dash_reposicion_detalle(
     marca_norm: str = "", tipo: str = "", entalle: str = "",
-    tela: str = "", color: str = "", talla: str = "",
+    tela: str = "", hilo: str = "", color: str = "", talla: str = "",
     tienda: str = "", marca_f: str = "", tipo_f: str = "", entalle_f: str = "",
     tela_f: str = "", modelo: str = "", talla_f: str = "", color_f: str = "",
     lq: str = "", negro: str = "",
@@ -1908,6 +2017,9 @@ async def dash_reposicion_detalle(
             if tela:
                 params.append(tela)
                 where += f" AND COALESCE(tela,'') = ${len(params)}"
+            if hilo:
+                params.append(hilo)
+                where += f" AND COALESCE(hilo,'') = ${len(params)}"
             if color:
                 params.append(color)
                 where += f" AND color = ${len(params)}"
