@@ -13,6 +13,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/stock-dashboard", icon: BarChart3, label: "Stock Dashboard" },
   { to: "/balance-tallas", icon: Grid3X3, label: "Balance de Tallas" },
+  { to: "/comercial", icon: ShoppingBag, label: "Ventas y Reservas" },
   { to: "/catalogo", icon: Package, label: "Catalogo" },
   { to: "/cuentas", icon: Users, label: "Cuentas" },
   { to: "/contactos", icon: UserCircle, label: "Contactos" },
