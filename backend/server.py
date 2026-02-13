@@ -433,9 +433,14 @@ async def get_cuenta_ventas(cuenta_id: str, page: int = 1, limit: int = 50, user
 async def get_cuenta_interacciones(cuenta_id: str, user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
+        odoo_id = int(cuenta_id)
+        # Get crm.cuenta.id by odoo_id
+        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id)
+        if not cuenta:
+            return []
         rows = await conn.fetch(
-            "SELECT * FROM crm.interaccion WHERE cuenta_id = $1::uuid ORDER BY fecha DESC",
-            cuenta_id
+            "SELECT * FROM crm.interaccion WHERE cuenta_id = $1 ORDER BY fecha DESC",
+            cuenta['id']
         )
         return records_to_list(rows)
 
@@ -444,15 +449,18 @@ async def get_cuenta_interacciones(cuenta_id: str, user=Depends(get_current_user
 async def create_interaccion(cuenta_id: str, data: InteraccionInput, user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
-        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
+        odoo_id = int(cuenta_id)
+        # Ensure cuenta exists
+        await conn.execute("INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING", odoo_id)
+        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id)
         if not cuenta:
             raise HTTPException(404, "Cuenta no encontrada")
 
         contacto_id = data.contacto_id if data.contacto_id else None
         row = await conn.fetchrow(
             """INSERT INTO crm.interaccion (cuenta_id, contacto_id, tipo, resumen, resultado)
-            VALUES ($1::uuid, $2::uuid, $3, $4, $5) RETURNING *""",
-            cuenta_id, contacto_id, data.tipo, data.resumen, data.resultado
+            VALUES ($1, $2::uuid, $3, $4, $5) RETURNING *""",
+            cuenta['id'], contacto_id, data.tipo, data.resumen, data.resultado
         )
         return record_to_dict(row)
 
@@ -461,9 +469,13 @@ async def create_interaccion(cuenta_id: str, data: InteraccionInput, user=Depend
 async def get_cuenta_tareas(cuenta_id: str, user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
+        odoo_id = int(cuenta_id)
+        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id)
+        if not cuenta:
+            return []
         rows = await conn.fetch(
-            "SELECT * FROM crm.tarea WHERE cuenta_id = $1::uuid ORDER BY due_at",
-            cuenta_id
+            "SELECT * FROM crm.tarea WHERE cuenta_id = $1 ORDER BY due_at",
+            cuenta['id']
         )
         return records_to_list(rows)
 
@@ -472,7 +484,9 @@ async def get_cuenta_tareas(cuenta_id: str, user=Depends(get_current_user)):
 async def create_tarea(cuenta_id: str, data: TareaInput, user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
-        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
+        odoo_id = int(cuenta_id)
+        await conn.execute("INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING", odoo_id)
+        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id)
         if not cuenta:
             raise HTTPException(404, "Cuenta no encontrada")
 
@@ -480,8 +494,8 @@ async def create_tarea(cuenta_id: str, data: TareaInput, user=Depends(get_curren
         due_at = datetime.fromisoformat(data.due_at.replace('Z', '+00:00'))
         row = await conn.fetchrow(
             """INSERT INTO crm.tarea (cuenta_id, contacto_id, tipo, due_at, prioridad, descripcion)
-            VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6) RETURNING *""",
-            cuenta_id, contacto_id, data.tipo, due_at, data.prioridad, data.descripcion
+            VALUES ($1, $2::uuid, $3, $4, $5, $6) RETURNING *""",
+            cuenta['id'], contacto_id, data.tipo, due_at, data.prioridad, data.descripcion
         )
         return record_to_dict(row)
 
