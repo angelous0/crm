@@ -343,6 +343,14 @@ async def get_cuenta(cuenta_id: str, user=Depends(get_current_user)):
 async def update_cuenta(cuenta_id: str, data: CuentaUpdateInput, user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
+        odoo_id = int(cuenta_id)
+        # Ensure row exists
+        await conn.execute("""
+            INSERT INTO crm.cuenta (cuenta_partner_odoo_id)
+            VALUES ($1)
+            ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
+        """, odoo_id)
+
         sets = []
         params = []
         if data.estado_comercial is not None:
@@ -362,8 +370,8 @@ async def update_cuenta(cuenta_id: str, data: CuentaUpdateInput, user=Depends(ge
             raise HTTPException(400, "No hay campos para actualizar")
 
         sets.append("updated_at = now()")
-        params.append(cuenta_id)
-        query = f"UPDATE crm.cuenta SET {', '.join(sets)} WHERE id = ${len(params)}::uuid RETURNING *"
+        params.append(odoo_id)
+        query = f"UPDATE crm.cuenta SET {', '.join(sets)} WHERE cuenta_partner_odoo_id = ${len(params)} RETURNING *"
         row = await conn.fetchrow(query, *params)
         if not row:
             raise HTTPException(404, "Cuenta no encontrada")
