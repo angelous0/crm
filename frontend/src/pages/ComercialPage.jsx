@@ -162,7 +162,7 @@ export default function ComercialPage() {
 
   useEffect(() => { fetchFilterOpts(); }, [tab, fechaDesde, fechaHasta]); // eslint-disable-line
 
-  const opts = summary?.filter_opts || {};
+  const opts = filterOpts || {};
   const kpis = summary?.kpis || {};
   const totalPages = Math.ceil(detail.total / LIMIT);
   const isSale = tab === "SALE";
