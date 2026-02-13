@@ -757,53 +757,57 @@ async def inicializar_crm(user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
         try:
-            view_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_ventas_pos_filtradas')")
+            await conn.execute("SET statement_timeout = '60s'")
             
-            contactos_created = 0
-            cuentas_created = 0
+            view_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_ventas_pos_filtradas')")
 
             if view_exists:
-                # Get all unique contacts from filtered sales
-                contacts = await conn.fetch("""
-                    SELECT DISTINCT contacto_partner_id, cuenta_partner_id 
+                # Batch upsert cuentas from distinct cuenta_partner_id
+                cuentas_result = await conn.execute("""
+                    INSERT INTO crm.cuenta (cuenta_partner_odoo_id)
+                    SELECT DISTINCT COALESCE(cuenta_partner_id, contacto_partner_id)
                     FROM crm.v_ventas_pos_filtradas 
                     WHERE contacto_partner_id IS NOT NULL
+                    ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
                 """)
+                cuentas_created = int(cuentas_result.split()[-1]) if cuentas_result else 0
+
+                # Batch upsert contactos
+                contactos_result = await conn.execute("""
+                    INSERT INTO crm.contacto (contacto_partner_odoo_id, cuenta_partner_odoo_id)
+                    SELECT DISTINCT contacto_partner_id, COALESCE(cuenta_partner_id, contacto_partner_id)
+                    FROM crm.v_ventas_pos_filtradas 
+                    WHERE contacto_partner_id IS NOT NULL
+                    ON CONFLICT (contacto_partner_odoo_id) DO NOTHING
+                """)
+                contactos_created = int(contactos_result.split()[-1]) if contactos_result else 0
             else:
-                # Fallback: use partner_account_final if available
+                # Fallback: use partner_account_final
                 paf_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_partner_account_final')")
                 if paf_exists:
-                    contacts = await conn.fetch("SELECT contacto_partner_odoo_id as contacto_partner_id, cuenta_partner_odoo_id as cuenta_partner_id FROM crm.v_partner_account_final")
+                    cuentas_result = await conn.execute("""
+                        INSERT INTO crm.cuenta (cuenta_partner_odoo_id)
+                        SELECT DISTINCT cuenta_partner_odoo_id FROM crm.v_partner_account_final
+                        ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
+                    """)
+                    cuentas_created = int(cuentas_result.split()[-1]) if cuentas_result else 0
+                    
+                    contactos_result = await conn.execute("""
+                        INSERT INTO crm.contacto (contacto_partner_odoo_id, cuenta_partner_odoo_id)
+                        SELECT contacto_partner_odoo_id, cuenta_partner_odoo_id FROM crm.v_partner_account_final
+                        ON CONFLICT (contacto_partner_odoo_id) DO NOTHING
+                    """)
+                    contactos_created = int(contactos_result.split()[-1]) if contactos_result else 0
                 else:
-                    contacts = []
+                    cuentas_created = 0
+                    contactos_created = 0
 
-            for c in contacts:
-                cp_id = c['contacto_partner_id']
-                acc_id = c['cuenta_partner_id'] or cp_id
-
-                # Upsert cuenta
-                result = await conn.execute("""
-                    INSERT INTO crm.cuenta (cuenta_partner_odoo_id)
-                    VALUES ($1)
-                    ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
-                """, acc_id)
-                if 'INSERT' in result and result.split()[-1] != '0':
-                    cuentas_created += 1
-
-                # Upsert contacto
-                result = await conn.execute("""
-                    INSERT INTO crm.contacto (contacto_partner_odoo_id, cuenta_partner_odoo_id)
-                    VALUES ($1, $2)
-                    ON CONFLICT (contacto_partner_odoo_id) DO NOTHING
-                """, cp_id, acc_id)
-                if 'INSERT' in result and result.split()[-1] != '0':
-                    contactos_created += 1
+            await conn.execute("SET statement_timeout = '0'")
 
             return {
                 "ok": True,
                 "cuentas_creadas": cuentas_created,
-                "contactos_creados": contactos_created,
-                "total_procesados": len(contacts)
+                "contactos_creados": contactos_created
             }
         except Exception as e:
             logger.error(f"Bootstrap error: {e}")
