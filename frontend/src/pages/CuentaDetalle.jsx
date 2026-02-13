@@ -30,7 +30,10 @@ export default function CuentaDetalle() {
   const [contactos, setContactos] = useState([]);
   const [interacciones, setInteracciones] = useState([]);
   const [tareas, setTareas] = useState([]);
-  const [ventas, setVentas] = useState([]);
+  const [ventas, setVentas] = useState({ items: [], kpis: {}, has_next: false, debug: {} });
+  const [ventasPage, setVentasPage] = useState(1);
+  const [ventasDocTipo, setVentasDocTipo] = useState("SALE");
+  const [ventasLoading, setVentasLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState({});
