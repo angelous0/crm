@@ -147,7 +147,11 @@ export default function CuentaDetalle() {
     setUnlinkLoading(true);
     try {
       const res = await api.get("/partners/unlinked", {
-        params: { q: searchVal, page: pg, pageSize: unlinkPageSize, solo_dni: dni, solo_telefono: tel }
+        params: {
+          q: searchVal, page: pg, pageSize: unlinkPageSize,
+          solo_dni: dni, solo_telefono: tel,
+          exclude_cuenta: parseInt(id) || 0
+        }
       });
       setUnlinkResults(res.data.items || []);
       setUnlinkTotal(res.data.total || 0);
@@ -156,7 +160,7 @@ export default function CuentaDetalle() {
     } finally {
       setUnlinkLoading(false);
     }
-  }, []);
+  }, [id]);
 
   const handleUnlinkSearchChange = (val) => {
     setUnlinkSearch(val);
