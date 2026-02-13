@@ -30,7 +30,7 @@ async def get_pool():
         dsn = os.environ.get('PG_URL', '')
         if dsn.startswith('postgres://'):
             dsn = dsn.replace('postgres://', 'postgresql://', 1)
-        pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10, command_timeout=30)
+        pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10, command_timeout=120)
     return pool
 
 
