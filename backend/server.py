@@ -239,57 +239,61 @@ async def get_cuentas(
     search: str = "", page: int = 1, limit: int = 50,
     user=Depends(get_current_user)
 ):
+    """List only 'free' accounts from crm.v_cuentas_libres (principal = self)"""
     p = await get_pool()
     async with p.acquire() as conn:
         offset = (page - 1) * limit
-        where = "WHERE 1=1"
-        params = []
 
-        if estado:
-            params.append(estado)
-            where += f" AND c.estado_comercial = ${len(params)}"
-        if clasificacion:
-            params.append(clasificacion)
-            where += f" AND c.clasificacion = ${len(params)}"
-        if asignado:
-            params.append(f"%{asignado}%")
-            where += f" AND c.asignado_a ILIKE ${len(params)}"
-
-        # Try to join with odoo.res_partner for name
         try:
-            partner_join = ""
-            partner_select = "'Sin nombre' as partner_nombre, '' as partner_phone, '' as partner_email, '' as partner_city"
-            rp_exists = await conn.fetchval("""
-                SELECT EXISTS(SELECT 1 FROM information_schema.tables 
-                WHERE table_schema='odoo' AND table_name='res_partner')
-            """)
-            if rp_exists:
-                rp_cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'")
-                rp_col_names = [r['column_name'] for r in rp_cols]
-                has_ck = 'company_key' in rp_col_names
-                ck_filter = "AND rp.company_key = 'GLOBAL'" if has_ck else ""
-                name_expr = 'rp.name' if 'name' in rp_col_names else "'Sin nombre'"
-                phone_expr = 'rp.phone::text' if 'phone' in rp_col_names else 'NULL'
-                email_expr = 'rp.email::text' if 'email' in rp_col_names else 'NULL'
-                city_expr = 'rp.city::text' if 'city' in rp_col_names else 'NULL'
-                partner_join = f"LEFT JOIN odoo.res_partner rp ON rp.odoo_id = c.cuenta_partner_odoo_id {ck_filter}"
-                partner_select = f"COALESCE({name_expr}, 'Sin nombre') as partner_nombre, COALESCE({phone_expr}, '') as partner_phone, COALESCE({email_expr}, '') as partner_email, COALESCE({city_expr}, '') as partner_city"
+            where = "WHERE 1=1"
+            params = []
 
-                search_col = 'rp.name' if 'name' in rp_col_names else 'c.asignado_a'
-                if search:
-                    params.append(f"%{search}%")
-                    where += f" AND ({search_col} ILIKE ${len(params)} OR c.asignado_a ILIKE ${len(params)})"
+            # CRM data filters (LEFT JOIN crm.cuenta)
+            if estado:
+                params.append(estado)
+                where += f" AND cu.estado_comercial = ${len(params)}"
+            if clasificacion:
+                params.append(clasificacion)
+                where += f" AND cu.clasificacion = ${len(params)}"
+            if asignado:
+                params.append(f"%{asignado}%")
+                where += f" AND cu.asignado_a ILIKE ${len(params)}"
+            if search:
+                params.append(f"%{search}%")
+                idx = len(params)
+                where += f" AND (rp.name ILIKE ${idx} OR COALESCE(rp.vat,'') ILIKE ${idx} OR COALESCE(cu.asignado_a,'') ILIKE ${idx})"
 
-            count = await conn.fetchval(f"SELECT COUNT(*) FROM crm.cuenta c {partner_join} {where}", *params)
-            params.extend([limit, offset])
-            rows = await conn.fetch(
-                f"""SELECT c.id, c.cuenta_partner_odoo_id, c.estado_comercial, c.clasificacion, 
-                    c.notas, c.asignado_a, c.created_at, c.updated_at,
-                    {partner_select}
-                FROM crm.cuenta c {partner_join} {where}
-                ORDER BY c.updated_at DESC NULLS LAST
-                LIMIT ${len(params)-1} OFFSET ${len(params)}""",
+            count = await conn.fetchval(
+                f"""SELECT COUNT(*)
+                FROM crm.v_cuentas_libres cl
+                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                {where}""",
                 *params
+            )
+
+            data_params = params.copy()
+            data_params.extend([limit, offset])
+            rows = await conn.fetch(
+                f"""SELECT
+                    cl.cuenta_partner_odoo_id,
+                    rp.name as partner_nombre,
+                    COALESCE(rp.vat, '') as partner_vat,
+                    COALESCE(rp.phone::text, '') as partner_phone,
+                    COALESCE(rp.mobile::text, '') as partner_mobile,
+                    COALESCE(rp.city::text, '') as partner_city,
+                    cu.id as cuenta_id,
+                    COALESCE(cu.estado_comercial, 'ACTIVO') as estado_comercial,
+                    cu.clasificacion,
+                    cu.asignado_a,
+                    cu.notas
+                FROM crm.v_cuentas_libres cl
+                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                {where}
+                ORDER BY rp.name
+                LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
+                *data_params
             )
             return {"items": records_to_list(rows), "total": count, "page": page}
         except Exception as e:
