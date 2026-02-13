@@ -44,10 +44,19 @@ Build a B2B CRM application integrated with PostgreSQL (Odoo schema). CRM operat
 21. **Drilldown**: Click row → distribution by store + suggestion badge
 22. **Zero-qty rows**: opacity-50, motivo "Sin stock para asignar"
 
+### Phase 4 - Balance de Tallas (Feb 2026)
+23. **DB View**: `crm.v_stock_balance_flat` - filtered join of stock, locations, variants, templates
+24. **GET /api/stock-balance/matrix**: Item x Tallas matrix (MARCA-TIPO-ENTALLE-TELA-HILO), paginated, with filter_opts
+25. **GET /api/stock-balance/colors-matrix**: Color x Tallas detail for selected item
+26. **Frontend**: `/balance-tallas` page with filter bar, 2-column layout (70/30), color coding, CSV export
+27. **Features**: Click row to see color breakdown, attenuation for non-selected, cascade filters
+28. **Performance**: Single query + Python aggregation (~2s), 229 items x 13 tallas from 15K source rows
+
 ## Key API Endpoints
 - Auth: POST /api/auth/login, /register
 - Dashboard: GET /api/stock-dashboard/cube, /detail, /filter-options-v2
 - Reposición: GET /api/stock-dashboard/reposicion (with pool capping), /reposicion-detalle (with hilo)
+- Balance Tallas: GET /api/stock-balance/matrix, /api/stock-balance/colors-matrix
 - Sync: POST /api/odoo-sync/run, GET /api/odoo-sync/job-status
 
 ## Backlog
