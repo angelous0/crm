@@ -333,7 +333,7 @@ export default function ComercialPage() {
                     </thead>
                     <tbody>
                       {!detail.items.length ? (
-                        <tr><td colSpan={13} className="text-center py-8 text-slate-400">Sin datos para los filtros seleccionados</td></tr>
+                        <tr><td colSpan={14} className="text-center py-8 text-slate-400">Sin datos para los filtros seleccionados</td></tr>
                       ) : detail.items.map((r, i) => (
                         <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
                           <td className="px-2 py-0.5 whitespace-nowrap">{fmtDate(r.fecha)}</td>
