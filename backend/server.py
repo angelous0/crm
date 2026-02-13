@@ -1616,20 +1616,20 @@ async def dash_cube(
             modelo_limit = 300 if not modelo else 5000
 
             cube_rows = await conn.fetch(f"""
-                WITH ranked AS (
-                    SELECT modelo_base, SUM(available_qty) as ts
+                WITH filtered AS (
+                    SELECT tienda_canonica as tienda, modelo_base as modelo,
+                           flag_lq as lq, color, talla::text as talla, available_qty as qty
                     FROM {DASH_BASE} {where}
-                    GROUP BY modelo_base ORDER BY ts DESC LIMIT {modelo_limit}
+                ),
+                ranked AS (
+                    SELECT modelo, SUM(qty) as ts
+                    FROM filtered GROUP BY modelo ORDER BY ts DESC LIMIT {modelo_limit}
                 )
-                SELECT b.tienda_canonica as tienda, b.modelo_base as modelo,
-                       b.flag_lq as lq, b.color, b.talla::text as talla,
-                       SUM(b.available_qty) as qty
-                FROM {DASH_BASE} b
-                JOIN ranked r ON r.modelo_base = b.modelo_base
-                {where.replace('WHERE', 'WHERE', 1)}
-                GROUP BY b.tienda_canonica, b.modelo_base, b.flag_lq, b.color, b.talla
-                HAVING SUM(b.available_qty) > 0
-            """, *params, *params)
+                SELECT f.tienda, f.modelo, f.lq, f.color, f.talla, SUM(f.qty) as qty
+                FROM filtered f JOIN ranked r ON r.modelo = f.modelo
+                GROUP BY f.tienda, f.modelo, f.lq, f.color, f.talla
+                HAVING SUM(f.qty) > 0
+            """, *params)
 
             cube = []
             for r in cube_rows:
