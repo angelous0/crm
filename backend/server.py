@@ -1481,7 +1481,237 @@ async def dash_filter_options(
             return {}
 
 
-@stock_dash_router.get("/modelo-talla")
+# ── Cube-based dashboard (v2) ────────────────────────────────────────────────
+
+def _cube_where(tienda, marca, tipo, entalle, tela, modelo, talla, color, lq, negro):
+    """WHERE clause for cube queries. Uses modelo_base, flag_lq, improved es_negro."""
+    parts = ["tienda_canonica IS NOT NULL"]
+    params = []
+
+    def _add(col, val):
+        if not val:
+            return
+        vals = [v.strip() for v in val.split(',') if v.strip()]
+        if vals:
+            params.append(vals)
+            parts.append(f"{col} = ANY(${len(params)})")
+
+    _add('tienda_canonica', tienda)
+    _add('marca', marca)
+    _add('tipo', tipo)
+    _add('entalle', entalle)
+    _add('tela', tela)
+    _add('talla', talla)
+    _add('color', color)
+
+    if modelo:
+        params.append(f"%{modelo}%")
+        parts.append(f"modelo_base ILIKE ${len(params)}")
+    if lq == 'yes':
+        parts.append("flag_lq = true")
+    elif lq == 'no':
+        parts.append("flag_lq = false")
+    if negro == 'yes':
+        parts.append("es_negro = true")
+    elif negro == 'no':
+        parts.append("es_negro = false")
+
+    return "WHERE " + " AND ".join(parts), params
+
+
+def _cascade_where_v2(all_f, exclude_col):
+    """Cascade WHERE using modelo_base + flag_lq for the v2 dashboard."""
+    parts = ["tienda_canonica IS NOT NULL"]
+    params = []
+    multi = [
+        ('tienda_canonica', all_f.get('tienda', '')),
+        ('marca', all_f.get('marca', '')),
+        ('tipo', all_f.get('tipo', '')),
+        ('entalle', all_f.get('entalle', '')),
+        ('tela', all_f.get('tela', '')),
+        ('talla', all_f.get('talla', '')),
+        ('color', all_f.get('color', '')),
+    ]
+    for col, val in multi:
+        if col == exclude_col or not val:
+            continue
+        vals = [v.strip() for v in val.split(',') if v.strip()]
+        if vals:
+            params.append(vals)
+            parts.append(f"{col} = ANY(${len(params)})")
+    modelo = all_f.get('modelo', '')
+    if exclude_col != 'modelo_base' and modelo:
+        params.append(f"%{modelo}%")
+        parts.append(f"modelo_base ILIKE ${len(params)}")
+    lq = all_f.get('lq', '')
+    if exclude_col != 'flag_lq':
+        if lq == 'yes':
+            parts.append("flag_lq = true")
+        elif lq == 'no':
+            parts.append("flag_lq = false")
+    negro = all_f.get('negro', '')
+    if exclude_col != 'es_negro':
+        if negro == 'yes':
+            parts.append("es_negro = true")
+        elif negro == 'no':
+            parts.append("es_negro = false")
+    return "WHERE " + " AND ".join(parts), params
+
+
+_CASCADE_FIELDS_V2 = [
+    ('tienda_canonicas', 'tienda_canonica'),
+    ('marcas', 'marca'),
+    ('tipos', 'tipo'),
+    ('entalles', 'entalle'),
+    ('telas', 'tela'),
+    ('tallas', 'talla'),
+    ('colores', 'color'),
+]
+
+
+@stock_dash_router.get("/filter-options-v2")
+async def dash_filter_options_v2(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    lq: str = "", negro: str = "",
+    user=Depends(get_current_user)
+):
+    ck = f"fo2|{tienda}|{marca}|{tipo}|{entalle}|{tela}|{modelo}|{talla}|{color}|{lq}|{negro}"
+    cached = _fopts_get(ck)
+    if cached:
+        return cached
+    all_f = dict(tienda=tienda, marca=marca, tipo=tipo, entalle=entalle,
+                 tela=tela, modelo=modelo, talla=talla, color=color,
+                 lq=lq, negro=negro)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            result = {}
+            for resp_key, db_col in _CASCADE_FIELDS_V2:
+                where, params = _cascade_where_v2(all_f, exclude_col=db_col)
+                rows = await conn.fetch(
+                    f"SELECT DISTINCT {db_col}::text as v FROM {DASH_BASE} {where} AND {db_col} IS NOT NULL ORDER BY v LIMIT 500",
+                    *params
+                )
+                result[resp_key] = [r['v'] for r in rows]
+            result['tallas'] = sorted(result['tallas'], key=_talla_sort_key)
+            _fopts_set(ck, result)
+            return result
+        except Exception as e:
+            logger.error(f"dash_filter_options_v2 error: {e}")
+            return {}
+
+
+@stock_dash_router.get("/cube")
+async def dash_cube(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    lq: str = "", negro: str = "",
+    user=Depends(get_current_user)
+):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            where, params = _cube_where(tienda, marca, tipo, entalle, tela, modelo, talla, color, lq, negro)
+            modelo_limit = 300 if not modelo else 5000
+
+            cube_rows = await conn.fetch(f"""
+                WITH ranked AS (
+                    SELECT modelo_base, SUM(available_qty) as ts
+                    FROM {DASH_BASE} {where}
+                    GROUP BY modelo_base ORDER BY ts DESC LIMIT {modelo_limit}
+                )
+                SELECT b.tienda_canonica as tienda, b.modelo_base as modelo,
+                       b.flag_lq as lq, b.color, b.talla::text as talla,
+                       SUM(b.available_qty) as qty
+                FROM {DASH_BASE} b
+                JOIN ranked r ON r.modelo_base = b.modelo_base
+                {where.replace('WHERE', 'WHERE', 1)}
+                GROUP BY b.tienda_canonica, b.modelo_base, b.flag_lq, b.color, b.talla
+                HAVING SUM(b.available_qty) > 0
+            """, *params, *params)
+
+            cube = []
+            for r in cube_rows:
+                cube.append({
+                    "t": r['tienda'], "m": r['modelo'], "lq": r['lq'],
+                    "c": r['color'], "z": r['talla'], "q": float(r['qty'])
+                })
+
+            kpi = await conn.fetchrow(f"""
+                SELECT COALESCE(SUM(available_qty),0) as total_stock,
+                       COUNT(DISTINCT modelo_base) as modelos,
+                       COUNT(DISTINCT product_product_id) as variantes,
+                       COUNT(DISTINCT tienda_canonica) as tiendas
+                FROM {DASH_BASE} {where}
+            """, *params)
+
+            return {
+                "cube": cube,
+                "kpis": {
+                    "total_stock": float(kpi['total_stock']),
+                    "modelos": kpi['modelos'],
+                    "variantes": kpi['variantes'],
+                    "tiendas": kpi['tiendas']
+                }
+            }
+        except Exception as e:
+            logger.error(f"dash_cube error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"cube": [], "kpis": {"total_stock": 0, "modelos": 0, "variantes": 0, "tiendas": 0}}
+
+
+@stock_dash_router.get("/detail")
+async def dash_detail(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    lq: str = "", negro: str = "",
+    sel_modelo: str = "", sel_talla: str = "", sel_color: str = "", sel_tienda: str = "",
+    page: int = 1, limit: int = 50,
+    user=Depends(get_current_user)
+):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            where, params = _cube_where(tienda, marca, tipo, entalle, tela, modelo, talla, color, lq, negro)
+
+            if sel_modelo:
+                params.append(sel_modelo)
+                where += f" AND modelo_base = ${len(params)}"
+            if sel_talla:
+                params.append(sel_talla)
+                where += f" AND talla::text = ${len(params)}"
+            if sel_color:
+                params.append(sel_color)
+                where += f" AND color = ${len(params)}"
+            if sel_tienda:
+                params.append(sel_tienda)
+                where += f" AND tienda_canonica = ${len(params)}"
+
+            cnt = await conn.fetchval(f"SELECT COUNT(*) FROM {DASH_BASE} {where}", *params)
+            offset = (page - 1) * limit
+            rows = await conn.fetch(f"""
+                SELECT tienda_canonica as tienda, modelo_base as modelo, modelo as modelo_raw,
+                       flag_lq as lq, talla::text as talla, color, barcode,
+                       available_qty as qty, es_negro, marca
+                FROM {DASH_BASE} {where}
+                ORDER BY modelo_base, tienda_canonica, color, talla
+                LIMIT {limit} OFFSET {offset}
+            """, *params)
+
+            items = []
+            for r in rows:
+                items.append({
+                    "tienda": r['tienda'], "modelo": r['modelo'], "modelo_raw": r['modelo_raw'],
+                    "lq": r['lq'], "talla": r['talla'], "color": r['color'],
+                    "barcode": r['barcode'], "qty": float(r['qty']),
+                    "es_negro": r['es_negro'], "marca": r['marca']
+                })
+            return {"items": items, "total": cnt}
+        except Exception as e:
+            logger.error(f"dash_detail error: {e}")
+            return {"items": [], "total": 0}
 async def dash_modelo_talla(
     tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
     tela: str = "", modelo: str = "", talla: str = "", color: str = "",
