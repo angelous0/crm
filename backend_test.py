@@ -263,6 +263,178 @@ class CRMAPITester:
             self.log_result("Bootstrap", False, f"Request error: {str(e)}")
             return False
 
+    def test_partners_unlinked(self):
+        """Test /partners/unlinked endpoint with search for GARCIA"""
+        if not self.token:
+            self.log_result("Partners Unlinked - GARCIA search", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"q": "GARCIA", "pageSize": 5}
+            response = requests.get(f"{self.base_url}/partners/unlinked", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    total = data['total']
+                    
+                    # Check that results contain expected fields
+                    if items:
+                        first_item = items[0]
+                        required_fields = ['name', 'vat', 'phone', 'mobile', 'city', 'odoo_id']
+                        missing_fields = [field for field in required_fields if field not in first_item]
+                        if missing_fields:
+                            self.log_result("Partners Unlinked - GARCIA search", False, f"Missing fields: {missing_fields}")
+                            return False
+                    
+                    self.log_result("Partners Unlinked - GARCIA search", True, f"Found {len(items)} GARCIA partners (total: {total})")
+                    return True
+                else:
+                    self.log_result("Partners Unlinked - GARCIA search", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Partners Unlinked - GARCIA search", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Partners Unlinked - GARCIA search", False, f"Request error: {str(e)}")
+            return False
+
+    def test_partners_unlinked_solo_dni(self):
+        """Test /partners/unlinked with solo_dni filter"""
+        if not self.token:
+            self.log_result("Partners Unlinked - Solo DNI filter", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"q": "GARCIA", "solo_dni": True, "pageSize": 5}
+            response = requests.get(f"{self.base_url}/partners/unlinked", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    
+                    # Check that all results have vat (DNI/RUC)
+                    if items:
+                        for item in items:
+                            if not item.get('vat'):
+                                self.log_result("Partners Unlinked - Solo DNI filter", False, f"Partner {item.get('name')} has no vat field")
+                                return False
+                    
+                    self.log_result("Partners Unlinked - Solo DNI filter", True, f"Found {len(items)} GARCIA partners with DNI/RUC")
+                    return True
+                else:
+                    self.log_result("Partners Unlinked - Solo DNI filter", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Partners Unlinked - Solo DNI filter", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Partners Unlinked - Solo DNI filter", False, f"Request error: {str(e)}")
+            return False
+
+    def test_partners_unlinked_solo_telefono(self):
+        """Test /partners/unlinked with solo_telefono filter"""
+        if not self.token:
+            self.log_result("Partners Unlinked - Solo Telefono filter", False, "No token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params = {"q": "GARCIA", "solo_telefono": True, "pageSize": 5}
+            response = requests.get(f"{self.base_url}/partners/unlinked", headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'items' in data and 'total' in data:
+                    items = data['items']
+                    
+                    # Check that all results have phone or mobile
+                    if items:
+                        for item in items:
+                            if not item.get('phone') and not item.get('mobile'):
+                                self.log_result("Partners Unlinked - Solo Telefono filter", False, f"Partner {item.get('name')} has no phone/mobile")
+                                return False
+                    
+                    self.log_result("Partners Unlinked - Solo Telefono filter", True, f"Found {len(items)} GARCIA partners with phone")
+                    return True
+                else:
+                    self.log_result("Partners Unlinked - Solo Telefono filter", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_result("Partners Unlinked - Solo Telefono filter", False, f"HTTP {response.status_code}: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Partners Unlinked - Solo Telefono filter", False, f"Request error: {str(e)}")
+            return False
+
+    def test_vincular_contacto(self):
+        """Test /cuentas/{id}/vincular-contacto endpoint"""
+        if not self.token:
+            self.log_result("Vincular Contacto", False, "No token available")
+            return False
+        
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            
+            # First, get a cuenta to test with
+            cuentas_response = requests.get(f"{self.base_url}/cuentas", headers=headers, params={"page": 1, "limit": 1}, timeout=10)
+            if cuentas_response.status_code != 200:
+                self.log_result("Vincular Contacto", False, "Could not get cuentas for testing")
+                return False
+            
+            cuentas_data = cuentas_response.json()
+            if not cuentas_data.get('items'):
+                self.log_result("Vincular Contacto", False, "No cuentas available for testing")
+                return False
+            
+            cuenta_id = cuentas_data['items'][0]['id']
+            
+            # Get an unlinked partner to test with
+            unlinked_response = requests.get(f"{self.base_url}/partners/unlinked", headers=headers, params={"q": "GARCIA", "pageSize": 1}, timeout=10)
+            if unlinked_response.status_code != 200:
+                self.log_result("Vincular Contacto", False, "Could not get unlinked partners for testing")
+                return False
+            
+            unlinked_data = unlinked_response.json()
+            if not unlinked_data.get('items'):
+                self.log_result("Vincular Contacto", False, "No unlinked partners available for testing")
+                return False
+            
+            partner_odoo_id = unlinked_data['items'][0]['odoo_id']
+            partner_name = unlinked_data['items'][0]['name']
+            
+            # Test vincular contacto
+            payload = {
+                "contacto_partner_odoo_id": partner_odoo_id,
+                "nota": "Test vincular from backend test"
+            }
+            
+            response = requests.post(f"{self.base_url}/cuentas/{cuenta_id}/vincular-contacto", headers=headers, json=payload, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('ok'):
+                    self.log_result("Vincular Contacto", True, f"Successfully linked partner {partner_name} (ID: {partner_odoo_id})")
+                    return True
+                else:
+                    self.log_result("Vincular Contacto", False, f"Vincular response not OK: {data}")
+                    return False
+            else:
+                # Check if it's already linked (acceptable for testing)
+                if response.status_code == 409 or ("already" in response.text.lower()):
+                    self.log_result("Vincular Contacto", True, f"Partner already linked - this is expected in testing")
+                    return True
+                else:
+                    self.log_result("Vincular Contacto", False, f"HTTP {response.status_code}: {response.text}")
+                    return False
+        except Exception as e:
+            self.log_result("Vincular Contacto", False, f"Request error: {str(e)}")
+            return False
+
     def run_all_tests(self):
         """Run comprehensive API test suite"""
         print("🚀 Starting CRM API Test Suite")
