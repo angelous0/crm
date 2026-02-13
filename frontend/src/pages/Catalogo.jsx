@@ -10,7 +10,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Search, Package, Loader2, ChevronLeft, ChevronRight, Layers, ArrowUpDown } from "lucide-react";
+import { Search, Package, Loader2, ChevronLeft, ChevronRight, Layers, ArrowUpDown, MapPin, ChevronDown, ChevronUp } from "lucide-react";
+
+function formatPEN(value) {
+  if (value == null) return "\u2014";
+  return `S/ ${Number(value).toFixed(2)}`;
+}
 
 export default function Catalogo() {
   const [items, setItems] = useState([]);
@@ -26,19 +31,26 @@ export default function Catalogo() {
   const [loading, setLoading] = useState(false);
   const [marcas, setMarcas] = useState([]);
   const [tipos, setTipos] = useState([]);
+  const [telas, setTelas] = useState([]);
+  const [entalles, setEntalles] = useState([]);
 
-  // Variant detail
-  const [showVariantes, setShowVariantes] = useState(false);
+  // Matrix modal state
+  const [showMatriz, setShowMatriz] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [variantes, setVariantes] = useState([]);
-  const [variantesLoading, setVariantesLoading] = useState(false);
+  const [matrizData, setMatrizData] = useState(null);
+  const [matrizLoading, setMatrizLoading] = useState(false);
+  const [locationId, setLocationId] = useState("ALL");
+  const [showDetalle, setShowDetalle] = useState(false);
+  const [detalleRows, setDetalleRows] = useState([]);
+  const [detalleLoading, setDetalleLoading] = useState(false);
 
   const limit = 50;
 
   useEffect(() => {
-    // Load filter options
     api.get("/catalogo/marcas").then(r => setMarcas(r.data || [])).catch(() => {});
     api.get("/catalogo/tipos").then(r => setTipos(r.data || [])).catch(() => {});
+    api.get("/catalogo/telas").then(r => setTelas(r.data || [])).catch(() => {});
+    api.get("/catalogo/entalles").then(r => setEntalles(r.data || [])).catch(() => {});
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -60,21 +72,45 @@ export default function Catalogo() {
     }
   }, [search, page, marca, tipo, tela, entalle, stockMin, orden]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openVariantes = async (product) => {
-    setSelectedProduct(product);
-    setShowVariantes(true);
-    setVariantesLoading(true);
+  const fetchMatriz = useCallback(async (tmplId, locId) => {
+    setMatrizLoading(true);
     try {
-      const res = await api.get(`/catalogo/${product.product_tmpl_id}/variantes`);
-      setVariantes(res.data || []);
+      const res = await api.get(`/catalogo/${tmplId}/matriz`, { params: { location_id: locId } });
+      setMatrizData(res.data);
     } catch (err) {
-      toast.error("Error al cargar variantes");
+      toast.error("Error al cargar matriz de stock");
     } finally {
-      setVariantesLoading(false);
+      setMatrizLoading(false);
+    }
+  }, []);
+
+  const openMatriz = (product) => {
+    setSelectedProduct(product);
+    setShowMatriz(true);
+    setLocationId("ALL");
+    setShowDetalle(false);
+    setDetalleRows([]);
+    fetchMatriz(product.product_tmpl_id, "ALL");
+  };
+
+  const handleLocationChange = (locId) => {
+    setLocationId(locId);
+    if (selectedProduct) fetchMatriz(selectedProduct.product_tmpl_id, locId);
+  };
+
+  const loadDetalle = async () => {
+    if (!selectedProduct) return;
+    setDetalleLoading(true);
+    try {
+      const res = await api.get(`/catalogo/${selectedProduct.product_tmpl_id}/variantes`);
+      setDetalleRows(res.data || []);
+      setShowDetalle(true);
+    } catch (err) {
+      toast.error("Error al cargar detalle");
+    } finally {
+      setDetalleLoading(false);
     }
   };
 
@@ -100,13 +136,13 @@ export default function Catalogo() {
       </div>
 
       <div className="p-8">
-        {/* Search + Filters Row 1 */}
+        {/* Filters Row 1: Search + Marca + Tipo */}
         <div className="flex flex-wrap gap-3 mb-4">
           <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <Input
               data-testid="catalogo-search"
-              placeholder="Buscar por nombre, marca, tipo, tela..."
+              placeholder="Buscar por nombre..."
               className="pl-9"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
@@ -132,28 +168,26 @@ export default function Catalogo() {
           </Select>
         </div>
 
-        {/* Filters Row 2 */}
+        {/* Filters Row 2: Tela + Entalle + Stock min + Orden */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-slate-500 uppercase tracking-wider font-semibold whitespace-nowrap">Tela</Label>
-            <Input
-              data-testid="catalogo-tela-filter"
-              placeholder="Filtrar tela..."
-              className="w-[140px] h-9 text-sm"
-              value={tela}
-              onChange={(e) => { setTela(e.target.value); setPage(1); }}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-slate-500 uppercase tracking-wider font-semibold whitespace-nowrap">Entalle</Label>
-            <Input
-              data-testid="catalogo-entalle-filter"
-              placeholder="Filtrar entalle..."
-              className="w-[140px] h-9 text-sm"
-              value={entalle}
-              onChange={(e) => { setEntalle(e.target.value); setPage(1); }}
-            />
-          </div>
+          <Select value={tela || "ALL"} onValueChange={(v) => { setTela(v === "ALL" ? "" : v); setPage(1); }}>
+            <SelectTrigger className="w-[180px]" data-testid="catalogo-tela-filter">
+              <SelectValue placeholder="Tela" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todas las telas</SelectItem>
+              {telas.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={entalle || "ALL"} onValueChange={(v) => { setEntalle(v === "ALL" ? "" : v); setPage(1); }}>
+            <SelectTrigger className="w-[180px]" data-testid="catalogo-entalle-filter">
+              <SelectValue placeholder="Entalle" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos los entalles</SelectItem>
+              {entalles.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-slate-500 uppercase tracking-wider font-semibold whitespace-nowrap">Stock min</Label>
             <Input
@@ -222,7 +256,7 @@ export default function Catalogo() {
                     <TableCell className="text-slate-600 text-sm">{item.tela || "-"}</TableCell>
                     <TableCell className="text-slate-600 text-sm">{item.entalle || "-"}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {item.list_price != null ? `$${Number(item.list_price).toFixed(2)}` : "-"}
+                      {formatPEN(item.list_price)}
                     </TableCell>
                     <TableCell className="text-right">
                       <span className={`font-mono text-sm font-semibold ${
@@ -241,7 +275,7 @@ export default function Catalogo() {
                     <TableCell>
                       <Button
                         variant="ghost" size="sm"
-                        onClick={() => openVariantes(item)}
+                        onClick={() => openMatriz(item)}
                         data-testid={`ver-variantes-${item.product_tmpl_id}`}
                       >
                         <Layers size={16} className="mr-1" /> Ver
@@ -282,76 +316,149 @@ export default function Catalogo() {
         )}
       </div>
 
-      {/* Variantes Dialog */}
-      <Dialog open={showVariantes} onOpenChange={setShowVariantes}>
-        <DialogContent className="max-w-2xl">
+      {/* Matrix Dialog */}
+      <Dialog open={showMatriz} onOpenChange={setShowMatriz}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="matriz-dialog">
           <DialogHeader>
-            <DialogTitle className="font-heading">
+            <DialogTitle className="font-heading text-lg">
               {selectedProduct?.nombre}
-              <span className="text-sm font-normal text-slate-500 ml-2">
-                - Variantes con stock
-              </span>
             </DialogTitle>
           </DialogHeader>
+
           {selectedProduct && (
-            <div className="mb-3 flex flex-wrap gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
               {selectedProduct.marca && <Badge variant="outline">{selectedProduct.marca}</Badge>}
               {selectedProduct.tipo && <Badge variant="outline">{selectedProduct.tipo}</Badge>}
               {selectedProduct.tela && <Badge variant="outline">{selectedProduct.tela}</Badge>}
               {selectedProduct.entalle && <Badge variant="outline">{selectedProduct.entalle}</Badge>}
-              <Badge variant="secondary">
-                Precio: ${Number(selectedProduct.list_price || 0).toFixed(2)}
-              </Badge>
-              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                Stock total: {Math.round(Number(selectedProduct.stock_total_disponible))}
-              </Badge>
+              <Badge variant="secondary">{formatPEN(selectedProduct.list_price)}</Badge>
             </div>
           )}
-          <div className="rounded-md border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead>Barcode</TableHead>
-                  <TableHead>Talla</TableHead>
-                  <TableHead>Color</TableHead>
-                  <TableHead className="text-right">Disponible</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Reservado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {variantesLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-20 text-center">
-                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />
-                    </TableCell>
+
+          {/* Location filter */}
+          <div className="flex items-center gap-3 mb-4">
+            <MapPin size={16} className="text-slate-500" />
+            <Label className="text-sm font-medium text-slate-700">Ubicacion:</Label>
+            <Select value={locationId} onValueChange={handleLocationChange}>
+              <SelectTrigger className="w-[240px]" data-testid="matriz-location-filter">
+                <SelectValue placeholder="Seleccionar ubicacion" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todas las ubicaciones</SelectItem>
+                {matrizData?.locations?.map(loc => (
+                  <SelectItem key={loc.id} value={String(loc.id)}>{loc.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Matrix */}
+          {matrizLoading ? (
+            <div className="h-40 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            </div>
+          ) : matrizData && matrizData.colores.length > 0 ? (
+            <div className="rounded-md border border-border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/80">
+                    <TableHead className="font-semibold text-slate-700 sticky left-0 bg-slate-50 z-10 min-w-[120px]">
+                      Color / Talla
+                    </TableHead>
+                    {matrizData.tallas.map(t => (
+                      <TableHead key={t} className="text-center font-semibold text-slate-700 min-w-[60px]">{t}</TableHead>
+                    ))}
+                    <TableHead className="text-center font-bold text-slate-900 bg-slate-100 min-w-[70px]">Total</TableHead>
                   </TableRow>
-                ) : variantes.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-16 text-center text-slate-500 text-sm">
-                      Sin variantes disponibles
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  variantes.map((v, idx) => (
-                    <TableRow key={idx} data-testid={`variante-row-${idx}`}>
-                      <TableCell className="font-mono text-xs">{v.barcode || "-"}</TableCell>
-                      <TableCell className="text-sm">{v.talla || "-"}</TableCell>
-                      <TableCell className="text-sm">{v.color || "-"}</TableCell>
-                      <TableCell className="text-right font-mono text-sm font-semibold text-emerald-700">
-                        {Math.round(Number(v.available_qty))}
+                </TableHeader>
+                <TableBody>
+                  {matrizData.colores.map(color => (
+                    <TableRow key={color}>
+                      <TableCell className="font-medium text-slate-800 sticky left-0 bg-white z-10 border-r border-border">
+                        {color}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-slate-600">
-                        {Math.round(Number(v.stock_total || 0))}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-slate-400">
-                        {Math.round(Number(v.reserved_qty || 0))}
+                      {matrizData.tallas.map(talla => {
+                        const qty = matrizData.matrix[color]?.[talla] || 0;
+                        return (
+                          <TableCell key={talla} className="text-center font-mono text-sm" data-testid={`matrix-cell-${color}-${talla}`}>
+                            <span className={qty > 0 ? (qty > 5 ? "text-emerald-700 font-semibold" : "text-amber-700") : "text-slate-300"}>
+                              {Math.round(qty)}
+                            </span>
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-center font-mono text-sm font-bold bg-slate-50 border-l border-border">
+                        {Math.round(matrizData.totals.byColor[color] || 0)}
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                  {/* Totals row */}
+                  <TableRow className="bg-slate-100 border-t-2 border-border">
+                    <TableCell className="font-bold text-slate-900 sticky left-0 bg-slate-100 z-10 border-r border-border">
+                      Total
+                    </TableCell>
+                    {matrizData.tallas.map(talla => (
+                      <TableCell key={talla} className="text-center font-mono text-sm font-bold text-slate-900">
+                        {Math.round(matrizData.totals.bySize[talla] || 0)}
+                      </TableCell>
+                    ))}
+                    <TableCell className="text-center font-mono font-bold text-lg text-emerald-700 bg-emerald-50 border-l border-border" data-testid="matrix-grand-total">
+                      {Math.round(matrizData.totals.grandTotal)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="h-24 flex items-center justify-center text-slate-500 text-sm">
+              Sin datos de stock para este producto
+            </div>
+          )}
+
+          {/* Detalle toggle */}
+          <div className="mt-4">
+            <Button
+              variant="ghost" size="sm"
+              className="text-slate-500 hover:text-slate-700"
+              onClick={() => { if (!showDetalle) loadDetalle(); else setShowDetalle(false); }}
+              data-testid="toggle-detalle-btn"
+            >
+              {showDetalle ? <ChevronUp size={16} className="mr-1" /> : <ChevronDown size={16} className="mr-1" />}
+              {showDetalle ? "Ocultar detalle por variante" : "Ver detalle por variante"}
+            </Button>
+
+            {detalleLoading && (
+              <div className="h-16 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              </div>
+            )}
+
+            {showDetalle && !detalleLoading && detalleRows.length > 0 && (
+              <div className="mt-2 rounded-md border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50">
+                      <TableHead>Barcode</TableHead>
+                      <TableHead>Talla</TableHead>
+                      <TableHead>Color</TableHead>
+                      <TableHead className="text-right">Disponible</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detalleRows.map((v, idx) => (
+                      <TableRow key={idx} data-testid={`detalle-row-${idx}`}>
+                        <TableCell className="font-mono text-xs">{v.barcode || "-"}</TableCell>
+                        <TableCell className="text-sm">{v.talla || "-"}</TableCell>
+                        <TableCell className="text-sm">{v.color || "-"}</TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold text-emerald-700">
+                          {Math.round(Number(v.available_qty))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
