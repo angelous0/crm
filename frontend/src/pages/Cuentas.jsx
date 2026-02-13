@@ -58,9 +58,9 @@ export default function Cuentas() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight text-slate-900">Cuentas</h1>
-            <p className="text-sm text-slate-500 mt-1">Gestion de cuentas cliente</p>
+            <p className="text-sm text-slate-500 mt-1">Cuentas libres (cliente principal = el mismo)</p>
           </div>
-          <Badge variant="secondary" className="text-sm">{total} cuentas</Badge>
+          <Badge variant="secondary" className="text-sm">{total} cuentas libres</Badge>
         </div>
       </div>
 
@@ -71,13 +71,13 @@ export default function Cuentas() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <Input
               data-testid="cuentas-search"
-              placeholder="Buscar cuenta..."
+              placeholder="Buscar por nombre, DNI/RUC..."
               className="pl-9"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
-          <Select value={estado} onValueChange={(v) => { setEstado(v === "ALL" ? "" : v); setPage(1); }}>
+          <Select value={estado || "ALL"} onValueChange={(v) => { setEstado(v === "ALL" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-[180px]" data-testid="cuentas-estado-filter">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
@@ -88,7 +88,7 @@ export default function Cuentas() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={clasificacion} onValueChange={(v) => { setClasificacion(v === "ALL" ? "" : v); setPage(1); }}>
+          <Select value={clasificacion || "ALL"} onValueChange={(v) => { setClasificacion(v === "ALL" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-[160px]" data-testid="cuentas-clasificacion-filter">
               <SelectValue placeholder="Clasificacion" />
             </SelectTrigger>
@@ -107,6 +107,8 @@ export default function Cuentas() {
             <TableHeader>
               <TableRow className="bg-slate-50/50">
                 <TableHead>Nombre</TableHead>
+                <TableHead>DNI/RUC</TableHead>
+                <TableHead>Telefono</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Clasificacion</TableHead>
                 <TableHead>Asignado a</TableHead>
@@ -117,13 +119,13 @@ export default function Cuentas() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center">
+                  <TableCell colSpan={8} className="h-32 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
                   </TableCell>
                 </TableRow>
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-slate-500">
+                  <TableCell colSpan={8} className="h-32 text-center text-slate-500">
                     <Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                     No se encontraron cuentas
                   </TableCell>
@@ -131,12 +133,14 @@ export default function Cuentas() {
               ) : (
                 items.map((item) => (
                   <TableRow
-                    key={item.id}
+                    key={item.cuenta_partner_odoo_id}
                     className="cursor-pointer"
-                    data-testid={`cuenta-row-${item.id}`}
-                    onClick={() => navigate(`/cuentas/${item.id}`)}
+                    data-testid={`cuenta-row-${item.cuenta_partner_odoo_id}`}
+                    onClick={() => navigate(`/cuentas/${item.cuenta_partner_odoo_id}`)}
                   >
                     <TableCell className="font-medium text-slate-900">{item.partner_nombre || `ID: ${item.cuenta_partner_odoo_id}`}</TableCell>
+                    <TableCell className="text-slate-600 font-mono text-sm">{item.partner_vat || "-"}</TableCell>
+                    <TableCell className="text-slate-600">{item.partner_phone || item.partner_mobile || "-"}</TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${estadoColors[item.estado_comercial] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                         {item.estado_comercial}
@@ -152,7 +156,7 @@ export default function Cuentas() {
                     <TableCell className="text-slate-600">{item.asignado_a || "-"}</TableCell>
                     <TableCell className="text-slate-600">{item.partner_city || "-"}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" data-testid={`ver-cuenta-${item.id}`}>
+                      <Button variant="ghost" size="sm" data-testid={`ver-cuenta-${item.cuenta_partner_odoo_id}`}>
                         <Eye size={16} />
                       </Button>
                     </TableCell>
