@@ -100,7 +100,7 @@ export default function ComercialPage() {
 
   const [summary, setSummary] = useState(null);
   const [filterOpts, setFilterOpts] = useState({});
-  const [detail, setDetail] = useState({ items: [], total: 0 });
+  const [detail, setDetail] = useState({ items: [], has_next: false });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
