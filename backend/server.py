@@ -510,7 +510,7 @@ async def get_contactos(search: str = "", page: int = 1, limit: int = 50, user=D
                         COALESCE(rp.name, 'Sin nombre') as partner_nombre,
                         COALESCE(rp.phone::text, '') as partner_phone,
                         COALESCE(rp.mobile::text, '') as partner_mobile,
-                        COALESCE(rp.email::text, '') as partner_email
+                        '' as partner_email
                     FROM crm.contacto c 
                     LEFT JOIN odoo.res_partner rp ON rp.odoo_id = c.contacto_partner_odoo_id {ck_filter}
                     {where}
