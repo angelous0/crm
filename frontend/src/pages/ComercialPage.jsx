@@ -164,7 +164,6 @@ export default function ComercialPage() {
 
   const opts = filterOpts || {};
   const kpis = summary?.kpis || {};
-  const totalPages = Math.ceil(detail.total / LIMIT);
   const isSale = tab === "SALE";
 
   const clearAll = () => {
