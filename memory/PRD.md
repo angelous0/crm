@@ -46,6 +46,13 @@ CRM B2B module integrated with Odoo PostgreSQL ODS database. Reads clients and s
   - Cuentas use odoo_id (int) routing instead of UUID
   - On-demand upsert crm.cuenta on detail page open
   - Stats: cuentas_libres (11,008), total_partners (11,592), contactos_vinculados (584)
+- **Catalogo con Stock** (2026-02-13):
+  - Replaced manual approval with stock-based catalog
+  - Views: crm.v_catalogo_con_stock (template-level), crm.v_catalogo_con_stock_variantes (variant-level)
+  - 759+ eligible products with available stock
+  - Filters: marca, tipo, tela, entalle, stock_min, orden (stock desc / nombre)
+  - Variant detail dialog: barcode, talla, color, disponible, total, reservado
+  - Endpoints: GET /api/catalogo, /api/catalogo/marcas, /api/catalogo/tipos, /api/catalogo/{id}/variantes
 - All UI in Spanish
 
 ## User Credentials
