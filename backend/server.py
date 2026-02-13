@@ -1376,6 +1376,111 @@ async def dash_filters(user=Depends(get_current_user)):
             return {}
 
 
+# ── Cascade filter options (dependent filters) ──────────────────────────────
+_fopts_cache: OrderedDict = OrderedDict()
+_FOPTS_TTL = 60
+_FOPTS_MAX = 100
+
+
+def _fopts_get(key):
+    if key in _fopts_cache:
+        val, ts = _fopts_cache[key]
+        if time.time() - ts < _FOPTS_TTL:
+            _fopts_cache.move_to_end(key)
+            return val
+        del _fopts_cache[key]
+    return None
+
+
+def _fopts_set(key, val):
+    _fopts_cache[key] = (val, time.time())
+    while len(_fopts_cache) > _FOPTS_MAX:
+        _fopts_cache.popitem(last=False)
+
+
+def _cascade_where(all_f, exclude_col):
+    """WHERE clause applying all filters EXCEPT exclude_col (for cascade options)."""
+    parts = ["tienda_canonica IS NOT NULL"]
+    params = []
+    multi = [
+        ('tienda_canonica', all_f.get('tienda', '')),
+        ('marca', all_f.get('marca', '')),
+        ('tipo', all_f.get('tipo', '')),
+        ('entalle', all_f.get('entalle', '')),
+        ('tela', all_f.get('tela', '')),
+        ('talla', all_f.get('talla', '')),
+        ('color', all_f.get('color', '')),
+    ]
+    for col, val in multi:
+        if col == exclude_col or not val:
+            continue
+        vals = [v.strip() for v in val.split(',') if v.strip()]
+        if vals:
+            params.append(vals)
+            parts.append(f"{col} = ANY(${len(params)})")
+    modelo = all_f.get('modelo', '')
+    if exclude_col != 'modelo' and modelo:
+        params.append(f"%{modelo}%")
+        parts.append(f"modelo ILIKE ${len(params)}")
+    es_lq = all_f.get('es_lq', '')
+    if exclude_col != 'es_lq':
+        if es_lq == 'si':
+            parts.append("es_lq = true")
+        elif es_lq == 'no':
+            parts.append("es_lq = false")
+    es_negro = all_f.get('es_negro', '')
+    if exclude_col != 'es_negro':
+        if es_negro == 'si':
+            parts.append("es_negro = true")
+        elif es_negro == 'no':
+            parts.append("es_negro = false")
+    return "WHERE " + " AND ".join(parts), params
+
+
+_CASCADE_FIELDS = [
+    ('tienda_canonicas', 'tienda_canonica'),
+    ('marcas', 'marca'),
+    ('tipos', 'tipo'),
+    ('entalles', 'entalle'),
+    ('telas', 'tela'),
+    ('tallas', 'talla'),
+    ('colores', 'color'),
+]
+
+
+@stock_dash_router.get("/filter-options")
+async def dash_filter_options(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    user=Depends(get_current_user)
+):
+    ck = f"fo|{tienda}|{marca}|{tipo}|{entalle}|{tela}|{modelo}|{talla}|{color}|{es_lq}|{es_negro}"
+    cached = _fopts_get(ck)
+    if cached:
+        return cached
+    all_f = dict(tienda=tienda, marca=marca, tipo=tipo, entalle=entalle,
+                 tela=tela, modelo=modelo, talla=talla, color=color,
+                 es_lq=es_lq, es_negro=es_negro)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            result = {}
+            for resp_key, db_col in _CASCADE_FIELDS:
+                where, params = _cascade_where(all_f, exclude_col=db_col)
+                rows = await conn.fetch(
+                    f"SELECT DISTINCT {db_col}::text as v FROM {DASH_BASE} {where} AND {db_col} IS NOT NULL ORDER BY v LIMIT 500",
+                    *params
+                )
+                result[resp_key] = [r['v'] for r in rows]
+            result['tallas'] = sorted(result['tallas'], key=_talla_sort_key)
+            _fopts_set(ck, result)
+            return result
+        except Exception as e:
+            logger.error(f"dash_filter_options error: {e}")
+            return {}
+
+
 @stock_dash_router.get("/modelo-talla")
 async def dash_modelo_talla(
     tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
