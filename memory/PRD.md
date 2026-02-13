@@ -32,9 +32,9 @@ Build a B2B CRM application that integrates with an existing PostgreSQL database
 ## Key DB Views
 - `crm.v_partner_account_final` - Maps contacts to accounts
 - `crm.v_cuentas_libres` - Free accounts (principal = self)
-- `crm.v_catalogo_con_stock` - Products with stock (template level)
-- `crm.v_catalogo_con_stock_variantes` - Variant-level stock
-- `crm.v_catalogo_con_stock_variantes_loc` - Variant stock by location
+- `crm.v_catalogo_con_stock` - Products with stock (template level, tiendas only)
+- `crm.v_catalogo_con_stock_variantes` - Variant-level stock (tiendas only, aggregated)
+- `crm.v_catalogo_con_stock_variantes_loc` - Variant stock by location (tiendas only, includes tienda name)
 
 ## Key API Endpoints
 - `POST /api/auth/login`, `POST /api/auth/register`
