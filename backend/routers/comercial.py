@@ -30,11 +30,11 @@ def _build_where(params_list, fecha_desde, fecha_hasta, tienda, marca, tipo,
 
     if fecha_desde:
         params_list.append(fecha_desde)
-        parts.append(f"fecha >= ${len(params_list)}::timestamptz")
+        parts.append(f"fecha >= ${len(params_list)}::text::timestamptz")
 
     if fecha_hasta:
         params_list.append(fecha_hasta + "T23:59:59")
-        parts.append(f"fecha <= ${len(params_list)}::timestamptz")
+        parts.append(f"fecha <= ${len(params_list)}::text::timestamptz")
 
     _add_arr('marca', marca)
     _add_arr('tipo', tipo)
