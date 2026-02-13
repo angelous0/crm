@@ -928,26 +928,14 @@ async def vincular_contacto(cuenta_id: str, data: VincularContactoInput, user=De
     """Link an odoo partner to a CRM cuenta: upserts override + contacto"""
     p = await get_pool()
     async with p.acquire() as conn:
-        # Verify cuenta exists
-        cuenta = await conn.fetchrow("SELECT * FROM crm.cuenta WHERE id = $1::uuid", cuenta_id)
-        if not cuenta:
-            raise HTTPException(404, "Cuenta no encontrada")
-
-        cuenta_odoo_id = cuenta['cuenta_partner_odoo_id']
+        cuenta_odoo_id = int(cuenta_id)
         contacto_odoo_id = data.contacto_partner_odoo_id
 
-        # Check this partner isn't already linked as contacto
-        existing = await conn.fetchrow(
-            "SELECT id FROM crm.contacto WHERE contacto_partner_odoo_id = $1",
-            contacto_odoo_id
+        # Ensure cuenta crm row exists
+        await conn.execute(
+            "INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            cuenta_odoo_id
         )
-        if existing:
-            # Update to point to this cuenta instead
-            await conn.execute(
-                "UPDATE crm.contacto SET cuenta_partner_odoo_id = $1, updated_at = now() WHERE contacto_partner_odoo_id = $2",
-                cuenta_odoo_id, contacto_odoo_id
-            )
-        else:
             # Try to get whatsapp from odoo
             whatsapp_val = None
             try:
