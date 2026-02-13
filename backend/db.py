@@ -795,7 +795,7 @@ async def _create_views(conn):
         has_rp = 'res_partner' in odoo_tables
         has_pt_cm = 'product_template' in odoo_tables
         if has_vpl and has_rp and has_pt_cm:
-            await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_mov_flat;")
+            await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_mov_flat CASCADE;")
             await conn.execute("""
                 CREATE VIEW crm.v_comercial_mov_flat AS
                 SELECT
