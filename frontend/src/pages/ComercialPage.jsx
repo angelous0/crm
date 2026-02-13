@@ -309,7 +309,7 @@ export default function ComercialPage() {
           <div className="flex-1 flex flex-col min-h-0 px-3 pb-3">
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold flex items-center justify-between shrink-0">
-                <span>Detalle ({fmtNum(detail.total)} registros)</span>
+                <span>Detalle</span>
                 <div className="flex items-center gap-2">
                   {detail.items.length > 0 && (
                     <button className="flex items-center gap-0.5 text-[10px] text-slate-300 hover:text-white px-1"
