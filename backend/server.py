@@ -1446,6 +1446,81 @@ async def stock_pivot_modelo(
             return {"tallas": [], "rows": [], "totals_by_talla": {}, "grand_total": 0, "total_modelos": 0, "page": page}
 
 
+@stock_dash_router.get("/pivot-modelo-tienda")
+async def stock_pivot_modelo_tienda(
+    tienda: str = "", marca: str = "", tipo: str = "", entalle: str = "",
+    tela: str = "", modelo: str = "", talla: str = "", color: str = "",
+    es_lq: str = "", es_negro: str = "",
+    limit: int = 50, page: int = 1,
+    user=Depends(get_current_user)
+):
+    """Pivot: rows=modelo+marca, cols=tienda, values=SUM(available_qty)."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            where, params = _stock_filters(tienda, marca, tipo, entalle, tela, modelo, talla, color, es_lq, es_negro)
+            offset = (page - 1) * limit
+
+            # Get distinct tiendas
+            t_rows = await conn.fetch(
+                f"SELECT DISTINCT tienda as t FROM {STOCK_FLAT_VIEW} {where} AND tienda IS NOT NULL ORDER BY tienda", *params
+            )
+            tiendas_list = [r['t'] for r in t_rows]
+
+            total_modelos = await conn.fetchval(
+                f"SELECT COUNT(DISTINCT (modelo, COALESCE(marca::text,''))) FROM {STOCK_FLAT_VIEW} {where}", *params
+            )
+
+            piv_params = list(params)
+            piv_params.extend([limit, offset])
+            rows = await conn.fetch(f"""
+                WITH modelo_totals AS (
+                    SELECT modelo, COALESCE(marca::text,'') as marca, SUM(available_qty) as total
+                    FROM {STOCK_FLAT_VIEW} {where}
+                    GROUP BY modelo, marca
+                    ORDER BY total DESC
+                    LIMIT ${len(piv_params)-1} OFFSET ${len(piv_params)}
+                )
+                SELECT f.modelo, COALESCE(f.marca::text,'') as marca, f.tienda, SUM(f.available_qty) as qty
+                FROM {STOCK_FLAT_VIEW} f
+                JOIN modelo_totals mt ON mt.modelo = f.modelo AND COALESCE(f.marca::text,'') = mt.marca
+                {"AND " + " AND ".join(where.replace("WHERE ", "").split(" AND ")) if where != "WHERE 1=1" else ""}
+                GROUP BY f.modelo, f.marca, f.tienda
+            """, *piv_params)
+
+            modelo_map = {}
+            for r in rows:
+                key = f"{r['modelo']}||{r['marca']}"
+                if key not in modelo_map:
+                    modelo_map[key] = {"modelo": r['modelo'], "marca": r['marca'], "values": {}, "total": 0}
+                qty = float(r['qty'])
+                modelo_map[key]["values"][r['tienda']] = qty
+                modelo_map[key]["total"] += qty
+
+            result_rows = sorted(modelo_map.values(), key=lambda x: -x['total'])
+
+            totals_by_tienda = {}
+            grand_total = 0
+            for rd in result_rows:
+                for t in tiendas_list:
+                    v = rd["values"].get(t, 0)
+                    totals_by_tienda[t] = totals_by_tienda.get(t, 0) + v
+                grand_total += rd["total"]
+
+            return {
+                "tiendas": tiendas_list,
+                "rows": result_rows,
+                "totals_by_tienda": totals_by_tienda,
+                "grand_total": grand_total,
+                "total_modelos": total_modelos,
+                "page": page
+            }
+        except Exception as e:
+            logger.error(f"Error fetching stock pivot modelo-tienda: {e}")
+            return {"tiendas": [], "rows": [], "totals_by_tienda": {}, "grand_total": 0, "total_modelos": 0, "page": page}
+
+
+
 @stock_dash_router.get("/pivot-tienda")
 async def stock_pivot_tienda(
     pivot_tienda: str = "",
