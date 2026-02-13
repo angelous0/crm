@@ -218,7 +218,7 @@ export default function ComercialPage() {
         )}
 
         <div className="ml-auto flex items-center gap-3 text-[10px]">
-          <span className="text-slate-400">Registros: <b className="text-white">{fmtNum(detail.total)}</b></span>
+          <span className="text-slate-400">Pag <b className="text-white">{page}</b></span>
         </div>
       </div>
 
