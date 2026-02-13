@@ -302,6 +302,7 @@ function computeSelKpis(cube, sel) {
    MAIN DASHBOARD
    ══════════════════════════════════════════════════════════════════════════════ */
 export default function StockDashboard() {
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [filterOpts, setFilterOpts] = useState({});
   const [f, setF] = useState({ ...DEFAULT_F });
   const sf = (k, v) => setF(prev => ({ ...prev, [k]: v }));
