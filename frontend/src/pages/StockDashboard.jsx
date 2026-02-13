@@ -429,8 +429,52 @@ export default function StockDashboard() {
     if (next) loadDetalle(1);
   };
 
+  // Fetch last sync time on mount
+  useEffect(() => {
+    api.get("/odoo-sync/job-status", { params: { job_code: "STOCK_QUANTS" } })
+      .then(r => {
+        const ls = r.data?.job?.last_success_at;
+        if (ls) setLastSync(new Date(ls));
+        if (r.data?.last_run?.status === "RUNNING") setSyncing(true);
+      }).catch(() => {});
+  }, []);
+
+  // Cleanup poll on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  const startSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    toast.info("Actualizando stock...");
+    try {
+      const r = await api.post("/odoo-sync/run", { job_code: "STOCK_QUANTS" });
+      if (!r.data.ok) { toast.error(r.data.error || "Error al iniciar sync"); setSyncing(false); return; }
+      // Poll every 3s
+      pollRef.current = setInterval(async () => {
+        try {
+          const st = await api.get("/odoo-sync/job-status", { params: { job_code: "STOCK_QUANTS" } });
+          const lr = st.data?.last_run;
+          if (!lr || lr.status === "RUNNING") return;
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setSyncing(false);
+          if (lr.status === "OK") {
+            toast.success(`Stock actualizado (${lr.rows_upserted || 0} filas)`);
+            setLastSync(new Date());
+            fetchCube();
+          } else {
+            toast.error(`Sync falló: ${lr.error_message || "Error desconocido"}`);
+          }
+        } catch { /* keep polling */ }
+      }, 3000);
+    } catch (e) {
+      setSyncing(false);
+      const msg = e?.response?.data?.detail || "Error al iniciar sync";
+      toast.error(msg);
+    }
+  };
+
   const detallePages = Math.ceil(detalle.total / 50);
-  const now = new Date().toLocaleString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return (
     <div data-testid="stock-dashboard-page" className="h-screen flex flex-col bg-slate-100 overflow-hidden">
