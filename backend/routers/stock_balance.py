@@ -1,6 +1,5 @@
 """Stock Balance (Balance de Tallas) router."""
-from fastapi import APIRouter, Depends, Query
-from typing import Optional
+from fastapi import APIRouter, Depends, Header
 import logging
 
 from db import get_pool
@@ -52,12 +51,9 @@ def _build_where(tienda, marca, tipo, entalle, tela, hilo, color, talla, modelo)
     return where, params
 
 
-# Import get_current_user from server module
-async def _get_user(authorization: str = None):
-    """Minimal auth dependency - imports from main server."""
+def _get_auth_dep():
     from server import get_current_user
-    from fastapi import Header
-    return await get_current_user(authorization=authorization)
+    return get_current_user
 
 
 @router.get("/matrix")
@@ -66,13 +62,9 @@ async def stock_balance_matrix(
     tela: str = "", hilo: str = "", color: str = "", talla: str = "",
     modelo: str = "",
     limit: int = 300, page: int = 1,
-    authorization: str = None
+    user=Depends(_get_auth_dep())
 ):
     """Item x Tallas matrix: rows=MARCA-TIPO-ENTALLE-TELA-HILO, cols=tallas."""
-    from server import get_current_user
-    from fastapi import Header
-    await get_current_user(authorization=authorization)
-
     p = await get_pool()
     async with p.acquire() as conn:
         try:
@@ -163,7 +155,6 @@ async def stock_balance_matrix(
                     *params
                 )
                 filter_opts[col] = [r['v'] for r in f_rows]
-            # Talla and color options
             filter_opts['talla'] = tallas
             c_rows = await conn.fetch(
                 f"SELECT DISTINCT color::text as v FROM {VIEW} {where} AND color IS NOT NULL ORDER BY v",
@@ -198,12 +189,9 @@ async def stock_balance_colors(
     tela: str = "", hilo: str = "",
     tienda: str = "", color: str = "", talla: str = "",
     modelo: str = "",
-    authorization: str = None
+    user=Depends(_get_auth_dep())
 ):
     """Color detail for a selected item: rows=COLOR, cols=tallas."""
-    from server import get_current_user
-    await get_current_user(authorization=authorization)
-
     if not any([marca, tipo, entalle, tela, hilo]):
         return {"tallas": [], "rows": [], "totals_by_talla": {}, "grand_total": 0}
 
