@@ -43,10 +43,10 @@ export default function Dashboard() {
   };
 
   const statCards = [
-    { label: "Cuentas", value: stats?.cuentas || 0, icon: Users, color: "text-blue-600 bg-blue-50" },
-    { label: "Contactos", value: stats?.contactos || 0, icon: UserCircle, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Cuentas libres", value: stats?.cuentas_libres || 0, icon: Users, color: "text-blue-600 bg-blue-50" },
+    { label: "Partners totales", value: stats?.total_partners || 0, icon: UserCircle, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Vinculados", value: stats?.contactos_vinculados || 0, icon: MessageSquare, color: "text-violet-600 bg-violet-50" },
     { label: "Tareas pendientes", value: stats?.tareas_pendientes || 0, icon: CalendarClock, color: "text-amber-600 bg-amber-50" },
-    { label: "Interacciones", value: stats?.interacciones || 0, icon: MessageSquare, color: "text-violet-600 bg-violet-50" },
     { label: "Productos aprobados", value: stats?.productos_aprobados || 0, icon: Package, color: "text-slate-600 bg-slate-100" },
   ];
 
