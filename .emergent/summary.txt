@@ -1,78 +1,38 @@
 <analysis>**original_problem_statement:**
-The user's initial goal was to build a Stock Dashboard with a Power BI Feel. This has evolved through several major feature additions:
-1.  **Replenishment Module (v1 & v2):** An initial module to suggest stock transfers, later enhanced with complex allocation logic for scarce stock.
-2.  **Balance de Tallas Report:** A new report was requested to show stock quantities pivoted by size for each item (), with a drill-down panel to see the color breakdown for a selected item.
-3.  **Replenishment Module Refactor:** A major overhaul of the replenishment module to change the primary view from a flat list of recommendations to a summary grouped by SKU (). This new view includes a drill-down panel to show the specific models () that make up that SKU.
-4.  **BUG:** The user is now reporting that the main Stock Dashboard page is no longer loading.
+The user's initial goal was to build a Stock Dashboard with a Power BI Feel. This has expanded to include:
+1.  A Balance de Tallas report.
+2.  A refactored Reposición (Replenishment) module.
+3.  **New in this session:** A Ventas y Reservas (Sales and Reservations) module to bring in and display sales and reservation data linked to products and customers, with extensive filtering capabilities. The backend should handle all aggregations for performance.
+4.  **New in this session:** An Owner/Account Linking feature, where sales from multiple individual contacts () are grouped under a single main account (). All reports must filter and aggregate by this main account.
+5.  **BUG:** The user is now reporting an error when trying to access the newly created Ventas y Reservas page.
 
 **User's preferred language**: Spanish
 
 **what currently exists?**
 A full-stack application with a React/Shadcn frontend and a FastAPI/PostgreSQL backend. It features:
--   An interactive stock dashboard with cross-filtering (currently broken).
--   A sophisticated Balance de Tallas report that pivots stock by size and provides a drill-down by color, featuring significant backend performance optimizations (in-memory processing).
--   A completely refactored Reposición (Replenishment) module that aggregates recommendations by SKU and allows users to drill down to see the specific models available for transfer.
+- An interactive stock dashboard and a replenishment module.
+- A Balance de Tallas report.
+- A new Ventas y Reservas page accessible from the sidebar. This page includes tabs for Sales and Reservations, KPIs, filter options, and a paginated detail table. It implements an account linking logic where transactions are grouped by a main owner account.
+- The backend includes performance optimizations like parallel queries and cursor-based pagination.
 
 **Last working item**:
--   Last item agent was working: The user reported a critical bug: no me carga el stock dashboard (the stock dashboard isn't loading). The agent acknowledged the issue and had just begun its investigation by listing the project's root directory files.
+-   Last item agent was working: The user reported a new critical bug: me sale error al entrar ventas y reservas (I get an error when entering sales and reservations). The agent acknowledged the issue and was about to begin the investigation.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? The agent must first reproduce the issue. A combination of  (with  to capture browser console errors) and checking backend logs (==> /var/log/supervisor/backend.err.log <==
-2026-02-13 17:55:23,167 - db - INFO - CRM tables created successfully
-2026-02-13 17:55:23,450 - db - INFO - Odoo tables/views found: 21
-2026-02-13 17:55:23,450 - db - INFO - Odoo objects: ['sync_job', 'sync_run_log', 'res_company', 'res_users', 'product_attribute', 'product_attribute_value', 'res_partner', 'product_template', 'product_template_attribute_line', 'product_attribute_value_product_product_rel', 'pos_order', 'pos_order_line', 'v_product_variant_flat', 'stock_location', 'product_product', 'v_partner_account_map', 'stock_quant', 'v_pos_order_enriched', 'v_pos_line_full', 'v_stock_by_product_location', 'v_stock_by_product']...
-2026-02-13 17:55:23,592 - db - INFO - View crm.v_partner_account_final created (ALL odoo partners)
-2026-02-13 17:55:23,731 - db - INFO - View crm.v_cuentas_libres created
-2026-02-13 17:55:23,871 - db - INFO - View crm.v_contactos_vinculados created
-2026-02-13 17:55:24,014 - db - INFO - View crm.v_catalogo_con_stock created (tiendas only)
-2026-02-13 17:55:24,156 - db - INFO - View crm.v_catalogo_con_stock_variantes created (tiendas only)
-2026-02-13 17:55:24,436 - db - INFO - View crm.v_catalogo_con_stock_variantes_loc created (tiendas only)
-2026-02-13 17:55:24,718 - db - INFO - View crm.v_stock_balance_flat created
-2026-02-13 17:55:24,856 - db - WARNING - Could not create v_catalogo_stock_flat: cannot drop view crm.v_catalogo_stock_flat because other objects depend on it
-DETAIL:  view crm.v_stock_dashboard_base depends on view crm.v_catalogo_stock_flat
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-2026-02-13 17:55:25,177 - db - INFO - View crm.v_stock_dashboard_base created
-2026-02-13 17:55:25,463 - db - INFO - product_template columns: ['company_key', 'odoo_id', 'name', 'active', 'sale_ok', 'purchase_ok', 'list_price', 'marca', 'tipo', 'tela', 'entalle', 'tel', 'hilo', 'odoo_write_date', 'synced_at', 'odoo_create_date', 'odoo_create_uid', 'odoo_write_uid']
-2026-02-13 17:55:25,603 - db - INFO - View crm.v_productos_elegibles created
-2026-02-13 17:55:25,743 - db - INFO - View crm.v_productos_crm created
-2026-02-13 17:55:26,021 - db - INFO - v_pos_line_full columns: ['company_key', 'date_order', 'cuenta_partner_id', 'contacto_partner_id', 'user_id', 'state', 'is_cancelled', 'reserva', 'reserva_use_id', 'order_id', 'pos_order_line_id', 'product_id', 'qty', 'price_unit', 'discount', 'price_subtotal', 'product_tmpl_id', 'barcode', 'talla', 'color']
-2026-02-13 17:55:26,161 - db - INFO - View crm.v_ventas_pos_filtradas created (from v_pos_line_full)
-2026-02-13 17:55:26,298 - server - INFO - Database initialized successfully
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'tests/test_reposicion_sku.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [3449]
-INFO:     Started server process [4564]
-INFO:     Waiting for application startup.
-2026-02-13 18:02:43,580 - db - INFO - CRM tables created successfully
-2026-02-13 18:02:43,861 - db - INFO - Odoo tables/views found: 21
-2026-02-13 18:02:43,861 - db - INFO - Odoo objects: ['sync_job', 'sync_run_log', 'res_company', 'res_users', 'product_attribute', 'product_attribute_value', 'res_partner', 'product_template', 'product_template_attribute_line', 'product_attribute_value_product_product_rel', 'pos_order', 'pos_order_line', 'v_product_variant_flat', 'stock_location', 'product_product', 'v_partner_account_map', 'stock_quant', 'v_pos_order_enriched', 'v_pos_line_full', 'v_stock_by_product_location', 'v_stock_by_product']...
-2026-02-13 18:02:44,002 - db - INFO - View crm.v_partner_account_final created (ALL odoo partners)
-2026-02-13 18:02:44,144 - db - INFO - View crm.v_cuentas_libres created
-2026-02-13 18:02:44,288 - db - INFO - View crm.v_contactos_vinculados created
-2026-02-13 18:02:44,433 - db - INFO - View crm.v_catalogo_con_stock created (tiendas only)
-2026-02-13 18:02:44,577 - db - INFO - View crm.v_catalogo_con_stock_variantes created (tiendas only)
-2026-02-13 18:02:44,864 - db - INFO - View crm.v_catalogo_con_stock_variantes_loc created (tiendas only)
-2026-02-13 18:02:45,145 - db - INFO - View crm.v_stock_balance_flat created
-2026-02-13 18:02:45,286 - db - WARNING - Could not create v_catalogo_stock_flat: cannot drop view crm.v_catalogo_stock_flat because other objects depend on it
-DETAIL:  view crm.v_stock_dashboard_base depends on view crm.v_catalogo_stock_flat
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-2026-02-13 18:02:45,575 - db - INFO - View crm.v_stock_dashboard_base created
-2026-02-13 18:02:45,871 - db - INFO - product_template columns: ['company_key', 'odoo_id', 'name', 'active', 'sale_ok', 'purchase_ok', 'list_price', 'marca', 'tipo', 'tela', 'entalle', 'tel', 'hilo', 'odoo_write_date', 'synced_at', 'odoo_create_date', 'odoo_create_uid', 'odoo_write_uid']
-2026-02-13 18:02:46,011 - db - INFO - View crm.v_productos_elegibles created
-2026-02-13 18:02:46,153 - db - INFO - View crm.v_productos_crm created
-2026-02-13 18:02:46,437 - db - INFO - v_pos_line_full columns: ['company_key', 'date_order', 'cuenta_partner_id', 'contacto_partner_id', 'user_id', 'state', 'is_cancelled', 'reserva', 'reserva_use_id', 'order_id', 'pos_order_line_id', 'product_id', 'qty', 'price_unit', 'discount', 'price_subtotal', 'product_tmpl_id', 'barcode', 'talla', 'color']
-2026-02-13 18:02:46,586 - db - INFO - View crm.v_ventas_pos_filtradas created (from v_pos_line_full)
-2026-02-13 18:02:46,725 - server - INFO - Database initialized successfully
-INFO:     Application startup complete.
-2026-02-13 18:24:16,720 - server - ERROR - dash_filter_options_v2 error: relation "crm.v_stock_dashboard_base" does not exist
-2026-02-13 18:24:16,735 - server - ERROR - dash_cube error: relation "crm.v_stock_dashboard_base" does not exist
-Traceback (most recent call last):
-  File "/app/backend/server.py", line 1629, in dash_cube
-    cube_rows = await conn.fetch(f"""
-                ^^^^^^^^^^^^^^^^^^^^^
+-   Which testing method agent to use? The agent must first reproduce the issue. A combination of checking backend logs (==> /var/log/supervisor/backend.err.log <==
+               ^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/routers/comercial.py", line 116, in comercial_summary
+    kpi, top_p, top_c = await asyncio.gather(_kpis(), _top_prod(), _top_cli())
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/routers/comercial.py", line 107, in _top_cli
+    return records_to_list(await conn.fetch(f"""
+                           ^^^^^^^^^^^^^^^^^^^^^
   File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
     return await self._execute(
            ^^^^^^^^^^^^^^^^^^^^
@@ -89,12 +49,55 @@ Traceback (most recent call last):
     statement = await self._protocol.prepare(
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_stock_dashboard_base" does not exist
-2026-02-13 18:24:52,705 - server - ERROR - dash_cube error: relation "crm.v_stock_dashboard_base" does not exist
+asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
+ERROR:    Exception in ASGI application
 Traceback (most recent call last):
-  File "/app/backend/server.py", line 1629, in dash_cube
-    cube_rows = await conn.fetch(f"""
-                ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 408, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/applications.py", line 123, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 65, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 756, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 776, in app
+    await route.handle(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 297, in handle
+    await self.app(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 77, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 72, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/routers/comercial.py", line 194, in comercial_detail
+    rows = records_to_list(await conn.fetch(f"""
+                           ^^^^^^^^^^^^^^^^^^^^^
   File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
     return await self._execute(
            ^^^^^^^^^^^^^^^^^^^^
@@ -111,182 +114,138 @@ Traceback (most recent call last):
     statement = await self._protocol.prepare(
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_stock_dashboard_base" does not exist
-2026-02-13 18:24:53,286 - server - ERROR - dash_filter_options_v2 error: relation "crm.v_stock_dashboard_base" does not exist
+asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
 INFO:     Will watch for changes in these directories: ['/app/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
 INFO:     Started reloader process [42] using WatchFiles
-INFO:     Started server process [89]
+INFO:     Started server process [90]
 INFO:     Waiting for application startup.
 
 ==> /var/log/supervisor/backend.out.log <==
-INFO:     10.64.133.74:48708 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:41232 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Musgo&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:39422 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Skinny&tela=Comfort&color=Acero+Cont&talla=28 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:41236 - "GET /api/reposicion/sku-models?marca=QEPO&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Madera+Cont&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:56202 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.131.36:45772 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Oversize&tela=Denim+Rigido&color=Madera+Claro&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37214 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:56202 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:34924 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Polo&entalle=Boxi+Fit&tela=Jersey+24%2F1&color=Beigue&talla=S HTTP/1.1" 200 OK
-INFO:     10.64.132.134:53900 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.130.53:34144 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.130.53:34144 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:36172 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:36112 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:47726 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.131.36:59118 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46100 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=true HTTP/1.1" 200 OK
-INFO:     10.64.131.36:59118 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33540 - "GET /api/reposicion/sku-summary?limit=2 HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:35796 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:52684 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:44462 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.130.44:46738 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM HTTP/1.1" 401 Unauthorized
-INFO:     10.64.130.53:54826 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:52694 - "GET /api/reposicion/sku-summary?marca=QEPO&limit=5&solo_objetivo=true HTTP/1.1" 200 OK
-INFO:     10.64.132.134:36850 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:36850 - "GET /api/reposicion/sku-summary?solo_objetivo=false&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:47128 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:49798 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Polo&entalle=Regular+Fit&tela=Jersey+24%2F1&color=Guinda&talla=L HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.133.74:49798 - "GET /api/reposicion/sku-summary?limit=5 HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.133.74:49798 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Polo&entalle=Regular+Fit&tela=Jersey+24%2F1&color=Marron&talla=S HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-summary?limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:52148 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Skinny&tela=Jogg+Vip&color=Plomo+Cont&talla=28 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:52148 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=2&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=100&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=200&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-summary?limit=100&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Pitillo&tela=Comfort&color=Celeste&talla=34 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?marca=ELEMENT+PREMIUM&limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?marca=QEPO&limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Pitillo&tela=Comfort&color=Azul&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=False HTTP/1.1" 200 OK
-INFO:     10.64.132.134:46926 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM HTTP/1.1" 401 Unauthorized
-INFO:     10.64.131.36:37856 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Pitillo&tela=Comfort&color=Azul+Cristal&talla=34 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:37856 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46932 - "GET /api/reposicion/sku-models HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46932 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46932 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:58496 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:42150 - "GET /api/stock-dashboard/cube?tipo=Biviri&modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.133.74:42166 - "GET /api/stock-dashboard/filter-options-v2?tipo=Biviri&modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56652 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32894 - "GET /api/stock-dashboard/cube?modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.130.44:39952 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:39952 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56652 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.133.74:42166 - "GET /api/stock-dashboard/filter-options-v2?modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56652 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32900 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40742 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32900 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32894 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:35852 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56266 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.133.74:59680 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:57920 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.131.36:57644 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:57920 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37094 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37090 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.130.44:57920 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.133.74:40594 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200&marca=QEPO HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:59236 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=false&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:35000 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.134:35000 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:35000 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.133.74:59052 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:39160 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.130.53:50216 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.131.36:45622 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.53:50216 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57600 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57606 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK) is the recommended first step. If that doesn't reveal the cause,  should be used to test the dashboard's data endpoints (, ) to isolate the problem between the frontend and backend.
+INFO:     10.64.132.108:56388 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=100 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:35632 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.134:48418 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.134:48418 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=10&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=20&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:48418 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=50&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:47060 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIENTES HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46558 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5&cliente=ANGELINO HTTP/1.1" 200 OK
+INFO:     10.64.132.134:57268 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:57268 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=3 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:47838 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.134:53840 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
+INFO:     10.64.129.70:47838 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.108:34062 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     10.64.133.74:38168 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:46560 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIEN HTTP/1.1" 200 OK
+INFO:     10.64.132.134:41568 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:41568 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:58640 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33838 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33848 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:58640 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:58798 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:58798 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.132.108:45462 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.132.108:45472 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:60004 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:45462 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:50326 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:50172 - "GET /api/comercial/filter-options?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:60140 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:60148 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
+INFO:     10.64.132.134:34976 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
+INFO:     10.64.132.134:34984 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
+INFO:     10.64.132.134:34988 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=a&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=an&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=ang&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=ange&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angel&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=angelito+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelito+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57178 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51360 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51368 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelito&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelit&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:53022 - "GET /api/cuentas?search=angelino+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelino+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas/948/ventas HTTP/1.1" 200 OK
+INFO:     10.64.129.70:47874 - "GET /api/cuentas/948/contactos HTTP/1.1" 200 OK
+INFO:     10.64.129.70:47886 - "GET /api/cuentas/948/tareas HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38772 - "GET /api/cuentas/948/interacciones HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas/948 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:50160 - "GET /api/ventas?page=1&limit=100&excluir_canceladas=true HTTP/1.1" 200 OK
+INFO:     10.64.132.108:41250 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:49016 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:52158 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:54218 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.129.70:54218 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:52442 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.132.134:52442 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.133.74:59432 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:59444 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:59454 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:39918 - "GET /api/stock-balance/matrix?limit=300&page=1 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:49016 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:39918 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:36080 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.132.134:38276 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
+INFO:     10.64.133.74:36086 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
+INFO:     10.64.132.108:49022 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38284 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
+INFO:     10.64.133.74:36094 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
+INFO:     10.64.133.74:36094 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.132.108:49022 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.132.134:38284 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:36086 - "GET /api/contactos?search=&page=1&limit=50&solo_dni=false&solo_telefono=false HTTP/1.1" 200 OK) and using the  tool with the  flag on the  page is the recommended first step to capture any backend or frontend console errors.
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1 (P0): Stock Dashboard Not Loading.** The user reported that the main dashboard page is failing to load. This is a critical regression, likely introduced during the last Reposición module refactoring.
+-   **Issue 1 (P0): Error loading Ventas y Reservas page.** The user is reporting an error immediately after the feature was delivered. This is a critical regression blocking the new functionality.
 -   **Issue 2 (P2): Automated Login Test Failure.** The testing agent's initial login test script consistently fails.
 
 **Issues Detail:**
--   **Issue 1: Stock Dashboard Not Loading**
+-   **Issue 1: Error loading Ventas y Reservas page**
     -   Attempted fixes: None yet. Investigation just started.
     -   Next debug checklist:
-        1.  **Frontend Check:** Use the  tool on the Stock Dashboard page with the  flag to capture any JavaScript errors in the browser console.
-        2.  **Backend Logs:** Examine the backend logs for any new errors using ==> /var/log/supervisor/backend.err.log <==
-2026-02-13 17:55:23,167 - db - INFO - CRM tables created successfully
-2026-02-13 17:55:23,450 - db - INFO - Odoo tables/views found: 21
-2026-02-13 17:55:23,450 - db - INFO - Odoo objects: ['sync_job', 'sync_run_log', 'res_company', 'res_users', 'product_attribute', 'product_attribute_value', 'res_partner', 'product_template', 'product_template_attribute_line', 'product_attribute_value_product_product_rel', 'pos_order', 'pos_order_line', 'v_product_variant_flat', 'stock_location', 'product_product', 'v_partner_account_map', 'stock_quant', 'v_pos_order_enriched', 'v_pos_line_full', 'v_stock_by_product_location', 'v_stock_by_product']...
-2026-02-13 17:55:23,592 - db - INFO - View crm.v_partner_account_final created (ALL odoo partners)
-2026-02-13 17:55:23,731 - db - INFO - View crm.v_cuentas_libres created
-2026-02-13 17:55:23,871 - db - INFO - View crm.v_contactos_vinculados created
-2026-02-13 17:55:24,014 - db - INFO - View crm.v_catalogo_con_stock created (tiendas only)
-2026-02-13 17:55:24,156 - db - INFO - View crm.v_catalogo_con_stock_variantes created (tiendas only)
-2026-02-13 17:55:24,436 - db - INFO - View crm.v_catalogo_con_stock_variantes_loc created (tiendas only)
-2026-02-13 17:55:24,718 - db - INFO - View crm.v_stock_balance_flat created
-2026-02-13 17:55:24,856 - db - WARNING - Could not create v_catalogo_stock_flat: cannot drop view crm.v_catalogo_stock_flat because other objects depend on it
-DETAIL:  view crm.v_stock_dashboard_base depends on view crm.v_catalogo_stock_flat
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-2026-02-13 17:55:25,177 - db - INFO - View crm.v_stock_dashboard_base created
-2026-02-13 17:55:25,463 - db - INFO - product_template columns: ['company_key', 'odoo_id', 'name', 'active', 'sale_ok', 'purchase_ok', 'list_price', 'marca', 'tipo', 'tela', 'entalle', 'tel', 'hilo', 'odoo_write_date', 'synced_at', 'odoo_create_date', 'odoo_create_uid', 'odoo_write_uid']
-2026-02-13 17:55:25,603 - db - INFO - View crm.v_productos_elegibles created
-2026-02-13 17:55:25,743 - db - INFO - View crm.v_productos_crm created
-2026-02-13 17:55:26,021 - db - INFO - v_pos_line_full columns: ['company_key', 'date_order', 'cuenta_partner_id', 'contacto_partner_id', 'user_id', 'state', 'is_cancelled', 'reserva', 'reserva_use_id', 'order_id', 'pos_order_line_id', 'product_id', 'qty', 'price_unit', 'discount', 'price_subtotal', 'product_tmpl_id', 'barcode', 'talla', 'color']
-2026-02-13 17:55:26,161 - db - INFO - View crm.v_ventas_pos_filtradas created (from v_pos_line_full)
-2026-02-13 17:55:26,298 - server - INFO - Database initialized successfully
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'tests/test_reposicion_sku.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [3449]
-INFO:     Started server process [4564]
-INFO:     Waiting for application startup.
-2026-02-13 18:02:43,580 - db - INFO - CRM tables created successfully
-2026-02-13 18:02:43,861 - db - INFO - Odoo tables/views found: 21
-2026-02-13 18:02:43,861 - db - INFO - Odoo objects: ['sync_job', 'sync_run_log', 'res_company', 'res_users', 'product_attribute', 'product_attribute_value', 'res_partner', 'product_template', 'product_template_attribute_line', 'product_attribute_value_product_product_rel', 'pos_order', 'pos_order_line', 'v_product_variant_flat', 'stock_location', 'product_product', 'v_partner_account_map', 'stock_quant', 'v_pos_order_enriched', 'v_pos_line_full', 'v_stock_by_product_location', 'v_stock_by_product']...
-2026-02-13 18:02:44,002 - db - INFO - View crm.v_partner_account_final created (ALL odoo partners)
-2026-02-13 18:02:44,144 - db - INFO - View crm.v_cuentas_libres created
-2026-02-13 18:02:44,288 - db - INFO - View crm.v_contactos_vinculados created
-2026-02-13 18:02:44,433 - db - INFO - View crm.v_catalogo_con_stock created (tiendas only)
-2026-02-13 18:02:44,577 - db - INFO - View crm.v_catalogo_con_stock_variantes created (tiendas only)
-2026-02-13 18:02:44,864 - db - INFO - View crm.v_catalogo_con_stock_variantes_loc created (tiendas only)
-2026-02-13 18:02:45,145 - db - INFO - View crm.v_stock_balance_flat created
-2026-02-13 18:02:45,286 - db - WARNING - Could not create v_catalogo_stock_flat: cannot drop view crm.v_catalogo_stock_flat because other objects depend on it
-DETAIL:  view crm.v_stock_dashboard_base depends on view crm.v_catalogo_stock_flat
-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-2026-02-13 18:02:45,575 - db - INFO - View crm.v_stock_dashboard_base created
-2026-02-13 18:02:45,871 - db - INFO - product_template columns: ['company_key', 'odoo_id', 'name', 'active', 'sale_ok', 'purchase_ok', 'list_price', 'marca', 'tipo', 'tela', 'entalle', 'tel', 'hilo', 'odoo_write_date', 'synced_at', 'odoo_create_date', 'odoo_create_uid', 'odoo_write_uid']
-2026-02-13 18:02:46,011 - db - INFO - View crm.v_productos_elegibles created
-2026-02-13 18:02:46,153 - db - INFO - View crm.v_productos_crm created
-2026-02-13 18:02:46,437 - db - INFO - v_pos_line_full columns: ['company_key', 'date_order', 'cuenta_partner_id', 'contacto_partner_id', 'user_id', 'state', 'is_cancelled', 'reserva', 'reserva_use_id', 'order_id', 'pos_order_line_id', 'product_id', 'qty', 'price_unit', 'discount', 'price_subtotal', 'product_tmpl_id', 'barcode', 'talla', 'color']
-2026-02-13 18:02:46,586 - db - INFO - View crm.v_ventas_pos_filtradas created (from v_pos_line_full)
-2026-02-13 18:02:46,725 - server - INFO - Database initialized successfully
-INFO:     Application startup complete.
-2026-02-13 18:24:16,720 - server - ERROR - dash_filter_options_v2 error: relation "crm.v_stock_dashboard_base" does not exist
-2026-02-13 18:24:16,735 - server - ERROR - dash_cube error: relation "crm.v_stock_dashboard_base" does not exist
-Traceback (most recent call last):
-  File "/app/backend/server.py", line 1629, in dash_cube
-    cube_rows = await conn.fetch(f"""
-                ^^^^^^^^^^^^^^^^^^^^^
+        1.  **Backend Logs:** Examine backend logs for errors that occurred when the user tried to access the page: ==> /var/log/supervisor/backend.err.log <==
+               ^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/routers/comercial.py", line 116, in comercial_summary
+    kpi, top_p, top_c = await asyncio.gather(_kpis(), _top_prod(), _top_cli())
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/routers/comercial.py", line 107, in _top_cli
+    return records_to_list(await conn.fetch(f"""
+                           ^^^^^^^^^^^^^^^^^^^^^
   File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
     return await self._execute(
            ^^^^^^^^^^^^^^^^^^^^
@@ -303,12 +262,55 @@ Traceback (most recent call last):
     statement = await self._protocol.prepare(
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_stock_dashboard_base" does not exist
-2026-02-13 18:24:52,705 - server - ERROR - dash_cube error: relation "crm.v_stock_dashboard_base" does not exist
+asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
+ERROR:    Exception in ASGI application
 Traceback (most recent call last):
-  File "/app/backend/server.py", line 1629, in dash_cube
-    cube_rows = await conn.fetch(f"""
-                ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 408, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/applications.py", line 123, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 65, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 756, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 776, in app
+    await route.handle(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 297, in handle
+    await self.app(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 77, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 72, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/backend/routers/comercial.py", line 194, in comercial_detail
+    rows = records_to_list(await conn.fetch(f"""
+                           ^^^^^^^^^^^^^^^^^^^^^
   File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
     return await self._execute(
            ^^^^^^^^^^^^^^^^^^^^
@@ -325,125 +327,125 @@ Traceback (most recent call last):
     statement = await self._protocol.prepare(
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_stock_dashboard_base" does not exist
-2026-02-13 18:24:53,286 - server - ERROR - dash_filter_options_v2 error: relation "crm.v_stock_dashboard_base" does not exist
+asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
 INFO:     Will watch for changes in these directories: ['/app/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
 INFO:     Started reloader process [42] using WatchFiles
-INFO:     Started server process [89]
+INFO:     Started server process [90]
 INFO:     Waiting for application startup.
 
 ==> /var/log/supervisor/backend.out.log <==
-INFO:     10.64.133.74:48708 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:41232 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Musgo&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:39422 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Skinny&tela=Comfort&color=Acero+Cont&talla=28 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:41236 - "GET /api/reposicion/sku-models?marca=QEPO&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Madera+Cont&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:56202 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.131.36:45772 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Oversize&tela=Denim+Rigido&color=Madera+Claro&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37214 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:56202 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:34924 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Polo&entalle=Boxi+Fit&tela=Jersey+24%2F1&color=Beigue&talla=S HTTP/1.1" 200 OK
-INFO:     10.64.132.134:53900 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40428 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.130.53:34144 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.130.53:34144 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:36172 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:36112 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:47726 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.131.36:59118 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46100 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=true HTTP/1.1" 200 OK
-INFO:     10.64.131.36:59118 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33540 - "GET /api/reposicion/sku-summary?limit=2 HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:35796 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:52684 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:44462 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.130.44:46738 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM HTTP/1.1" 401 Unauthorized
-INFO:     10.64.130.53:54826 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:52694 - "GET /api/reposicion/sku-summary?marca=QEPO&limit=5&solo_objetivo=true HTTP/1.1" 200 OK
-INFO:     10.64.132.134:36850 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:36850 - "GET /api/reposicion/sku-summary?solo_objetivo=false&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:47128 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:49798 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Polo&entalle=Regular+Fit&tela=Jersey+24%2F1&color=Guinda&talla=L HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.133.74:49798 - "GET /api/reposicion/sku-summary?limit=5 HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.133.74:49798 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Polo&entalle=Regular+Fit&tela=Jersey+24%2F1&color=Marron&talla=S HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-summary?limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:52148 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Skinny&tela=Jogg+Vip&color=Plomo+Cont&talla=28 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:52148 - "GET /api/reposicion/sku-summary?limit=5&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=2&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=100&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58422 - "GET /api/reposicion/sku-summary?limit=200&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-summary?limit=100&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.131.36:47202 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Pitillo&tela=Comfort&color=Celeste&talla=34 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?marca=ELEMENT+PREMIUM&limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?marca=QEPO&limit=10&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Pitillo&tela=Comfort&color=Azul&talla=30 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=False HTTP/1.1" 200 OK
-INFO:     10.64.132.134:46926 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37894 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM HTTP/1.1" 401 Unauthorized
-INFO:     10.64.131.36:37856 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Pitillo&tela=Comfort&color=Azul+Cristal&talla=34 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:37856 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46932 - "GET /api/reposicion/sku-models HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46932 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.130.44:36006 - "GET /api/reposicion/sku-summary?limit=1&solo_objetivo=True HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46932 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:58496 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:42150 - "GET /api/stock-dashboard/cube?tipo=Biviri&modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.133.74:42166 - "GET /api/stock-dashboard/filter-options-v2?tipo=Biviri&modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56652 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32894 - "GET /api/stock-dashboard/cube?modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.130.44:39952 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:39952 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56652 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.133.74:42166 - "GET /api/stock-dashboard/filter-options-v2?modelo=staru HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56652 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32900 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:40742 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32900 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:32894 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.130.44:35852 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.130.53:56266 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.133.74:59680 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:57920 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.131.36:57644 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.44:57920 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37094 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:37090 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.130.44:57920 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.133.74:40594 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200&marca=QEPO HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=true&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.131.36:59236 - "GET /api/reposicion/sku-summary?umbral_destino=0&objetivo_destino=2&umbral_min_origen=0&solo_objetivo=false&page=1&limit=200 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:44432 - "GET /api/reposicion/sku-models?marca=ELEMENT+PREMIUM&tipo=Pantalon+Denim&entalle=Semipitillo&tela=Comfort&color=Cenizo+Claro&talla=32 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:35000 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.134:35000 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:35000 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.133.74:59052 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK
-INFO:     10.64.130.53:39160 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.130.53:50216 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.131.36:45622 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.130.53:50216 - "GET /api/odoo-sync/job-status?job_code=STOCK_QUANTS HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57600 - "GET /api/stock-dashboard/cube HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57606 - "GET /api/stock-dashboard/filter-options-v2 HTTP/1.1" 200 OK.
-        3.  **API Health Check:** Manually  the endpoints that power the dashboard:  and . Check for HTTP errors, timeouts, or empty responses.
-        4.  **Code Review:** Review the recent changes made to  and how the refactored  is integrated. The issue might be a faulty prop or state change that affects the main dashboard tab.
-    -   Why fix this issue and what will be achieved with the fix? This is a critical regression that makes a core feature of the application unusable. Fixing it will restore the application to a fully functional state.
+INFO:     10.64.132.108:56388 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=100 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:35632 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.134:48418 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.134:48418 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=10&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=20&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:48418 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=50&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:47060 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIENTES HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46558 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5&cliente=ANGELINO HTTP/1.1" 200 OK
+INFO:     10.64.132.134:57268 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:57268 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=3 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:47838 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.134:53840 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
+INFO:     10.64.129.70:47838 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
+INFO:     10.64.132.108:34062 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     10.64.133.74:38168 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:46560 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIEN HTTP/1.1" 200 OK
+INFO:     10.64.132.134:41568 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:41568 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:58640 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33838 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:33848 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:58640 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:58798 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:58798 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.132.108:45462 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.132.108:45472 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:60004 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:45462 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:50326 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.129.70:50172 - "GET /api/comercial/filter-options?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:60140 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:60148 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
+INFO:     10.64.132.134:34976 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
+INFO:     10.64.132.134:34984 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
+INFO:     10.64.132.134:34988 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=a&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=an&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=ang&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=ange&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angel&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=angelito+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelito+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57178 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51360 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51368 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelito&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelit&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:53022 - "GET /api/cuentas?search=angelino+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelino+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57164 - "GET /api/cuentas/948/ventas HTTP/1.1" 200 OK
+INFO:     10.64.129.70:47874 - "GET /api/cuentas/948/contactos HTTP/1.1" 200 OK
+INFO:     10.64.129.70:47886 - "GET /api/cuentas/948/tareas HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38772 - "GET /api/cuentas/948/interacciones HTTP/1.1" 200 OK
+INFO:     10.64.133.74:57154 - "GET /api/cuentas/948 HTTP/1.1" 200 OK
+INFO:     10.64.132.134:50160 - "GET /api/ventas?page=1&limit=100&excluir_canceladas=true HTTP/1.1" 200 OK
+INFO:     10.64.132.108:41250 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:49016 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:52158 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:54218 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.129.70:54218 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.132.134:52442 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     10.64.132.134:52442 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     10.64.133.74:59432 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:59444 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:59454 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:39918 - "GET /api/stock-balance/matrix?limit=300&page=1 HTTP/1.1" 200 OK
+INFO:     10.64.132.108:49016 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.129.70:39918 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:36080 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.132.134:38276 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
+INFO:     10.64.133.74:36086 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
+INFO:     10.64.132.108:49022 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
+INFO:     10.64.132.134:38284 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
+INFO:     10.64.133.74:36094 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
+INFO:     10.64.133.74:36094 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.132.108:49022 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.132.134:38284 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:     10.64.133.74:36086 - "GET /api/contactos?search=&page=1&limit=50&solo_dni=false&solo_telefono=false HTTP/1.1" 200 OK.
+        2.  **Frontend Check:** Use the  tool on the  page with  to capture any JavaScript errors in the browser console.
+        3.  **API Health Check:** Manually  the authenticated endpoints that power the page: , , and . Check for errors, timeouts, or unexpected responses.
+        4.  **Code Review:** Review the latest changes, particularly in  (the  join) and . The error could be a data integrity issue where a  or  doesn't exist in the  table, causing the  to fail or return nulls where they aren't expected.
+    -   Why fix this issue and what will be achieved with the fix? This is a critical bug blocking a newly delivered feature. Fixing it will make the Ventas y Reservas module usable.
     -   Status: IN PROGRESS
     -   Is recurring issue? N
     -   Should Test frontend/backend/both after fix? Both.
     -   Blocked on other issue: None.
 
 -   **Issue 2: Automated Login Test Failure**
-    -   Attempted fixes: None in this session.
+    -   Attempted fixes: None.
     -   Next debug checklist: Investigate the Playwright test script for missing  attributes, race conditions, or timing issues on the login page.
     -   Why fix this issue and what will be achieved with this? Fixing it would enable more robust end-to-end automated testing. It is a low-priority, non-blocking technical debt item.
     -   Status: NOT STARTED
@@ -455,7 +457,7 @@ INFO:     10.64.132.134:57606 - "GET /api/stock-dashboard/filter-options-v2 HTTP
 -   There are no tasks currently in progress, as the focus is on the critical bug fix.
 
 **Upcoming and Future Tasks**
-*   **Refactoring (P1):** Move the stock dashboard-related endpoints (, , ) from  into a dedicated router file (e.g., ). This is now more important as  continues to grow.
+*   **Refactoring (P1):** Move the stock dashboard-related endpoints (, , ) from  into a dedicated router file (e.g., ).
 *   **Dashboard Features (P1):**
     *   Persist the dashboard's filter state in the URL to allow sharing specific views.
     *   Implement the frontend UI for the Detalle de Stock paginated table (backend endpoint  already exists).
@@ -463,14 +465,13 @@ INFO:     10.64.132.134:57606 - "GET /api/stock-dashboard/filter-options-v2 HTTP
     *   Implement the Por Arreglar filter, which is currently a placeholder.
 
 **Completed work in this session**
--   **Replenishment Module Refactor (DONE):**
-    -   Backend: Created new endpoints  and  in a new router () to provide SKU-level aggregation and a model-level drill-down.
-    -   Frontend: Completely redesigned  to show a two-panel UI: a main table for SKU summaries and a detail panel for the models within the selected SKU.
--   **Balance de Tallas Report (DONE):**
-    -   Backend: Created new endpoints  and . Implemented a significant performance optimization by fetching raw data once and processing it in memory (Python) instead of running multiple slow DB queries.
-    -   Database: Created a new view  in .
-    -   Frontend: Created a new page  with a two-panel layout for the main matrix and the color-detail matrix.
--   **Verification of Reposición v2 (DONE):** The agent successfully verified the previous session's work on the advanced replenishment logic before starting new features.
+-   **Ventas y Reservas Module (DONE, but now has a bug):**
+    -   Backend: Created  view. Developed a new router  with authenticated endpoints (, , ). Implemented performance optimizations, including parallel queries for KPIs and cursor-based pagination.
+    -   Frontend: Created , adding a new route and navigation link. The page features tabs, filters, KPIs, and a detail table.
+-   **Client Account Linking (DONE, but now has a bug):**
+    -   Backend: Modified  to join with  and added  and  to group transactions by a main account.
+    -   Frontend: Updated  to filter by and display the main account () while also showing the original contact ().
+-   **Initial Bug Investigation (Resolved/Not Reproduced):** The Stock Dashboard not loading bug from the previous session could not be reproduced. The agent verified that the dashboard, replenishment, and balance de tallas pages were all fully functional before starting new work.
 
 **Earlier issues found/mentioned but not fixed**
 -   The recurring failure of the automated login test remains unresolved.
@@ -484,63 +485,65 @@ INFO:     10.64.132.134:57606 - "GET /api/stock-dashboard/filter-options-v2 HTTP
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, PostgreSQL, , Dynamic SQL with CTEs.
--   **Frontend:** React, Shadcn/UI, Tailwind CSS, Axios, React Hooks.
--   **Performance Optimization:** A key pattern was introduced where, to overcome network latency to the DB, raw data is fetched in a single query and then aggregated/pivoted in memory on the backend using Python, mimicking Pandas-like operations.
+-   **Backend:** FastAPI, PostgreSQL, .
+-   **Frontend:** React, Shadcn/UI, Tailwind CSS, Axios.
+-   **Performance Optimization:**
+    -   Backend in-memory aggregation of data fetched from the DB.
+    -   Running multiple aggregate queries in parallel () for dashboard KPIs.
+    -   Cursor-style pagination (using  flag) to avoid expensive  operations on large tables.
 
 **key DB schema**
--   **crm.v_stock_dashboard_base:** The primary view for original dashboard and replenishment data.
--   **crm.v_stock_balance_flat:** **NEW** view created to power the Balance de Tallas report.
+-   **crm.v_comercial_mov_flat:** **NEW** view that unifies sales and reservations from , links them to product/customer details, and includes the  for account linking.
+-   **crm.v_partner_account_final:** **Existing** view used to map an original  to a main account .
 
 **All files of reference**
--   : Contains old dashboard endpoints; was modified to register new routers.
--   : Modified to add the  view and increase the DB pool timeout.
--   : **NEW**, contains logic for the Balance de Tallas report.
--   : **NEW**, contains logic for the refactored replenishment module.
--   : Modified to integrate the refactored . **This is a likely suspect for the current bug.**
--   : **COMPLETELY REWRITTEN** with the new SKU summary and model drill-down UI.
--   : **NEW**, contains the UI for the Balance de Tallas report.
--   : Modified to add routing for the new .
+-   : **Modified** to create the  view.
+-   : **NEW**, contains all logic for the Ventas y Reservas feature.
+-   : **Modified** to register the new  router.
+-   : **NEW**, the entire UI for the Ventas y Reservas feature.
+-   : **Modified** to add the  route.
+-   : **Modified** to add the Ventas y Reservas link to the sidebar.
+-   : **Modified** to add functions for calling the new  endpoints.
 
 **Areas that need refactoring**:
--   The original stock dashboard endpoints (, , ) are still in the main  file. They should be moved to their own router for consistency and maintainability.
+-   The original stock dashboard endpoints (, , ) are still in the main  file. They should be moved to their own router.
 
 **key api endpoints**
--   : Powers the main dashboard. **(Potentially broken/slow)**
--   : **NEW**, provides data for the Balance de Tallas report.
--   : **NEW**, provides drill-down data for the Balance de Tallas report.
--   : **NEW**, provides SKU-level summary for the refactored replenishment module.
--   : **NEW**, provides model-level drill-down for the replenishment module.
+-   : **NEW**, provides aggregated KPIs for the commercial page.
+-   : **NEW**, provides paginated detail rows for the commercial page.
+-   : **NEW**, provides distinct values for populating filter dropdowns.
 
 **Critical Info for New Agent**
--   The immediate priority is to fix the critical bug where the main Stock Dashboard is not loading. This is a regression. Start by investigating frontend console errors and backend logs.
--   A successful performance optimization pattern was implemented in the  router: fetch raw data once, then process in memory. Consider this pattern if other endpoints are slow.
--   The user provides very detailed, spec-driven requirements. Adhere to them closely.
+-   The immediate and only priority is to fix the critical bug: me sale error al entrar ventas y reservas.
+-   The previous critical bug (stock dashboard not loading) was a false alarm or transient. The agent extensively tested all existing features, and they were working correctly before the new Ventas y Reservas feature was built. Do not get sidetracked investigating old issues.
+-   The new bug likely stems from the latest changes for the Ventas y Reservas feature, especially the account linking logic which added a  to the main view. A data inconsistency (e.g., a missing partner in ) is a strong possibility.
 
 **documents and test reports created in this job**
--   : Confirmed the Balance de Tallas feature worked.
--   : Confirmed the Reposición refactor worked.
--   : Updated with the completion of the two major features.
+-   : Successful test run after implementing Ventas y Reservas feature (before account linking).
+-   : Successful test run after adding authentication to commercial endpoints.
+-   : Successful test run after implementing client account linking.
+-   : Updated with completion of Ventas y Reservas and Client Account Linking.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** Provided a detailed spec for the Balance de Tallas report.
-2.  ... (Agent implements, debugs performance, and tests the feature) ...
-3.  **Agent:** Finished the Balance de Tallas task.
-4.  **User:** Provided a detailed spec for a major refactor of the Reposición module (SKU summary + drill-down).
-5.  ... (Agent implements, debugs a frontend file location issue, and tests the feature) ...
-6.  **Agent:** Finished the Reposición refactor task.
-7.  **User:** no me carga el stock dashboard (the stock dashboard isn't loading for me) - **This is the current pending issue.**
+1.  **User:** Provided a detailed spec for the Ventas y Reservas module.
+2.  ... (Agent implements, optimizes performance, adds auth, and tests the feature) ...
+3.  **Agent:** Finished the Ventas y Reservas task.
+4.  **User:** Provided a detailed spec for the Client Account Linking feature.
+5.  ... (Agent implements and tests the account linking feature) ...
+6.  **Agent:** Finished the Client Account Linking task.
+7.  **User:** me sale error al entrar ventas y reservas (I get an error when entering sales and reservations) - **This is the current pending issue.**
 8.  **Agent:** Acknowledged the bug report and started the investigation.
 
 **Project Health Check:**
--   **Broken:** A core feature (the main Stock Dashboard) is not loading, which constitutes a critical regression.
+-   **Broken:** A newly delivered core feature (Ventas y Reservas) is inaccessible due to an error, constituting a critical regression.
 
 **3rd Party Integrations**
--   **Odoo:** Used for manual stock data synchronization via XML-RPC.
+-   **Odoo:** Used for data synchronization via a PostgreSQL connection (not XML-RPC as previously assumed).
 
 **Testing status**
--   Testing agent used after significant changes: YES. It was used successfully for both major features implemented in this session. It has not yet been used for the new bug.
--   Known regressions: The main Stock Dashboard is not loading.
+-   Testing agent used after significant changes: YES. It was used successfully after the Ventas y Reservas implementation and again after the Account Linking implementation.
+-   Test files created: None.
+-   Known regressions: The Ventas y Reservas page is now throwing an error for the user, even though it passed automated testing.
 
 **What agent forgot to execute**
--   The agent did not refactor the original stock dashboard endpoints out of  and into their own dedicated router file, even though this was a planned task from the previous session and new routers were being created.</analysis>
+-   The agent has not yet refactored the original stock dashboard endpoints out of  and into their own dedicated router file. This remains a pending technical debt item.</analysis>
