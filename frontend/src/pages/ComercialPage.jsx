@@ -326,7 +326,7 @@ export default function ComercialPage() {
                   <table className="w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 bg-slate-100 z-10">
                       <tr>
-                        {["Fecha", "Orden", "Cliente", "Modelo", "Marca", "Tipo", "Entalle", "Tela", "Talla", "Color", "Qty", "P.Unit", "Subtotal"].map(h => (
+                        {["Fecha", "Orden", "Cuenta", "Contacto", "Modelo", "Marca", "Tipo", "Entalle", "Tela", "Talla", "Color", "Qty", "P.Unit", "Subtotal"].map(h => (
                           <th key={h} className={`text-left px-2 py-1 font-semibold whitespace-nowrap ${h === "Qty" || h === "P.Unit" || h === "Subtotal" ? "text-right" : ""}`}>{h}</th>
                         ))}
                       </tr>
