@@ -338,7 +338,8 @@ export default function ComercialPage() {
                         <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
                           <td className="px-2 py-0.5 whitespace-nowrap">{fmtDate(r.fecha)}</td>
                           <td className="px-2 py-0.5 font-mono text-slate-500">{r.order_id}</td>
-                          <td className="px-2 py-0.5 truncate max-w-[140px]">{r.partner_name || "-"}</td>
+                          <td className="px-2 py-0.5 font-medium truncate max-w-[140px]">{r.owner_partner_name || "-"}</td>
+                          <td className="px-2 py-0.5 text-slate-500 truncate max-w-[120px]">{r.partner_name && r.partner_name !== r.owner_partner_name ? r.partner_name : "-"}</td>
                           <td className="px-2 py-0.5 font-medium truncate max-w-[100px]">{r.modelo || "-"}</td>
                           <td className="px-2 py-0.5 text-slate-500">{r.marca || "-"}</td>
                           <td className="px-2 py-0.5 text-slate-500">{r.tipo || "-"}</td>
