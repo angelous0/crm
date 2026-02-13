@@ -99,6 +99,7 @@ export default function ComercialPage() {
   const [cliente, setCliente] = useState("");
 
   const [summary, setSummary] = useState(null);
+  const [filterOpts, setFilterOpts] = useState({});
   const [detail, setDetail] = useState({ items: [], total: 0 });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
