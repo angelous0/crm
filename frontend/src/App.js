@@ -14,6 +14,7 @@ import Agenda from "@/pages/Agenda";
 import Ventas from "@/pages/Ventas";
 import StockDashboard from "@/pages/StockDashboard";
 import BalanceTallas from "@/pages/BalanceTallas";
+import ComercialPage from "@/pages/ComercialPage";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }) {
