@@ -1,5 +1,5 @@
 """Comercial (Ventas y Reservas) router – optimized."""
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from typing import Optional
 import asyncio
 import logging
@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/comercial", tags=["comercial"])
 
 VIEW = "crm.v_comercial_mov_flat"
+
+
+def _get_auth_dep():
+    from server import get_current_user
+    return get_current_user
 
 
 def _build_where(params_list, fecha_desde, fecha_hasta, marca, tipo,
