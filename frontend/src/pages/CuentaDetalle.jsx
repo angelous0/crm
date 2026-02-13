@@ -63,12 +63,11 @@ export default function CuentaDetalle() {
     const load = async () => {
       setLoading(true);
       try {
-        const [cRes, ctRes, iRes, tRes, vRes] = await Promise.all([
+        const [cRes, ctRes, iRes, tRes] = await Promise.all([
           api.get(`/cuentas/${id}`),
           api.get(`/cuentas/${id}/contactos`),
           api.get(`/cuentas/${id}/interacciones`),
           api.get(`/cuentas/${id}/tareas`),
-          api.get(`/cuentas/${id}/ventas`).catch(() => ({ data: { items: [] } }))
         ]);
         setCuenta(cRes.data);
         setEditForm({
@@ -80,7 +79,7 @@ export default function CuentaDetalle() {
         setContactos(ctRes.data || []);
         setInteracciones(iRes.data || []);
         setTareas(tRes.data || []);
-        setVentas(vRes.data?.items || []);
+        setVentas({ items: [], kpis: {}, has_next: false, debug: {} });
       } catch (err) {
         toast.error("Error al cargar cuenta");
       } finally {
