@@ -293,7 +293,7 @@ export default function ComercialPage() {
                   <tbody>
                     {(summary?.top_clientes || []).map((r, i) => (
                       <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
-                        <td className="px-2 py-0.5 font-medium truncate max-w-[180px]">{r.partner_name || `ID: ${r.partner_id}`}</td>
+                        <td className="px-2 py-0.5 font-medium truncate max-w-[180px]">{r.owner_partner_name || `ID: ${r.owner_partner_id}`}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.qty)}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtMoney(r.subtotal)}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.orders)}</td>
