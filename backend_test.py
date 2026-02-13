@@ -108,9 +108,10 @@ class CRMAPITester:
             
             if response.status_code == 200:
                 data = response.json()
-                expected_keys = ['cuentas', 'contactos', 'tareas_pendientes', 'interacciones', 'productos_aprobados']
+                # Updated expected keys to match actual response
+                expected_keys = ['cuentas_libres', 'contactos_vinculados', 'total_partners', 'tareas_pendientes', 'interacciones', 'productos_aprobados']
                 if all(key in data for key in expected_keys):
-                    stats_summary = f"Cuentas: {data['cuentas']}, Contactos: {data['contactos']}, Tareas: {data['tareas_pendientes']}"
+                    stats_summary = f"Cuentas libres: {data['cuentas_libres']}, Contactos vinculados: {data['contactos_vinculados']}, Tareas: {data['tareas_pendientes']}"
                     self.log_result("Stats", True, stats_summary)
                     return True
                 else:
