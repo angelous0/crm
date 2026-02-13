@@ -427,7 +427,10 @@ export default function CuentaDetalle() {
 
           {/* Right: Tabs */}
           <div className="col-span-12 lg:col-span-8">
-            <Tabs defaultValue="contactos">
+            <Tabs defaultValue="contactos" onValueChange={(v) => {
+              if (v === "ventas") { setVentasDocTipo("SALE"); }
+              if (v === "reservas") { setVentasDocTipo("RESERVA"); }
+            }}>
               <TabsList className="mb-4" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
                 <TabsTrigger value="ventas">Ventas ({ventas.kpis?.orders || 0})</TabsTrigger>
