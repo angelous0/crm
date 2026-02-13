@@ -42,6 +42,18 @@ Build a B2B CRM application that integrates with an existing PostgreSQL database
 20. Expandable detail table with CSV export
 21. **Collapsible sidebar** (persists in localStorage)
 
+### Phase 3.1 - Cross-Filtering (Feb 2026) ✅
+22. **Interactive cross-filtering** on Stock Dashboard:
+    - Click modelo name → filters entire dashboard by that modelo
+    - Click talla header → filters by talla (amber highlight)
+    - Click color name → filters by color (blue highlight)
+    - Click cell → toggles both color and talla filters
+    - Active filter chips with individual remove (X) buttons
+    - "Limpiar todo" button resets all filters
+    - 300ms debounce on filter changes
+    - All panels + KPIs update reactively
+    - Tested: 100% backend (17/17), 100% frontend
+
 ## Key DB Views
 - `crm.v_partner_account_final` - Maps contacts to accounts
 - `crm.v_cuentas_libres` - Free accounts
@@ -58,7 +70,13 @@ Build a B2B CRM application that integrates with an existing PostgreSQL database
 - CRM: `GET /api/cuentas`, `/contactos`, `/cuentas/{odoo_id}`, `POST /cuentas/{odoo_id}/vincular-contacto`
 
 ## Tienda Rule
-Only locations with `x_nombre IS NOT NULL AND btrim(x_nombre) <> ''` are considered real stores. Internal locations without x_nombre are excluded from all stock calculations and dropdowns.
+Only locations with `x_nombre IS NOT NULL AND btrim(x_nombre) <> ''` are considered real stores.
 
-## Backlog
-- No pending tasks from user
+## Backlog (Prioritized)
+### P1
+- Persist dashboard filter state in URL query string (shareable/reloadable)
+### P2
+- "Por Arreglar" filter (pending data source definition)
+- Multi-selection of filters (SHIFT + click)
+### P3
+- Refactor `backend/server.py` into multiple router files
