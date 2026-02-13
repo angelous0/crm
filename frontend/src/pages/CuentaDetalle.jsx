@@ -41,6 +41,21 @@ export default function CuentaDetalle() {
   const [interaccionForm, setInteraccionForm] = useState({ tipo: "WHATSAPP", resumen: "", resultado: "" });
   const [tareaForm, setTareaForm] = useState({ tipo: "LLAMAR", due_at: "", prioridad: 3, descripcion: "" });
 
+  // Vincular contacto states
+  const [unlinkSearch, setUnlinkSearch] = useState("");
+  const [unlinkResults, setUnlinkResults] = useState([]);
+  const [unlinkTotal, setUnlinkTotal] = useState(0);
+  const [unlinkPage, setUnlinkPage] = useState(1);
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
+  const [soloDni, setSoloDni] = useState(false);
+  const [soloTelefono, setSoloTelefono] = useState(false);
+  const [showVincularConfirm, setShowVincularConfirm] = useState(false);
+  const [vincularTarget, setVincularTarget] = useState(null);
+  const [vincularNota, setVincularNota] = useState("");
+  const [vincularLoading, setVincularLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const unlinkPageSize = 20;
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
