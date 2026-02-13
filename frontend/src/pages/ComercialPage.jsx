@@ -4,10 +4,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
-  Loader2, Search, X, ChevronDown, ChevronUp, Download,
-  ShoppingBag, Bookmark, Calendar, DollarSign, Hash, Users
+  Loader2, Search, X, Download,
+  ShoppingBag, Bookmark, Calendar, Hash, Users, Copy, Check
 } from "lucide-react";
 
 /* ── Helpers ── */
@@ -15,10 +16,8 @@ function fmtNum(n) { return Number(n || 0).toLocaleString("es-PE"); }
 function fmtMoney(n) { return "S/ " + Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDate(d) {
   if (!d) return "-";
-  const dt = new Date(d);
-  return dt.toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
-
 function downloadCSV(rows, filename) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
@@ -29,11 +28,11 @@ function downloadCSV(rows, filename) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
 
-/* ── Slicer Filter ── */
+/* ── Slicer Filter (cascade with counts) ── */
 function SlicerFilter({ label, options, selected, onChange }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const filtered = q ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options;
+  const filtered = q ? options.filter(o => o.value.toLowerCase().includes(q.toLowerCase())) : options;
   const toggle = (v) => onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
   const count = selected.length;
   return (
@@ -45,7 +44,7 @@ function SlicerFilter({ label, options, selected, onChange }) {
           {count > 0 && <span className="bg-white/30 rounded-full px-1 text-[9px] font-bold">{count}</span>}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-0 shadow-xl" align="start">
+      <PopoverContent className="w-60 p-0 shadow-xl" align="start">
         <div className="p-1.5 border-b">
           <div className="relative">
             <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
@@ -60,9 +59,10 @@ function SlicerFilter({ label, options, selected, onChange }) {
         <ScrollArea className="h-[200px]">
           <div className="p-0.5">
             {filtered.map(o => (
-              <label key={o} className="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer hover:bg-slate-50 text-[10px]">
-                <Checkbox checked={selected.includes(o)} onCheckedChange={() => toggle(o)} className="h-3 w-3" />
-                <span className="truncate">{o}</span>
+              <label key={o.value} className="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer hover:bg-slate-50 text-[10px]">
+                <Checkbox checked={selected.includes(o.value)} onCheckedChange={() => toggle(o.value)} className="h-3 w-3" />
+                <span className="truncate flex-1">{o.value}</span>
+                <span className="text-slate-400 text-[9px] tabular-nums">{o.count}</span>
               </label>
             ))}
             {!filtered.length && <p className="text-[10px] text-slate-400 text-center py-3">Sin resultados</p>}
@@ -86,6 +86,25 @@ function KpiCard({ icon: Icon, label, value, color }) {
   );
 }
 
+/* ── Copy ID button ── */
+function CopyIds({ tmplId, varId }) {
+  const [copied, setCopied] = useState(false);
+  const text = `TMPL:${tmplId ?? '?'} / VAR:${varId ?? '?'}`;
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button onClick={handleCopy} className="flex items-center gap-0.5 text-slate-400 hover:text-slate-700 transition-colors"
+      title={text} data-testid="copy-ids-btn">
+      {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+      <span className="text-[9px] font-mono">{tmplId ?? '?'}/{varId ?? '?'}</span>
+    </button>
+  );
+}
+
 /* ══════════════════════════════════════════════════════ */
 export default function ComercialPage() {
   const [tab, setTab] = useState("SALE");
@@ -97,6 +116,7 @@ export default function ComercialPage() {
   const [filters, setFilters] = useState({ marca: [], tipo: [], entalle: [], tela: [], hilo: [], talla: [], color: [] });
   const [modelo, setModelo] = useState("");
   const [cliente, setCliente] = useState("");
+  const [excluirVarios, setExcluirVarios] = useState(false);
 
   const [summary, setSummary] = useState(null);
   const [filterOpts, setFilterOpts] = useState({});
@@ -128,18 +148,19 @@ export default function ComercialPage() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get("/comercial/summary", { params: buildParams() });
+      const p = { ...buildParams(), excluir_clientes_varios: excluirVarios };
+      const r = await api.get("/comercial/summary", { params: p });
       setSummary(r.data);
     } catch { toast.error("Error cargando resumen"); }
     finally { setLoading(false); }
-  }, [buildParams]);
+  }, [buildParams, excluirVarios]);
 
   const fetchFilterOpts = useCallback(async () => {
     try {
-      const r = await api.get("/comercial/filter-options", { params: { doc_tipo: tab, fecha_desde: fechaDesde, fecha_hasta: fechaHasta } });
+      const r = await api.get("/comercial/filter-options", { params: buildParams() });
       setFilterOpts(r.data || {});
     } catch {}
-  }, [tab, fechaDesde, fechaHasta]);
+  }, [buildParams]);
 
   const fetchDetail = useCallback(async (pg) => {
     setDetailLoading(true);
@@ -156,11 +177,10 @@ export default function ComercialPage() {
     debounceRef.current = setTimeout(() => {
       fetchSummary();
       fetchDetail(1);
+      fetchFilterOpts();
     }, 400);
     return () => clearTimeout(debounceRef.current);
-  }, [tab, fechaDesde, fechaHasta, filters, modelo, cliente]); // eslint-disable-line
-
-  useEffect(() => { fetchFilterOpts(); }, [tab, fechaDesde, fechaHasta]); // eslint-disable-line
+  }, [tab, fechaDesde, fechaHasta, filters, modelo, cliente, excluirVarios]); // eslint-disable-line
 
   const opts = filterOpts || {};
   const kpis = summary?.kpis || {};
@@ -168,9 +188,11 @@ export default function ComercialPage() {
 
   const clearAll = () => {
     setFilters({ marca: [], tipo: [], entalle: [], tela: [], hilo: [], talla: [], color: [] });
-    setModelo(""); setCliente(""); setFechaDesde(""); setFechaHasta("");
+    setModelo(""); setCliente(""); setExcluirVarios(false);
   };
-  const hasFilters = Object.values(filters).some(v => v.length > 0) || modelo || cliente || fechaDesde || fechaHasta;
+  const hasFilters = Object.values(filters).some(v => v.length > 0) || modelo || cliente;
+
+  const DETAIL_COLS = ["Fecha", "Orden", "Cliente", "Modelo", "Marca", "Tipo", "Entalle", "Tela", "Hilo", "Talla", "Color", "Qty", "P.Unit", "IDs"];
 
   return (
     <div data-testid="comercial-page" className="h-screen flex flex-col bg-slate-100 overflow-hidden">
@@ -232,6 +254,12 @@ export default function ComercialPage() {
           onClick={() => setTab("RESERVA")} data-testid="tab-reservas">
           <Bookmark size={11} /> Reservas
         </button>
+        <div className="ml-auto flex items-center gap-2 py-1">
+          <label className="flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer" data-testid="toggle-excluir-varios">
+            <Switch checked={excluirVarios} onCheckedChange={setExcluirVarios} className="h-4 w-7 data-[state=checked]:bg-amber-500" />
+            <span>Excluir Clientes Varios</span>
+          </label>
+        </div>
       </div>
 
       {/* ── KPIs ── */}
@@ -241,8 +269,8 @@ export default function ComercialPage() {
         <>
           <div className="grid grid-cols-3 gap-3 p-3 shrink-0" data-testid="comercial-kpis">
             <KpiCard icon={Hash} label="Cantidad Total" value={fmtNum(kpis.total_qty)} color="border-slate-200" />
-            <KpiCard icon={DollarSign} label="Subtotal" value={fmtMoney(kpis.total_subtotal)} color="border-slate-200" />
             <KpiCard icon={ShoppingBag} label="Ordenes" value={fmtNum(kpis.count_orders)} color="border-slate-200" />
+            <KpiCard icon={Users} label="Clientes" value={fmtNum(kpis.count_clients)} color="border-slate-200" />
           </div>
 
           {/* ── Top Sections ── */}
@@ -256,21 +284,21 @@ export default function ComercialPage() {
                     <tr>
                       <th className="text-left px-2 py-1 font-semibold">Modelo</th>
                       <th className="text-left px-2 py-1 font-semibold">Marca</th>
-                      <th className="text-left px-2 py-1 font-semibold">Talla</th>
-                      <th className="text-left px-2 py-1 font-semibold">Color</th>
+                      <th className="text-left px-2 py-1 font-semibold">Tipo</th>
                       <th className="text-right px-2 py-1 font-semibold">Qty</th>
-                      <th className="text-right px-2 py-1 font-semibold">Subtotal</th>
+                      <th className="text-right px-2 py-1 font-semibold">Ordenes</th>
+                      <th className="text-left px-2 py-1 font-semibold">IDs</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(summary?.top_productos || []).map((r, i) => (
                       <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
-                        <td className="px-2 py-0.5 font-medium truncate max-w-[120px]">{r.modelo || "-"}</td>
+                        <td className="px-2 py-0.5 font-medium truncate max-w-[140px]">{r.modelo_display || "-"}</td>
                         <td className="px-2 py-0.5 text-slate-500">{r.marca || "-"}</td>
-                        <td className="px-2 py-0.5">{r.talla || "-"}</td>
-                        <td className="px-2 py-0.5">{r.color || "-"}</td>
+                        <td className="px-2 py-0.5 text-slate-500">{r.tipo || "-"}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.qty)}</td>
-                        <td className="px-2 py-0.5 text-right font-mono">{fmtMoney(r.subtotal)}</td>
+                        <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.orders)}</td>
+                        <td className="px-2 py-0.5"><CopyIds tmplId={r.product_tmpl_id} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -286,16 +314,14 @@ export default function ComercialPage() {
                     <tr>
                       <th className="text-left px-2 py-1 font-semibold">Cliente</th>
                       <th className="text-right px-2 py-1 font-semibold">Qty</th>
-                      <th className="text-right px-2 py-1 font-semibold">Subtotal</th>
                       <th className="text-right px-2 py-1 font-semibold">Ordenes</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(summary?.top_clientes || []).map((r, i) => (
                       <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
-                        <td className="px-2 py-0.5 font-medium truncate max-w-[180px]">{r.owner_partner_name || `ID: ${r.owner_partner_id}`}</td>
+                        <td className="px-2 py-0.5 font-medium truncate max-w-[200px]">{r.owner_partner_name || `ID: ${r.owner_partner_id}`}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.qty)}</td>
-                        <td className="px-2 py-0.5 text-right font-mono">{fmtMoney(r.subtotal)}</td>
                         <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.orders)}</td>
                       </tr>
                     ))}
@@ -323,33 +349,33 @@ export default function ComercialPage() {
                 {detailLoading ? (
                   <div className="h-20 flex items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
                 ) : (
-                  <table className="w-full text-[10px] border-collapse">
+                  <table className="w-full text-[10px] border-collapse" data-testid="detail-table">
                     <thead className="sticky top-0 bg-slate-100 z-10">
                       <tr>
-                        {["Fecha", "Orden", "Cuenta", "Contacto", "Modelo", "Marca", "Tipo", "Entalle", "Tela", "Talla", "Color", "Qty", "P.Unit", "Subtotal"].map(h => (
-                          <th key={h} className={`text-left px-2 py-1 font-semibold whitespace-nowrap ${h === "Qty" || h === "P.Unit" || h === "Subtotal" ? "text-right" : ""}`}>{h}</th>
+                        {DETAIL_COLS.map(h => (
+                          <th key={h} className={`text-left px-2 py-1 font-semibold whitespace-nowrap ${h === "Qty" || h === "P.Unit" ? "text-right" : ""}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {!detail.items.length ? (
-                        <tr><td colSpan={14} className="text-center py-8 text-slate-400">Sin datos para los filtros seleccionados</td></tr>
+                        <tr><td colSpan={DETAIL_COLS.length} className="text-center py-8 text-slate-400">Sin datos para los filtros seleccionados</td></tr>
                       ) : detail.items.map((r, i) => (
                         <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
                           <td className="px-2 py-0.5 whitespace-nowrap">{fmtDate(r.fecha)}</td>
                           <td className="px-2 py-0.5 font-mono text-slate-500">{r.order_id}</td>
                           <td className="px-2 py-0.5 font-medium truncate max-w-[140px]">{r.owner_partner_name || "-"}</td>
-                          <td className="px-2 py-0.5 text-slate-500 truncate max-w-[120px]">{r.partner_name && r.partner_name !== r.owner_partner_name ? r.partner_name : "-"}</td>
-                          <td className="px-2 py-0.5 font-medium truncate max-w-[100px]">{r.modelo || "-"}</td>
+                          <td className="px-2 py-0.5 font-medium truncate max-w-[120px]">{r.modelo_display || "-"}</td>
                           <td className="px-2 py-0.5 text-slate-500">{r.marca || "-"}</td>
                           <td className="px-2 py-0.5 text-slate-500">{r.tipo || "-"}</td>
                           <td className="px-2 py-0.5 text-slate-500">{r.entalle || "-"}</td>
                           <td className="px-2 py-0.5 text-slate-500">{r.tela || "-"}</td>
+                          <td className="px-2 py-0.5 text-slate-500">{r.hilo || "-"}</td>
                           <td className="px-2 py-0.5">{r.talla || "-"}</td>
                           <td className="px-2 py-0.5">{r.color || "-"}</td>
                           <td className="px-2 py-0.5 text-right font-mono">{fmtNum(r.qty)}</td>
                           <td className="px-2 py-0.5 text-right font-mono">{fmtMoney(r.price_unit)}</td>
-                          <td className="px-2 py-0.5 text-right font-mono font-medium">{fmtMoney(r.subtotal)}</td>
+                          <td className="px-2 py-0.5"><CopyIds tmplId={r.product_tmpl_id} varId={r.product_product_id} /></td>
                         </tr>
                       ))}
                     </tbody>
