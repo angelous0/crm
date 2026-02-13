@@ -131,6 +131,7 @@ async def comercial_filter_options(
     doc_tipo: Optional[str] = None,
     fecha_desde: Optional[str] = None,
     fecha_hasta: Optional[str] = None,
+    user=Depends(_get_auth_dep()),
 ):
     """Lightweight endpoint: only filters by doc_tipo + dates for speed."""
     pool = await get_pool()
