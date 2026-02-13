@@ -401,7 +401,7 @@ async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
             ORDER BY rp.name
         """, odoo_id)
 
-        return records_to_list(rows)        return items
+        return records_to_list(rows)
 
 
 @cuentas_router.get("/{cuenta_id}/ventas")
