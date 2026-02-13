@@ -1,5 +1,5 @@
 """Stock Balance (Balance de Tallas) router."""
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 import logging
 
 from db import get_pool
@@ -69,59 +69,24 @@ async def stock_balance_matrix(
     async with p.acquire() as conn:
         try:
             where, params = _build_where(tienda, marca, tipo, entalle, tela, hilo, color, talla, modelo)
-            offset = (page - 1) * limit
 
-            # Get all distinct tallas
-            t_rows = await conn.fetch(
-                f"SELECT DISTINCT talla::text as t FROM {VIEW} {where} AND talla IS NOT NULL",
-                *params
-            )
-            tallas = sorted([r['t'] for r in t_rows], key=_talla_sort_key)
-
-            # Count total distinct items
-            total_items = await conn.fetchval(
-                f"""SELECT COUNT(*) FROM (
-                    SELECT 1 FROM {VIEW} {where}
-                    GROUP BY COALESCE(marca::text,''), COALESCE(tipo::text,''), COALESCE(entalle::text,''), COALESCE(tela::text,''), COALESCE(hilo::text,'')
-                ) sub""",
-                *params
-            )
-
-            # Get top items by total stock, paginated
-            item_params = list(params)
-            item_params.extend([limit, offset])
-            items_sql = f"""
-                WITH item_totals AS (
-                    SELECT
-                        COALESCE(marca::text,'') as marca,
-                        COALESCE(tipo::text,'') as tipo,
-                        COALESCE(entalle::text,'') as entalle,
-                        COALESCE(tela::text,'') as tela,
-                        COALESCE(hilo::text,'SIN_HILO') as hilo,
-                        SUM(available_qty) as total
-                    FROM {VIEW} {where}
-                    GROUP BY marca, tipo, entalle, tela, hilo
-                    ORDER BY total DESC
-                    LIMIT ${len(item_params)-1} OFFSET ${len(item_params)}
-                )
+            # Single aggregation query - group by item + talla
+            rows = await conn.fetch(f"""
                 SELECT
-                    it.marca, it.tipo, it.entalle, it.tela, it.hilo,
-                    f.talla::text as talla,
-                    SUM(f.available_qty) as qty
-                FROM {VIEW} f
-                JOIN item_totals it
-                    ON COALESCE(f.marca::text,'') = it.marca
-                    AND COALESCE(f.tipo::text,'') = it.tipo
-                    AND COALESCE(f.entalle::text,'') = it.entalle
-                    AND COALESCE(f.tela::text,'') = it.tela
-                    AND COALESCE(f.hilo::text,'SIN_HILO') = it.hilo
-                {where.replace("WHERE", "AND") if "1=1" not in where else ""}
-                GROUP BY it.marca, it.tipo, it.entalle, it.tela, it.hilo, f.talla
-            """
-            rows = await conn.fetch(items_sql, *item_params)
+                    COALESCE(marca::text,'') as marca,
+                    COALESCE(tipo::text,'') as tipo,
+                    COALESCE(entalle::text,'') as entalle,
+                    COALESCE(tela::text,'') as tela,
+                    COALESCE(hilo::text,'SIN_HILO') as hilo,
+                    talla::text as talla,
+                    SUM(available_qty) as qty
+                FROM {VIEW} {where}
+                GROUP BY marca, tipo, entalle, tela, hilo, talla
+            """, *params, timeout=60)
 
-            # Build matrix
+            # Build item map in Python (fast for 15K source rows)
             item_map = {}
+            tallas_set = set()
             for r in rows:
                 key = f"{r['marca']}|{r['tipo']}|{r['entalle']}|{r['tela']}|{r['hilo']}"
                 if key not in item_map:
@@ -132,39 +97,63 @@ async def stock_balance_matrix(
                         "values": {}, "total": 0
                     }
                 qty = float(r['qty'] or 0)
-                item_map[key]["values"][r['talla']] = round(qty)
-                item_map[key]["total"] += qty
+                t = r['talla']
+                if t:
+                    tallas_set.add(t)
+                    item_map[key]["values"][t] = round(qty)
+                    item_map[key]["total"] += qty
 
-            result_rows = sorted(item_map.values(), key=lambda x: -x['total'])
-            for row in result_rows:
+            tallas = sorted(tallas_set, key=_talla_sort_key)
+
+            # Sort by total desc, paginate
+            all_items = sorted(item_map.values(), key=lambda x: -x['total'])
+            total_items = len(all_items)
+            offset = (page - 1) * limit
+            page_items = all_items[offset:offset + limit]
+
+            for row in page_items:
                 row["total"] = round(row["total"])
 
-            # Totals by talla
+            # Totals for this page
             totals_by_talla = {}
             grand_total = 0
-            for row in result_rows:
+            for row in page_items:
                 grand_total += row["total"]
                 for t in tallas:
                     totals_by_talla[t] = totals_by_talla.get(t, 0) + row["values"].get(t, 0)
 
-            # Filter options for cascade
+            # Filter options from source data
             filter_opts = {}
-            for col in ['tienda', 'marca', 'tipo', 'entalle', 'tela', 'hilo']:
-                f_rows = await conn.fetch(
-                    f"SELECT DISTINCT {col}::text as v FROM {VIEW} {where} AND {col} IS NOT NULL ORDER BY v",
-                    *params
-                )
-                filter_opts[col] = [r['v'] for r in f_rows]
+            opt_rows = await conn.fetch(f"""
+                SELECT
+                    'tienda' as dim, tienda::text as v FROM {VIEW} {where} AND tienda IS NOT NULL
+                UNION ALL SELECT
+                    'marca', marca::text FROM {VIEW} {where} AND marca IS NOT NULL
+                UNION ALL SELECT
+                    'tipo', tipo::text FROM {VIEW} {where} AND tipo IS NOT NULL
+                UNION ALL SELECT
+                    'entalle', entalle::text FROM {VIEW} {where} AND entalle IS NOT NULL
+                UNION ALL SELECT
+                    'tela', tela::text FROM {VIEW} {where} AND tela IS NOT NULL
+                UNION ALL SELECT
+                    'hilo', hilo::text FROM {VIEW} {where} AND hilo IS NOT NULL
+                UNION ALL SELECT
+                    'color', color::text FROM {VIEW} {where} AND color IS NOT NULL
+            """, *(params * 7), timeout=60)
+
+            for r in opt_rows:
+                dim = r['dim']
+                if dim not in filter_opts:
+                    filter_opts[dim] = set()
+                filter_opts[dim].add(r['v'])
+
+            for k in filter_opts:
+                filter_opts[k] = sorted(filter_opts[k])
             filter_opts['talla'] = tallas
-            c_rows = await conn.fetch(
-                f"SELECT DISTINCT color::text as v FROM {VIEW} {where} AND color IS NOT NULL ORDER BY v",
-                *params
-            )
-            filter_opts['color'] = [r['v'] for r in c_rows]
 
             return {
                 "tallas": tallas,
-                "rows": result_rows,
+                "rows": page_items,
                 "totals_by_talla": totals_by_talla,
                 "grand_total": round(grand_total),
                 "total_items": total_items,
@@ -200,31 +189,27 @@ async def stock_balance_colors(
         try:
             where, params = _build_where(tienda, marca, tipo, entalle, tela, hilo, color, talla, modelo)
 
-            # Get tallas for this item
-            t_rows = await conn.fetch(
-                f"SELECT DISTINCT talla::text as t FROM {VIEW} {where} AND talla IS NOT NULL",
-                *params
-            )
-            tallas = sorted([r['t'] for r in t_rows], key=_talla_sort_key)
-
-            # Get color x talla matrix
             rows = await conn.fetch(f"""
                 SELECT COALESCE(color,'Sin color') as color, talla::text as talla,
                        SUM(available_qty) as qty
                 FROM {VIEW} {where}
                 GROUP BY color, talla
-                ORDER BY color, talla
-            """, *params)
+            """, *params, timeout=60)
 
+            tallas_set = set()
             color_map = {}
             for r in rows:
-                c = r['color']
+                c, t = r['color'], r['talla']
+                if t:
+                    tallas_set.add(t)
                 if c not in color_map:
                     color_map[c] = {"color": c, "values": {}, "total": 0}
                 qty = float(r['qty'] or 0)
-                color_map[c]["values"][r['talla']] = round(qty)
+                if t:
+                    color_map[c]["values"][t] = round(qty)
                 color_map[c]["total"] += qty
 
+            tallas = sorted(tallas_set, key=_talla_sort_key)
             result_rows = sorted(color_map.values(), key=lambda x: -x['total'])
             for row in result_rows:
                 row["total"] = round(row["total"])
