@@ -859,98 +859,59 @@ partners_router = APIRouter(prefix="/api/partners", tags=["partners"])
 async def get_unlinked_partners(
     q: str = "", page: int = 1, pageSize: int = 20,
     solo_dni: bool = False, solo_telefono: bool = False,
+    exclude_cuenta: int = 0,
     user=Depends(get_current_user)
 ):
-    """Search odoo.res_partner (GLOBAL) NOT already in crm.contacto"""
+    """Search 'free' partners: those whose principal in v_partner_account_final is themselves.
+    Excludes the current cuenta's own partner."""
     p = await get_pool()
     async with p.acquire() as conn:
         try:
-            rp_exists = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='res_partner')"
-            )
-            if not rp_exists:
-                return {"items": [], "total": 0, "page": page}
-
-            rp_cols = await conn.fetch(
-                "SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'"
-            )
-            col_names = [r['column_name'] for r in rp_cols]
-            has_ck = 'company_key' in col_names
-            has_vat = 'vat' in col_names
-            has_phone = 'phone' in col_names
-            has_mobile = 'mobile' in col_names
-            has_city = 'city' in col_names
-
             offset = (page - 1) * pageSize
-            where = "WHERE 1=1"
+            where = """WHERE rp.company_key = 'GLOBAL'
+                AND COALESCE(rp.active, true) = true
+                AND m.cuenta_partner_odoo_id = rp.odoo_id
+                AND rp.name IS NOT NULL AND rp.name <> ''
+                AND rp.name NOT ILIKE '%cliente varios%'
+                AND rp.name NOT ILIKE '%publico general%'"""
             params = []
 
-            # GLOBAL filter
-            if has_ck:
-                where += " AND rp.company_key = 'GLOBAL'"
+            if exclude_cuenta > 0:
+                params.append(exclude_cuenta)
+                where += f" AND rp.odoo_id <> ${len(params)}"
 
-            # Exclude already-linked contacts
-            where += " AND rp.odoo_id NOT IN (SELECT contacto_partner_odoo_id FROM crm.contacto)"
-
-            # Exclude blanks and generic partners
-            where += " AND rp.name IS NOT NULL AND rp.name <> ''"
-            where += " AND rp.name NOT ILIKE '%cliente varios%'"
-            where += " AND rp.name NOT ILIKE '%publico general%'"
-
-            # Search query
             if q:
                 search_parts = [f"rp.name ILIKE ${len(params)+1}"]
                 params.append(f"%{q}%")
                 idx = len(params)
-                if has_vat:
-                    search_parts.append(f"rp.vat ILIKE ${idx}")
-                if has_phone:
-                    search_parts.append(f"rp.phone::text ILIKE ${idx}")
-                if has_mobile:
-                    search_parts.append(f"rp.mobile::text ILIKE ${idx}")
+                search_parts.append(f"COALESCE(rp.vat,'') ILIKE ${idx}")
+                search_parts.append(f"COALESCE(rp.phone::text,'') ILIKE ${idx}")
+                search_parts.append(f"COALESCE(rp.mobile::text,'') ILIKE ${idx}")
                 where += f" AND ({' OR '.join(search_parts)})"
 
-            # Quick filters
-            if solo_dni and has_vat:
+            if solo_dni:
                 where += " AND rp.vat IS NOT NULL AND rp.vat <> ''"
             if solo_telefono:
-                phone_parts = []
-                if has_phone:
-                    phone_parts.append("(rp.phone IS NOT NULL AND rp.phone::text <> '')")
-                if has_mobile:
-                    phone_parts.append("(rp.mobile IS NOT NULL AND rp.mobile::text <> '')")
-                if phone_parts:
-                    where += f" AND ({' OR '.join(phone_parts)})"
+                where += " AND (rp.phone IS NOT NULL AND rp.phone::text <> '' OR rp.mobile IS NOT NULL AND rp.mobile::text <> '')"
 
-            # Build SELECT columns
-            select_cols = ["rp.odoo_id", "rp.name"]
-            if has_vat:
-                select_cols.append("rp.vat")
-            else:
-                select_cols.append("NULL as vat")
-            if has_phone:
-                select_cols.append("rp.phone::text as phone")
-            else:
-                select_cols.append("NULL as phone")
-            if has_mobile:
-                select_cols.append("rp.mobile::text as mobile")
-            else:
-                select_cols.append("NULL as mobile")
-            if has_city:
-                select_cols.append("rp.city::text as city")
-            else:
-                select_cols.append("NULL as city")
-
-            select_str = ", ".join(select_cols)
+            base_from = """FROM odoo.res_partner rp
+                JOIN crm.v_partner_account_final m ON m.contacto_partner_odoo_id = rp.odoo_id"""
 
             count = await conn.fetchval(
-                f"SELECT COUNT(*) FROM odoo.res_partner rp {where}", *params
+                f"SELECT COUNT(*) {base_from} {where}", *params
             )
 
             data_params = params.copy()
             data_params.extend([pageSize, offset])
             rows = await conn.fetch(
-                f"SELECT {select_str} FROM odoo.res_partner rp {where} ORDER BY rp.name LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}",
+                f"""SELECT rp.odoo_id, rp.name,
+                    COALESCE(rp.vat, '') as vat,
+                    COALESCE(rp.phone::text, '') as phone,
+                    COALESCE(rp.mobile::text, '') as mobile,
+                    COALESCE(rp.city::text, '') as city
+                {base_from} {where}
+                ORDER BY rp.name
+                LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
                 *data_params
             )
 
