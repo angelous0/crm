@@ -936,34 +936,27 @@ async def vincular_contacto(cuenta_id: str, data: VincularContactoInput, user=De
             "INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING",
             cuenta_odoo_id
         )
-            # Try to get whatsapp from odoo
-            whatsapp_val = None
-            try:
-                rp_cols = await conn.fetch(
-                    "SELECT column_name FROM information_schema.columns WHERE table_schema='odoo' AND table_name='res_partner'"
-                )
-                col_names = [r['column_name'] for r in rp_cols]
-                has_ck = 'company_key' in col_names
-                ck_filter = "AND company_key = 'GLOBAL'" if has_ck else ""
-                mobile_col = 'mobile' if 'mobile' in col_names else ('phone' if 'phone' in col_names else None)
-                if mobile_col:
-                    val = await conn.fetchval(
-                        f"SELECT {mobile_col}::text FROM odoo.res_partner WHERE odoo_id = $1 {ck_filter} LIMIT 1",
-                        contacto_odoo_id
-                    )
-                    if val:
-                        whatsapp_val = str(val)
-            except Exception:
-                pass
 
-            # Insert new contacto
-            await conn.execute(
-                """INSERT INTO crm.contacto (contacto_partner_odoo_id, cuenta_partner_odoo_id, whatsapp)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (contacto_partner_odoo_id) DO UPDATE SET 
-                    cuenta_partner_odoo_id = $2, whatsapp = COALESCE(crm.contacto.whatsapp, $3), updated_at = now()""",
-                contacto_odoo_id, cuenta_odoo_id, whatsapp_val
+        # Try to get whatsapp from odoo
+        whatsapp_val = None
+        try:
+            val = await conn.fetchval(
+                "SELECT mobile::text FROM odoo.res_partner WHERE odoo_id = $1 AND company_key = 'GLOBAL' LIMIT 1",
+                contacto_odoo_id
             )
+            if val:
+                whatsapp_val = str(val)
+        except Exception:
+            pass
+
+        # Upsert contacto
+        await conn.execute(
+            """INSERT INTO crm.contacto (contacto_partner_odoo_id, cuenta_partner_odoo_id, whatsapp)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (contacto_partner_odoo_id) DO UPDATE SET 
+                cuenta_partner_odoo_id = $2, whatsapp = COALESCE(crm.contacto.whatsapp, $3), updated_at = now()""",
+            contacto_odoo_id, cuenta_odoo_id, whatsapp_val
+        )
 
         # Upsert partner_principal_override
         nota = data.nota or "Vinculado manualmente desde la cuenta"
