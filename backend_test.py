@@ -450,7 +450,11 @@ class CRMAPITester:
             self.test_cuentas,
             self.test_tareas,
             self.test_ventas,
-            self.test_bootstrap
+            self.test_bootstrap,
+            self.test_partners_unlinked,
+            self.test_partners_unlinked_solo_dni,
+            self.test_partners_unlinked_solo_telefono,
+            self.test_vincular_contacto
         ]
         
         for test in tests:
