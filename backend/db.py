@@ -443,6 +443,33 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_catalogo_stock_flat: {e}")
 
+    # 3.1h) v_stock_dashboard_base - dashboard base with tienda_canonica mapping
+    try:
+        await conn.execute("DROP VIEW IF EXISTS crm.v_stock_dashboard_base;")
+        await conn.execute("""
+            CREATE VIEW crm.v_stock_dashboard_base AS
+            SELECT
+                CASE
+                    WHEN tienda ILIKE 'TALLER' THEN 'ALMACEN'
+                    WHEN replace(tienda,' ','') ILIKE 'GM209' THEN 'GAMARRA 209'
+                    WHEN replace(tienda,' ','') ILIKE 'GM207' THEN 'GAMARRA 207'
+                    WHEN tienda ILIKE 'GR238' OR tienda ILIKE 'GR55' THEN 'GRAU 238 / GRAU 55'
+                    WHEN tienda ILIKE 'GM218' THEN 'GM218'
+                    WHEN tienda ILIKE 'BOOSH' THEN 'BOOSH'
+                    ELSE NULL
+                END AS tienda_canonica,
+                modelo, marca, tipo, entalle, tela, hilo,
+                talla, color, barcode, available_qty,
+                es_lq, es_negro,
+                product_tmpl_id, product_product_id
+            FROM crm.v_catalogo_stock_flat
+            WHERE modelo NOT ILIKE '%probador%';
+        """)
+        logger.info("View crm.v_stock_dashboard_base created")
+    except Exception as e:
+        logger.warning(f"Could not create v_stock_dashboard_base: {e}")
+
+
 
     # 3.2) v_productos_elegibles
     try:
