@@ -180,25 +180,21 @@ async def comercial_detail(
                          cliente, doc_tipo)
     offset = (page - 1) * limit
 
-    async def _count():
-        async with pool.acquire() as conn:
-            return await conn.fetchval(f"SELECT COUNT(*) FROM {VIEW} {where}", *params)
+    async with pool.acquire() as conn:
+        p = list(params)
+        p.append(limit + 1)  # fetch one extra to detect next page
+        p.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT doc_tipo, order_id, line_id, fecha,
+                   partner_id, partner_name,
+                   product_product_id, product_tmpl_id, modelo,
+                   marca, tipo, entalle, tela, hilo,
+                   talla, color, barcode, qty, price_unit, subtotal
+            FROM {VIEW} {where}
+            ORDER BY fecha DESC, order_id DESC, line_id DESC
+            LIMIT ${len(p)-1} OFFSET ${len(p)}
+        """, *p))
 
-    async def _rows():
-        async with pool.acquire() as conn:
-            p = list(params)
-            p.append(limit)
-            p.append(offset)
-            return records_to_list(await conn.fetch(f"""
-                SELECT doc_tipo, order_id, line_id, fecha,
-                       partner_id, partner_name,
-                       product_product_id, product_tmpl_id, modelo,
-                       marca, tipo, entalle, tela, hilo,
-                       talla, color, barcode, qty, price_unit, subtotal
-                FROM {VIEW} {where}
-                ORDER BY fecha DESC, order_id DESC, line_id DESC
-                LIMIT ${len(p)-1} OFFSET ${len(p)}
-            """, *p))
-
-    total, rows = await asyncio.gather(_count(), _rows())
-    return {"items": rows, "total": total, "page": page, "limit": limit}
+    has_next = len(rows) > limit
+    items = rows[:limit]
+    return {"items": items, "has_next": has_next, "page": page, "limit": limit}
