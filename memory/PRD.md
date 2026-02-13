@@ -32,13 +32,17 @@ Build a B2B CRM application integrated with PostgreSQL (Odoo schema). CRM operat
 11. `POST /api/odoo-sync/run` + `GET /api/odoo-sync/job-status`
 12. Frontend: "Actualizar stock" button with polling
 
-### Phase 3.6 - Reposición v2 (Feb 2026) - Pool Capping + Tallado
-13. **SKU key**: (marca_norm, tipo, entalle, tela, hilo, color, talla)
-14. **ITEM_BASE**: (marca_norm, tipo, entalle, tela, hilo) — for tallado
-15. **Tallado**: COUNT DISTINCT (color,talla) per store per ITEM_BASE
-16. **Pool capping**: qty_sugerida capped by available stock at origin. Sum across destinations <= pool.
-17. **Priority sorting**: Brand prevalence rules + tallado tiebreaker
-18. **ELEMENT PREMIUM competition**: GAMARRA 209 vs GRAU by tallado, winner first
+### Phase 3.6 - Reposición v3 (Feb 2026) - SKU Summary + Model Drilldown
+13. **SKU-level grouping**: (marca, tipo, entalle, tela, color, talla) instead of per-model rows
+14. **Store columns**: ALMACEN (TALLER), GM209, GM218, GRAU 238/GRAU 55, GM207, BOOSH
+15. **Tienda mapping**: TALLER→ALMACEN, GR238+GR55→GRAU, AP→AP
+16. **Pool capping**: qty_asignada never exceeds stock_almacen per SKU
+17. **Brand targeting**: ELEMENT PREMIUM→GM209/GM218/GRAU, QEPO→BOOSH/GM207, BOOSH→BOOSH
+18. **Tallado scoring**: count distinct (color,talla) per item_base per store for priority
+19. **Sorting**: FALTANTE first, then stock_total ASC, stock_almacen DESC
+20. **Model drilldown**: Click SKU → shows models with per-store stock breakdown
+21. **Endpoints**: GET /api/reposicion/sku-summary, GET /api/reposicion/sku-models
+22. **KPIs**: total_skus, faltantes, bajos, con_asignacion, total_qty_asignada, sin_stock18. **ELEMENT PREMIUM competition**: GAMARRA 209 vs GRAU by tallado, winner first
 19. **Marca prevalencia**: QEPO→BOOSH/GAMARRA207, BOOSH→BOOSH, ELEMENT PREMIUM→GAMARRA209/GM218/GRAU
 20. **KPIs**: total_faltantes, con_asignacion, total_qty_sugerida, desde_almacen, entre_tiendas, sin_stock
 21. **Drilldown**: Click row → distribution by store + suggestion badge
@@ -55,7 +59,8 @@ Build a B2B CRM application integrated with PostgreSQL (Odoo schema). CRM operat
 ## Key API Endpoints
 - Auth: POST /api/auth/login, /register
 - Dashboard: GET /api/stock-dashboard/cube, /detail, /filter-options-v2
-- Reposición: GET /api/stock-dashboard/reposicion (with pool capping), /reposicion-detalle (with hilo)
+- Reposición: GET /api/reposicion/sku-summary, GET /api/reposicion/sku-models
+- Reposición (legacy): GET /api/stock-dashboard/reposicion (old, kept for backward compat)
 - Balance Tallas: GET /api/stock-balance/matrix, /api/stock-balance/colors-matrix
 - Sync: POST /api/odoo-sync/run, GET /api/odoo-sync/job-status
 
