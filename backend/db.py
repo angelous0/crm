@@ -387,6 +387,54 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_catalogo_con_stock_variantes_loc: {e}")
 
+    # 3.1f2) v_stock_balance_flat - flat view for Balance de Tallas report
+    try:
+        has_sloc2 = 'v_stock_by_product_location' in odoo_tables
+        has_sl2 = 'stock_location' in odoo_tables
+        has_vf2 = 'v_product_variant_flat' in odoo_tables
+        has_pt2 = 'product_template' in odoo_tables
+        if has_sloc2 and has_sl2 and has_vf2 and has_pt2:
+            await conn.execute("DROP VIEW IF EXISTS crm.v_stock_balance_flat CASCADE;")
+            await conn.execute("""
+                CREATE VIEW crm.v_stock_balance_flat AS
+                SELECT
+                    sl.odoo_id AS location_id,
+                    sl.x_nombre AS tienda,
+                    pt.marca,
+                    pt.tipo,
+                    pt.entalle,
+                    pt.tela,
+                    COALESCE(pt.hilo::text,'SIN_HILO') AS hilo,
+                    pt.name AS modelo,
+                    vv.product_tmpl_id,
+                    vv.product_product_id,
+                    vv.talla,
+                    vv.color,
+                    s.available_qty
+                FROM odoo.v_stock_by_product_location s
+                JOIN odoo.stock_location sl
+                    ON sl.company_key='GLOBAL' AND sl.odoo_id = s.location_id
+                JOIN odoo.v_product_variant_flat vv
+                    ON vv.company_key='GLOBAL' AND vv.product_product_id = s.product_id
+                JOIN odoo.product_template pt
+                    ON pt.company_key='GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
+                WHERE sl.usage='internal'
+                    AND COALESCE(sl.active,true)=true
+                    AND sl.x_nombre IS NOT NULL
+                    AND pt.sale_ok=true
+                    AND pt.purchase_ok=false
+                    AND pt.name NOT ILIKE '%correa%'
+                    AND pt.name NOT ILIKE '%saco%'
+                    AND pt.name NOT ILIKE '%bolsa%'
+                    AND pt.name NOT ILIKE '%probador%'
+                    AND COALESCE(s.available_qty,0) >= 0;
+            """)
+            logger.info("View crm.v_stock_balance_flat created")
+        else:
+            logger.warning("Missing tables for v_stock_balance_flat")
+    except Exception as e:
+        logger.warning(f"Could not create v_stock_balance_flat: {e}")
+
     # 3.1g) v_catalogo_stock_flat - flat view for Stock Dashboard
     try:
         has_sloc = 'v_stock_by_product_location' in odoo_tables
