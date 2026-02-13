@@ -977,15 +977,23 @@ async def vincular_contacto(cuenta_id: str, data: VincularContactoInput, user=De
 async def get_stats(user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
-        cuentas = await conn.fetchval("SELECT COUNT(*) FROM crm.cuenta")
-        contactos = await conn.fetchval("SELECT COUNT(*) FROM crm.contacto")
+        try:
+            cuentas_libres = await conn.fetchval("SELECT COUNT(*) FROM crm.v_cuentas_libres")
+        except Exception:
+            cuentas_libres = 0
+        try:
+            contactos_vinculados = await conn.fetchval("SELECT COUNT(*) FROM crm.v_contactos_vinculados")
+        except Exception:
+            contactos_vinculados = 0
+        total_partners = await conn.fetchval("SELECT COUNT(*) FROM odoo.res_partner WHERE company_key='GLOBAL' AND COALESCE(active,true)=true")
         tareas_pendientes = await conn.fetchval("SELECT COUNT(*) FROM crm.tarea WHERE status = 'PENDIENTE'")
         interacciones = await conn.fetchval("SELECT COUNT(*) FROM crm.interaccion")
         productos_aprobados = await conn.fetchval("SELECT COUNT(*) FROM crm.producto_aprobado WHERE aprobado = true")
 
         return {
-            "cuentas": cuentas,
-            "contactos": contactos,
+            "cuentas_libres": cuentas_libres,
+            "contactos_vinculados": contactos_vinculados,
+            "total_partners": total_partners,
             "tareas_pendientes": tareas_pendientes,
             "interacciones": interacciones,
             "productos_aprobados": productos_aprobados
