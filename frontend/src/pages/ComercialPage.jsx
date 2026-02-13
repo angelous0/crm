@@ -160,6 +160,8 @@ export default function ComercialPage() {
     return () => clearTimeout(debounceRef.current);
   }, [tab, fechaDesde, fechaHasta, filters, modelo, cliente]); // eslint-disable-line
 
+  useEffect(() => { fetchFilterOpts(); }, [tab, fechaDesde, fechaHasta]); // eslint-disable-line
+
   const opts = summary?.filter_opts || {};
   const kpis = summary?.kpis || {};
   const totalPages = Math.ceil(detail.total / LIMIT);
