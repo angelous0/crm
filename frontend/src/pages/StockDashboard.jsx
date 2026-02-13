@@ -1,62 +1,56 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "@/lib/api";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import {
-  BarChart3, Loader2, Filter, Download, ChevronLeft, ChevronRight,
-  Package, Store, Layers, Hash, Search, X, ChevronDown, ChevronUp
-} from "lucide-react";
+import { Loader2, Search, X, ChevronDown, ChevronUp, Download } from "lucide-react";
 
-/* ── Multi-select filter popover ── */
-function MultiFilter({ label, options, selected, onChange, testId }) {
+const STORE_ORDER_CENTER = [
+  "GRAU 238 / GRAU 55", "GAMARRA 209", "GM218",
+  "BOOSH", "GAMARRA 207", "TOTAL"
+];
+
+/* ── Compact multi-select filter ── */
+function SlicerFilter({ label, options, selected, onChange }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const filtered = q ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options;
-  const toggle = (val) => onChange(selected.includes(val) ? selected.filter(v => v !== val) : [...selected, val]);
+  const toggle = (v) => onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+  const count = selected.length;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 font-normal px-2.5" data-testid={testId}>
-          {label}
-          {selected.length > 0 && (
-            <Badge variant="secondary" className="ml-0.5 px-1 py-0 text-[9px] leading-3.5 rounded-full">{selected.length}</Badge>
-          )}
-        </Button>
+        <button className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-white/90 transition-colors min-w-0"
+          data-testid={`slicer-${label.toLowerCase().replace(/\s/g, '-')}`}>
+          <span className="truncate">{label}</span>
+          {count > 0 && <span className="bg-amber-500 text-black rounded-full px-1 text-[9px] font-bold leading-tight">{count}</span>}
+        </button>
       </PopoverTrigger>
-      <PopoverContent className="w-52 p-0" align="start">
-        <div className="p-1.5 border-b border-border">
+      <PopoverContent className="w-48 p-0 shadow-xl" align="start">
+        <div className="p-1.5 border-b">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
-            <Input placeholder="Buscar..." className="h-6 text-[11px] pl-6" value={q} onChange={e => setQ(e.target.value)} />
+            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
+            <Input placeholder="Buscar..." className="h-6 text-[10px] pl-6" value={q} onChange={e => setQ(e.target.value)} />
           </div>
         </div>
-        {selected.length > 0 && (
-          <div className="px-2 py-1 border-b border-border">
-            <Button variant="ghost" size="sm" className="h-5 text-[10px] text-slate-500 px-1" onClick={() => onChange([])}>
-              <X size={10} className="mr-0.5" /> Limpiar
-            </Button>
-          </div>
+        {count > 0 && (
+          <button className="w-full text-left px-2 py-1 text-[10px] text-red-500 hover:bg-red-50 flex items-center gap-1 border-b"
+            onClick={() => onChange([])}>
+            <X size={10} /> Limpiar
+          </button>
         )}
-        <ScrollArea className="h-[180px]">
-          <div className="p-1">
-            {filtered.map(opt => (
-              <label key={opt} className="flex items-center gap-1.5 px-2 py-1 rounded-sm cursor-pointer hover:bg-slate-50 text-[11px]">
-                <Checkbox checked={selected.includes(opt)} onCheckedChange={() => toggle(opt)} className="h-3 w-3" />
-                <span className="truncate">{opt}</span>
+        <ScrollArea className="h-[160px]">
+          <div className="p-0.5">
+            {filtered.map(o => (
+              <label key={o} className="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer hover:bg-slate-50 text-[10px]">
+                <Checkbox checked={selected.includes(o)} onCheckedChange={() => toggle(o)} className="h-3 w-3" />
+                <span className="truncate">{o}</span>
               </label>
             ))}
-            {filtered.length === 0 && <p className="text-[11px] text-slate-400 text-center py-3">Sin resultados</p>}
+            {!filtered.length && <p className="text-[10px] text-slate-400 text-center py-3">Sin resultados</p>}
           </div>
         </ScrollArea>
       </PopoverContent>
@@ -64,43 +58,105 @@ function MultiFilter({ label, options, selected, onChange, testId }) {
   );
 }
 
-function qtyClass(v) {
-  if (v > 10) return "text-emerald-700 font-semibold";
-  if (v > 0) return "text-amber-700 font-medium";
-  return "text-slate-300";
+/* ── Toggle filter (Todas/Si/No) ── */
+function ToggleFilter({ label, value, onChange, disabled }) {
+  const opts = ["", "si", "no"];
+  const labels = ["Todas", "Si", "No"];
+  const idx = opts.indexOf(value || "");
+  const next = () => onChange(opts[(idx + 1) % 3]);
+
+  return (
+    <button
+      className={`px-2 py-1 rounded text-[10px] transition-colors ${
+        disabled ? "bg-slate-800 text-slate-600 cursor-not-allowed" :
+        value === "si" ? "bg-emerald-600 text-white" :
+        value === "no" ? "bg-red-600 text-white" :
+        "bg-slate-700 text-white/90 hover:bg-slate-600"
+      }`}
+      onClick={disabled ? undefined : next}
+      title={disabled ? "Pendiente - no hay datos" : `${label}: ${labels[idx]}`}
+      data-testid={`toggle-${label.toLowerCase().replace(/\s/g, '-')}`}
+    >
+      {label}: {labels[idx]}
+    </button>
+  );
 }
 
+/* ── Store panel (Color x Talla matrix) ── */
+function StorePanel({ title, data, tallas, isTotal }) {
+  if (!data || !data.colores || data.colores.length === 0) {
+    return (
+      <div className="flex flex-col h-full rounded overflow-hidden border border-slate-700/30">
+        <div className={`px-2 py-1.5 text-[11px] font-bold text-white text-center ${isTotal ? "bg-amber-700" : "bg-slate-800"}`}>{title}</div>
+        <div className="flex-1 flex items-center justify-center text-[10px] text-slate-400 bg-white">sin datos</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full rounded overflow-hidden border border-slate-200 shadow-sm">
+      <div className={`px-2 py-1.5 text-[11px] font-bold text-white text-center shrink-0 ${isTotal ? "bg-amber-700" : "bg-slate-800"}`}>{title}</div>
+      <div className="flex-1 overflow-auto bg-white">
+        <table className="w-full text-[10px] border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-700">
+              <th className="text-left text-white font-semibold px-1.5 py-1 sticky left-0 bg-slate-700 z-20 min-w-[70px]">color</th>
+              {tallas.map(t => <th key={t} className="text-center text-white font-semibold px-1 py-1 min-w-[28px]">{t}</th>)}
+              <th className="text-center text-white font-bold px-1 py-1 bg-slate-900 min-w-[36px]">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.colores.map((c, i) => (
+              <tr key={c} className={i % 2 === 0 ? "" : "bg-slate-50/50"}>
+                <td className="px-1.5 py-0.5 font-medium text-slate-800 sticky left-0 bg-inherit z-10 border-r border-slate-100 truncate max-w-[90px]">{c}</td>
+                {tallas.map(t => {
+                  const v = data.matrix[c]?.[t] || 0;
+                  return <td key={t} className={`text-center px-0.5 py-0.5 ${v > 0 ? "text-slate-800" : "text-slate-200"}`}>{v > 0 ? Math.round(v) : "-"}</td>;
+                })}
+                <td className="text-center px-0.5 py-0.5 font-bold bg-slate-100/60 border-l border-slate-200">{data.totals.byColor[c] || 0}</td>
+              </tr>
+            ))}
+            {/* Total row */}
+            <tr className="bg-amber-100 border-t-2 border-amber-300 font-bold sticky bottom-0">
+              <td className="px-1.5 py-1 text-amber-900 sticky left-0 bg-amber-100 z-10 border-r border-amber-200">Total</td>
+              {tallas.map(t => (
+                <td key={t} className="text-center px-0.5 py-1 text-amber-900">{data.totals.bySize[t] ? Math.round(data.totals.bySize[t]) : "-"}</td>
+              ))}
+              <td className="text-center px-0.5 py-1 text-amber-900 bg-amber-200 border-l border-amber-300 text-xs">{data.totals.grandTotal}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── CSV helper ── */
 function downloadCSV(rows, filename) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
-  const header = cols.join(",");
-  const body = rows.map(r => cols.map(c => { const v = r[c]; return typeof v === "string" && v.includes(",") ? `"${v}"` : (v ?? ""); }).join(",")).join("\n");
-  const blob = new Blob([header + "\n" + body], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  const lines = [cols.join(","), ...rows.map(r => cols.map(c => { const v = r[c]; return typeof v === "string" && v.includes(",") ? `"${v}"` : (v ?? ""); }).join(","))];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
 
+/* ── Main Dashboard ── */
 export default function StockDashboard() {
   const [filterOpts, setFilterOpts] = useState({});
   const [f, setF] = useState({
     tienda: [], marca: [], tipo: [], entalle: [], tela: [], talla: [], color: [],
     modelo: "", es_lq: "", es_negro: ""
   });
-  const setFilter = (key, val) => setF(prev => ({ ...prev, [key]: val }));
+  const sf = (k, v) => setF(prev => ({ ...prev, [k]: v }));
 
+  const [panels, setPanels] = useState(null);
+  const [modeloTalla, setModeloTalla] = useState(null);
   const [kpis, setKpis] = useState(null);
-  const [pivotMT, setPivotMT] = useState(null); // Modelo x Tienda (main)
-  const [pivotTalla, setPivotTalla] = useState(null); // Modelo x Talla (secondary)
-  const [pivotTienda, setPivotTienda] = useState(null); // Color x Talla for 1 tienda
-  const [detalle, setDetalle] = useState({ items: [], total: 0 });
-  const [pivotTiendaName, setPivotTiendaName] = useState("");
-  const [detallePage, setDetallePage] = useState(1);
-  const [pivotPage, setPivotPage] = useState(1);
-  const [loading, setLoading] = useState({});
-  const [showTalla, setShowTalla] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showDetalle, setShowDetalle] = useState(false);
-
+  const [detalle, setDetalle] = useState({ items: [], total: 0 });
+  const [detallePage, setDetallePage] = useState(1);
+  const [detalleLoading, setDetalleLoading] = useState(false);
   const debounceRef = useRef(null);
 
   const buildParams = useCallback(() => {
@@ -119,446 +175,252 @@ export default function StockDashboard() {
   }, [f]);
 
   useEffect(() => {
-    api.get("/stock-dashboard/filtros").then(r => setFilterOpts(r.data || {})).catch(() => {});
+    api.get("/stock-dashboard/filters").then(r => setFilterOpts(r.data || {})).catch(() => {});
   }, []);
 
   const fetchAll = useCallback(async () => {
     const p = buildParams();
-    setLoading(prev => ({ ...prev, kpis: true, mt: true }));
-
+    setLoading(true);
     try {
-      const [kR, mtR] = await Promise.all([
-        api.get("/stock-dashboard/kpis", { params: p }),
-        api.get("/stock-dashboard/pivot-modelo-tienda", { params: { ...p, page: pivotPage, limit: 50 } })
+      const [pR, mtR] = await Promise.all([
+        api.get("/stock-dashboard/panels", { params: p }),
+        api.get("/stock-dashboard/modelo-talla", { params: { ...p, limit: 50 } })
       ]);
-      setKpis(kR.data);
-      setPivotMT(mtR.data);
-    } catch { toast.error("Error al cargar datos"); }
-    finally { setLoading(prev => ({ ...prev, kpis: false, mt: false })); }
-
-    // Fetch secondary sections if open
-    if (showTalla) {
-      setLoading(prev => ({ ...prev, talla: true }));
-      try {
-        const tR = await api.get("/stock-dashboard/pivot-modelo", { params: { ...p, page: 1, limit: 50 } });
-        setPivotTalla(tR.data);
-      } catch {} finally { setLoading(prev => ({ ...prev, talla: false })); }
-    }
-    if (pivotTiendaName) {
-      setLoading(prev => ({ ...prev, tienda: true }));
-      try {
-        const tR = await api.get("/stock-dashboard/pivot-tienda", { params: { ...p, pivot_tienda: pivotTiendaName } });
-        setPivotTienda(tR.data);
-      } catch {} finally { setLoading(prev => ({ ...prev, tienda: false })); }
-    }
-    if (showDetalle) {
-      setLoading(prev => ({ ...prev, detalle: true }));
-      try {
-        const dR = await api.get("/stock-dashboard/detalle", { params: { ...p, page: detallePage, limit: 50 } });
-        setDetalle({ items: dR.data.items || [], total: dR.data.total || 0 });
-      } catch {} finally { setLoading(prev => ({ ...prev, detalle: false })); }
-    }
-  }, [buildParams, pivotPage, pivotTiendaName, showTalla, showDetalle, detallePage]);
+      setPanels(pR.data.stores || {});
+      setKpis(pR.data.kpis || null);
+      setModeloTalla(mtR.data);
+    } catch { toast.error("Error cargando dashboard"); }
+    finally { setLoading(false); }
+  }, [buildParams]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => { setPivotPage(1); setDetallePage(1); fetchAll(); }, 400);
+    debounceRef.current = setTimeout(fetchAll, 350);
     return () => clearTimeout(debounceRef.current);
   }, [f]); // eslint-disable-line
 
-  useEffect(() => { fetchAll(); }, [pivotPage, detallePage]); // eslint-disable-line
-
-  // Expand sections
-  const toggleTalla = () => {
-    const next = !showTalla;
-    setShowTalla(next);
-    if (next && !pivotTalla) {
-      setLoading(prev => ({ ...prev, talla: true }));
-      api.get("/stock-dashboard/pivot-modelo", { params: { ...buildParams(), page: 1, limit: 50 } })
-        .then(r => setPivotTalla(r.data)).catch(() => {}).finally(() => setLoading(prev => ({ ...prev, talla: false })));
-    }
+  const loadDetalle = async (pg) => {
+    setDetalleLoading(true);
+    try {
+      const p = buildParams();
+      const r = await api.get("/stock-dashboard/detalle", { params: { ...p, page: pg, limit: 50 } });
+      setDetalle({ items: r.data.items || [], total: r.data.total || 0 });
+      setDetallePage(pg);
+    } catch {} finally { setDetalleLoading(false); }
   };
 
   const toggleDetalle = () => {
     const next = !showDetalle;
     setShowDetalle(next);
-    if (next && !detalle.items.length) {
-      setLoading(prev => ({ ...prev, detalle: true }));
-      api.get("/stock-dashboard/detalle", { params: { ...buildParams(), page: 1, limit: 50 } })
-        .then(r => setDetalle({ items: r.data.items || [], total: r.data.total || 0 })).catch(() => {}).finally(() => setLoading(prev => ({ ...prev, detalle: false })));
-    }
+    if (next && !detalle.items.length) loadDetalle(1);
   };
 
-  const selectTienda = async (name) => {
-    setPivotTiendaName(name);
-    if (!name) { setPivotTienda(null); return; }
-    setLoading(prev => ({ ...prev, tienda: true }));
-    try {
-      const r = await api.get("/stock-dashboard/pivot-tienda", { params: { ...buildParams(), pivot_tienda: name } });
-      setPivotTienda(r.data);
-    } catch {} finally { setLoading(prev => ({ ...prev, tienda: false })); }
-  };
-
-  const clearFilters = () => setF({ tienda: [], marca: [], tipo: [], entalle: [], tela: [], talla: [], color: [], modelo: "", es_lq: "", es_negro: "" });
+  const clearAll = () => setF({ tienda: [], marca: [], tipo: [], entalle: [], tela: [], talla: [], color: [], modelo: "", es_lq: "", es_negro: "" });
   const hasFilters = f.tienda.length || f.marca.length || f.tipo.length || f.entalle.length || f.tela.length || f.talla.length || f.color.length || f.modelo || f.es_lq || f.es_negro;
-  const pivotPages = pivotMT ? Math.ceil((pivotMT.total_modelos || 0) / 50) : 1;
+
+  // Unified tallas from panels
+  const tallas = panels ? (Object.values(panels)[0]?.colores ? [] : []) : [];
+  const panelTallas = modeloTalla?.tallas || [];
+
+  // Get tallas from panels response (all stores share same tallas)
+  let storeTallas = [];
+  if (panels) {
+    const allT = new Set();
+    Object.values(panels).forEach(p => {
+      if (p.totals?.bySize) Object.keys(p.totals.bySize).forEach(t => allT.add(t));
+    });
+    const sortKey = (t) => {
+      const m = { XXS: 1, XS: 2, S: 3, M: 4, L: 5, XL: 6, XXL: 7, XXXL: 8 };
+      if (m[t]) return [1, m[t]];
+      const n = parseInt(t); return isNaN(n) ? [2, t] : [0, n];
+    };
+    storeTallas = [...allT].sort((a, b) => {
+      const [ga, va] = sortKey(a); const [gb, vb] = sortKey(b);
+      return ga !== gb ? ga - gb : (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb)));
+    });
+  }
+
+  const now = new Date().toLocaleString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const detallePages = Math.ceil(detalle.total / 50);
 
   return (
-    <div data-testid="stock-dashboard-page" className="min-h-screen">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border bg-white/60 backdrop-blur-sm sticky top-0 z-20">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
-              <BarChart3 size={20} /> Stock Dashboard
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">Vista de stock por tienda, modelo, talla y color</p>
-          </div>
-          {kpis && <Badge variant="secondary" className="text-xs font-mono">{Number(kpis.total_stock).toLocaleString("es-PE")} uds</Badge>}
+    <div data-testid="stock-dashboard-page" className="h-screen flex flex-col bg-slate-100 overflow-hidden">
+      {/* ── DARK FILTER BAR ── */}
+      <div className="bg-slate-900 px-3 py-2 flex items-center gap-2 flex-wrap shrink-0" data-testid="filter-bar">
+        <div className="flex items-center gap-1.5 mr-2">
+          <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Actualizado</span>
+          <span className="text-[10px] text-white/60">{now}</span>
         </div>
+        <div className="w-px h-5 bg-slate-700" />
+
+        <SlicerFilter label="Tienda" options={filterOpts.tienda_canonicas || []} selected={f.tienda} onChange={v => sf("tienda", v)} />
+        <SlicerFilter label="Marca" options={filterOpts.marcas || []} selected={f.marca} onChange={v => sf("marca", v)} />
+        <SlicerFilter label="Tipo" options={filterOpts.tipos || []} selected={f.tipo} onChange={v => sf("tipo", v)} />
+        <SlicerFilter label="Entalle" options={filterOpts.entalles || []} selected={f.entalle} onChange={v => sf("entalle", v)} />
+        <SlicerFilter label="Tela" options={filterOpts.telas || []} selected={f.tela} onChange={v => sf("tela", v)} />
+        <div className="relative">
+          <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
+          <input
+            className="h-6 w-[100px] bg-slate-700 text-white text-[10px] rounded pl-5 pr-1 border-0 outline-none focus:ring-1 focus:ring-amber-500 placeholder:text-slate-500"
+            placeholder="Modelo..."
+            value={f.modelo}
+            onChange={e => sf("modelo", e.target.value)}
+            data-testid="filter-modelo"
+          />
+        </div>
+        <SlicerFilter label="Talla" options={filterOpts.tallas || []} selected={f.talla} onChange={v => sf("talla", v)} />
+        <SlicerFilter label="Color" options={filterOpts.colores || []} selected={f.color} onChange={v => sf("color", v)} />
+        <div className="w-px h-5 bg-slate-700" />
+        <ToggleFilter label="Es LQ" value={f.es_lq} onChange={v => sf("es_lq", v)} />
+        <ToggleFilter label="Por Arreglar" value="" onChange={() => {}} disabled />
+        <ToggleFilter label="Es Negro" value={f.es_negro} onChange={v => sf("es_negro", v)} />
+
+        {hasFilters && (
+          <button className="ml-auto px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-[10px] text-white flex items-center gap-0.5" onClick={clearAll}>
+            <X size={10} /> Limpiar
+          </button>
+        )}
+
+        {kpis && (
+          <div className="ml-auto flex items-center gap-3 text-[10px]">
+            <span className="text-slate-400">Stock: <b className="text-white">{Number(kpis.total_stock).toLocaleString("es-PE")}</b></span>
+            <span className="text-slate-400">Modelos: <b className="text-white">{kpis.modelos}</b></span>
+            <span className="text-slate-400">Variantes: <b className="text-white">{kpis.variantes}</b></span>
+          </div>
+        )}
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Filter Bar */}
-        <div className="bg-white rounded-lg border border-border px-3 py-2.5 shadow-sm" data-testid="stock-filters">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Filter size={12} className="text-slate-400" />
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Filtros</span>
-            {hasFilters && (
-              <Button variant="ghost" size="sm" className="h-5 text-[10px] text-red-500 ml-auto px-1" onClick={clearFilters}>
-                <X size={10} className="mr-0.5" /> Limpiar
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <MultiFilter label="Tienda" options={filterOpts.tiendas || []} selected={f.tienda} onChange={v => setFilter("tienda", v)} testId="filter-tienda" />
-            <MultiFilter label="Marca" options={filterOpts.marcas || []} selected={f.marca} onChange={v => setFilter("marca", v)} testId="filter-marca" />
-            <MultiFilter label="Tipo" options={filterOpts.tipos || []} selected={f.tipo} onChange={v => setFilter("tipo", v)} testId="filter-tipo" />
-            <MultiFilter label="Entalle" options={filterOpts.entalles || []} selected={f.entalle} onChange={v => setFilter("entalle", v)} testId="filter-entalle" />
-            <MultiFilter label="Tela" options={filterOpts.telas || []} selected={f.tela} onChange={v => setFilter("tela", v)} testId="filter-tela" />
-            <MultiFilter label="Talla" options={filterOpts.tallas || []} selected={f.talla} onChange={v => setFilter("talla", v)} testId="filter-talla" />
-            <MultiFilter label="Color" options={filterOpts.colors || []} selected={f.color} onChange={v => setFilter("color", v)} testId="filter-color" />
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
-              <Input placeholder="Modelo..." className="h-7 w-[120px] text-[11px] pl-6" value={f.modelo} onChange={e => setFilter("modelo", e.target.value)} data-testid="filter-modelo" />
+      {/* ── MAIN GRID ── */}
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>
+      ) : (
+        <div className="flex-1 grid grid-cols-[minmax(280px,1.2fr)_3fr_minmax(220px,1fr)] gap-1.5 p-1.5 overflow-hidden min-h-0">
+          {/* LEFT: Modelo x Talla */}
+          <div className="flex flex-col rounded overflow-hidden border border-slate-200 shadow-sm bg-white min-h-0">
+            <div className="px-2 py-1.5 bg-slate-800 text-white text-[11px] font-bold text-center shrink-0">
+              Modelo x Talla
+              {modeloTalla && <span className="text-[9px] text-slate-400 ml-1">({modeloTalla.total_modelos})</span>}
             </div>
-            <Select value={f.es_lq || "ALL"} onValueChange={v => setFilter("es_lq", v === "ALL" ? "" : v)}>
-              <SelectTrigger className="h-7 w-[90px] text-[11px]" data-testid="filter-es-lq"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">LQ: Todos</SelectItem>
-                <SelectItem value="si">Solo LQ</SelectItem>
-                <SelectItem value="no">No LQ</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={f.es_negro || "ALL"} onValueChange={v => setFilter("es_negro", v === "ALL" ? "" : v)}>
-              <SelectTrigger className="h-7 w-[100px] text-[11px]" data-testid="filter-es-negro"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Negro: Todos</SelectItem>
-                <SelectItem value="si">Solo Negro</SelectItem>
-                <SelectItem value="no">No Negro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-4 gap-3" data-testid="stock-kpis">
-          <KpiCard icon={<Package size={16} />} label="Stock" value={kpis ? Number(kpis.total_stock).toLocaleString("es-PE") : "-"} loading={loading.kpis} testId="kpi-stock" />
-          <KpiCard icon={<Layers size={16} />} label="Modelos" value={kpis?.modelos ?? "-"} loading={loading.kpis} testId="kpi-modelos" />
-          <KpiCard icon={<Hash size={16} />} label="Variantes" value={kpis?.variantes ?? "-"} loading={loading.kpis} testId="kpi-variantes" />
-          <KpiCard icon={<Store size={16} />} label="Tiendas" value={kpis?.tiendas_con_stock ?? "-"} loading={loading.kpis} testId="kpi-tiendas" />
-        </div>
-
-        {/* ── MAIN PIVOT: Modelo x Tienda ── */}
-        <div className="bg-white rounded-lg border border-border shadow-sm overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center justify-between bg-slate-50/50">
-            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <Store size={15} className="text-slate-500" /> Stock por Modelo x Tienda
-            </h2>
-            {pivotMT && <span className="text-[11px] text-slate-500">{pivotMT.total_modelos} modelos | Pag {pivotPage}</span>}
-          </div>
-          {loading.mt ? (
-            <div className="h-48 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-          ) : pivotMT && pivotMT.rows.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table className="text-xs">
-                <TableHeader>
-                  <TableRow className="bg-slate-800 hover:bg-slate-800">
-                    <TableHead className="sticky left-0 z-10 bg-slate-800 text-white font-semibold text-[11px] min-w-[160px]">Modelo</TableHead>
-                    <TableHead className="text-white font-semibold text-[11px] min-w-[60px]">Marca</TableHead>
-                    {pivotMT.tiendas.map(t => (
-                      <TableHead key={t} className="text-center text-white font-semibold text-[10px] min-w-[55px] px-1.5 whitespace-nowrap">{t}</TableHead>
-                    ))}
-                    <TableHead className="text-center text-white font-bold text-[11px] bg-slate-900 min-w-[60px]">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pivotMT.rows.map((row, i) => (
-                    <TableRow key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
-                      <TableCell className="font-medium text-slate-900 sticky left-0 z-10 border-r border-slate-200 truncate max-w-[180px]"
-                        style={{ backgroundColor: i % 2 === 0 ? "white" : "rgb(248 250 252 / 0.6)" }}>
-                        {row.modelo}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-[10px]">{row.marca || "-"}</TableCell>
-                      {pivotMT.tiendas.map(t => {
-                        const v = row.values[t] || 0;
-                        return (
-                          <TableCell key={t} className={`text-center font-mono text-[11px] px-1.5 ${qtyClass(v)}`}>
-                            {v > 0 ? Math.round(v) : <span className="text-slate-200">-</span>}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-center font-mono text-[11px] font-bold bg-slate-100/80 border-l border-slate-200">
-                        {Math.round(row.total)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {/* Totals row */}
-                  <TableRow className="bg-slate-800 hover:bg-slate-800 border-t-2 border-slate-600">
-                    <TableCell className="font-bold text-white sticky left-0 z-10 bg-slate-800 border-r border-slate-600">Total</TableCell>
-                    <TableCell></TableCell>
-                    {pivotMT.tiendas.map(t => (
-                      <TableCell key={t} className="text-center font-mono text-[11px] font-bold text-white px-1.5">
-                        {Math.round(pivotMT.totals_by_tienda[t] || 0)}
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-center font-mono font-bold text-emerald-400 bg-slate-900 border-l border-slate-600 text-sm" data-testid="pivot-mt-grand-total">
-                      {Math.round(pivotMT.grand_total)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="h-24 flex items-center justify-center text-slate-500 text-sm">Sin datos</div>
-          )}
-          {pivotPages > 1 && (
-            <div className="px-4 py-1.5 border-t border-border flex items-center justify-between bg-slate-50/30">
-              <span className="text-[11px] text-slate-500">Pag {pivotPage} de {pivotPages}</span>
-              <div className="flex gap-1">
-                <Button variant="outline" size="sm" className="h-6 w-6 p-0" disabled={pivotPage <= 1} onClick={() => setPivotPage(p => p - 1)}>
-                  <ChevronLeft size={13} />
-                </Button>
-                <Button variant="outline" size="sm" className="h-6 w-6 p-0" disabled={pivotPage >= pivotPages} onClick={() => setPivotPage(p => p + 1)}>
-                  <ChevronRight size={13} />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Pivot by Tienda (Color x Talla) ── */}
-        <div className="bg-white rounded-lg border border-border shadow-sm overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-3 bg-slate-50/50">
-            <Store size={15} className="text-slate-500" />
-            <h2 className="text-sm font-semibold text-slate-800">Detalle Tienda: Color x Talla</h2>
-            <Select value={pivotTiendaName || "NONE"} onValueChange={v => selectTienda(v === "NONE" ? "" : v)}>
-              <SelectTrigger className="w-[180px] h-7 text-[11px] ml-auto" data-testid="pivot-tienda-select">
-                <SelectValue placeholder="Seleccionar tienda..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NONE">Seleccionar tienda...</SelectItem>
-                {(filterOpts.tiendas || []).map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {loading.tienda ? (
-            <div className="h-28 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-          ) : pivotTienda && pivotTienda.colores.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table className="text-xs">
-                <TableHeader>
-                  <TableRow className="bg-slate-800 hover:bg-slate-800">
-                    <TableHead className="sticky left-0 z-10 bg-slate-800 text-white font-semibold text-[11px] min-w-[110px]">Color</TableHead>
-                    {pivotTienda.tallas.map(t => (
-                      <TableHead key={t} className="text-center text-white font-semibold text-[10px] min-w-[45px] px-1">{t}</TableHead>
-                    ))}
-                    <TableHead className="text-center text-white font-bold text-[11px] bg-slate-900 min-w-[55px]">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pivotTienda.colores.map((color, i) => (
-                    <TableRow key={color} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
-                      <TableCell className="font-medium text-slate-800 sticky left-0 z-10 border-r border-slate-200 text-[11px]"
-                        style={{ backgroundColor: i % 2 === 0 ? "white" : "rgb(248 250 252 / 0.6)" }}>
-                        {color}
-                      </TableCell>
-                      {pivotTienda.tallas.map(t => {
-                        const v = pivotTienda.matrix[color]?.[t] || 0;
-                        return <TableCell key={t} className={`text-center font-mono text-[11px] px-1 ${qtyClass(v)}`}>{v > 0 ? Math.round(v) : <span className="text-slate-200">-</span>}</TableCell>;
-                      })}
-                      <TableCell className="text-center font-mono text-[11px] font-bold bg-slate-100/80 border-l border-slate-200">
-                        {Math.round(pivotTienda.totals.byColor[color] || 0)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="bg-slate-800 hover:bg-slate-800 border-t-2">
-                    <TableCell className="font-bold text-white sticky left-0 z-10 bg-slate-800 border-r border-slate-600">Total</TableCell>
-                    {pivotTienda.tallas.map(t => (
-                      <TableCell key={t} className="text-center font-mono text-[11px] font-bold text-white px-1">{Math.round(pivotTienda.totals.bySize[t] || 0)}</TableCell>
-                    ))}
-                    <TableCell className="text-center font-mono font-bold text-emerald-400 bg-slate-900 border-l border-slate-600">
-                      {Math.round(pivotTienda.totals.grandTotal)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="h-16 flex items-center justify-center text-slate-400 text-[11px]">
-              {pivotTiendaName ? "Sin datos" : "Selecciona una tienda para ver Color x Talla"}
-            </div>
-          )}
-        </div>
-
-        {/* ── Expandable: Modelo x Talla ── */}
-        <div className="bg-white rounded-lg border border-border shadow-sm overflow-hidden">
-          <button className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-50/50 border-b border-border hover:bg-slate-100/50 transition-colors"
-            onClick={toggleTalla} data-testid="toggle-pivot-talla">
-            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <Layers size={15} className="text-slate-500" /> Stock por Modelo x Talla
-            </h2>
-            {showTalla ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-          </button>
-          {showTalla && (
-            loading.talla ? (
-              <div className="h-32 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-            ) : pivotTalla && pivotTalla.rows.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table className="text-xs">
-                  <TableHeader>
-                    <TableRow className="bg-slate-800 hover:bg-slate-800">
-                      <TableHead className="sticky left-0 z-10 bg-slate-800 text-white font-semibold text-[11px] min-w-[160px]">Modelo</TableHead>
-                      <TableHead className="text-white font-semibold text-[11px] min-w-[60px]">Marca</TableHead>
-                      {pivotTalla.tallas.map(t => (
-                        <TableHead key={t} className="text-center text-white font-semibold text-[10px] min-w-[45px] px-1">{t}</TableHead>
-                      ))}
-                      <TableHead className="text-center text-white font-bold text-[11px] bg-slate-900 min-w-[55px]">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pivotTalla.rows.map((row, i) => (
-                      <TableRow key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
-                        <TableCell className="font-medium text-slate-900 sticky left-0 z-10 border-r border-slate-200 truncate max-w-[180px]"
-                          style={{ backgroundColor: i % 2 === 0 ? "white" : "rgb(248 250 252 / 0.6)" }}>
-                          {row.modelo}
-                        </TableCell>
-                        <TableCell className="text-slate-500 text-[10px]">{row.marca || "-"}</TableCell>
-                        {pivotTalla.tallas.map(t => {
-                          const v = row.values[t] || 0;
-                          return <TableCell key={t} className={`text-center font-mono text-[11px] px-1 ${qtyClass(v)}`}>{v > 0 ? Math.round(v) : <span className="text-slate-200">-</span>}</TableCell>;
+            <div className="flex-1 overflow-auto min-h-0">
+              {modeloTalla && modeloTalla.rows.length > 0 ? (
+                <table className="w-full text-[10px] border-collapse">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-slate-700">
+                      <th className="text-left text-white font-semibold px-1.5 py-1 sticky left-0 bg-slate-700 z-20 min-w-[100px]">modelo</th>
+                      {panelTallas.map(t => <th key={t} className="text-center text-white font-semibold px-0.5 py-1 min-w-[26px]">{t}</th>)}
+                      <th className="text-center text-white font-bold px-1 py-1 bg-slate-900 min-w-[36px]">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modeloTalla.rows.map((r, i) => (
+                      <tr key={r.modelo} className={i % 2 === 0 ? "" : "bg-slate-50/50"}>
+                        <td className="px-1.5 py-0.5 font-medium text-slate-800 sticky left-0 bg-inherit z-10 border-r border-slate-100 truncate max-w-[120px]">{r.modelo}</td>
+                        {panelTallas.map(t => {
+                          const v = r.cells[t] || 0;
+                          return <td key={t} className={`text-center px-0 py-0.5 ${v > 0 ? "text-slate-800" : "text-slate-200"}`}>{v > 0 ? Math.round(v) : "-"}</td>;
                         })}
-                        <TableCell className="text-center font-mono text-[11px] font-bold bg-slate-100/80 border-l border-slate-200">{Math.round(row.total)}</TableCell>
-                      </TableRow>
+                        <td className="text-center px-0.5 py-0.5 font-bold bg-slate-100/60 border-l border-slate-200">{r.total}</td>
+                      </tr>
                     ))}
-                    <TableRow className="bg-slate-800 hover:bg-slate-800 border-t-2">
-                      <TableCell className="font-bold text-white sticky left-0 z-10 bg-slate-800 border-r border-slate-600">Total</TableCell>
-                      <TableCell></TableCell>
-                      {pivotTalla.tallas.map(t => (
-                        <TableCell key={t} className="text-center font-mono text-[11px] font-bold text-white px-1">{Math.round(pivotTalla.totals_by_talla[t] || 0)}</TableCell>
+                    <tr className="bg-amber-100 border-t-2 border-amber-300 font-bold sticky bottom-0">
+                      <td className="px-1.5 py-1 text-amber-900 sticky left-0 bg-amber-100 z-10 border-r border-amber-200">Total</td>
+                      {panelTallas.map(t => (
+                        <td key={t} className="text-center px-0 py-1 text-amber-900">{modeloTalla.totals_by_talla[t] || "-"}</td>
                       ))}
-                      <TableCell className="text-center font-mono font-bold text-emerald-400 bg-slate-900 border-l border-slate-600">{Math.round(pivotTalla.grand_total)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            ) : <div className="h-16 flex items-center justify-center text-slate-400 text-[11px]">Sin datos</div>
-          )}
-        </div>
-
-        {/* ── Expandable: Detail Table ── */}
-        <div className="bg-white rounded-lg border border-border shadow-sm overflow-hidden">
-          <button className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-50/50 border-b border-border hover:bg-slate-100/50 transition-colors"
-            onClick={toggleDetalle} data-testid="toggle-detalle">
-            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <Hash size={15} className="text-slate-500" /> Detalle de Stock
-              {detalle.total > 0 && <span className="text-[10px] text-slate-400 font-normal ml-1">{detalle.total} filas</span>}
-            </h2>
-            <div className="flex items-center gap-2">
-              {showDetalle && detalle.items.length > 0 && (
-                <Button variant="outline" size="sm" className="h-6 text-[10px] gap-0.5 px-2"
-                  onClick={(e) => { e.stopPropagation(); downloadCSV(detalle.items, "stock_detalle.csv"); }}
-                  data-testid="export-csv-btn">
-                  <Download size={11} /> CSV
-                </Button>
-              )}
-              {showDetalle ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                      <td className="text-center px-0.5 py-1 text-amber-900 bg-amber-200 border-l border-amber-300 text-xs font-bold">{modeloTalla.grand_total}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : <div className="flex-1 flex items-center justify-center text-slate-400 text-[10px] py-8">Sin datos</div>}
             </div>
-          </button>
-          {showDetalle && (
-            loading.detalle ? (
-              <div className="h-28 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+          </div>
+
+          {/* CENTER: 2x3 grid of store panels */}
+          <div className="grid grid-cols-3 grid-rows-2 gap-1.5 min-h-0 overflow-hidden">
+            {STORE_ORDER_CENTER.map(name => (
+              <div key={name} className="min-h-0 overflow-hidden">
+                <StorePanel title={name} data={panels?.[name]} tallas={storeTallas} isTotal={name === "TOTAL"} />
+              </div>
+            ))}
+          </div>
+
+          {/* RIGHT: ALMACEN */}
+          <div className="min-h-0 overflow-hidden">
+            <StorePanel title="ALMACEN" data={panels?.["ALMACEN"]} tallas={storeTallas} />
+          </div>
+        </div>
+      )}
+
+      {/* ── DETAIL TABLE (expandable) ── */}
+      <div className="shrink-0 border-t border-slate-300 bg-white">
+        <button className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 transition-colors"
+          onClick={toggleDetalle} data-testid="toggle-detalle">
+          <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+            Detalle de Stock {detalle.total > 0 && <span className="text-[10px] text-slate-400 font-normal">({detalle.total})</span>}
+          </span>
+          <div className="flex items-center gap-2">
+            {showDetalle && detalle.items.length > 0 && (
+              <button className="flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-slate-700 px-1"
+                onClick={e => { e.stopPropagation(); downloadCSV(detalle.items, "stock_detalle.csv"); }}
+                data-testid="export-csv-btn">
+                <Download size={10} /> CSV
+              </button>
+            )}
+            {showDetalle ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronUp size={14} className="text-slate-400" />}
+          </div>
+        </button>
+        {showDetalle && (
+          <div className="max-h-[250px] overflow-auto border-t border-slate-200">
+            {detalleLoading ? (
+              <div className="h-20 flex items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <Table className="text-xs">
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/50">
-                        <TableHead className="text-[11px]">Tienda</TableHead>
-                        <TableHead className="text-[11px]">Modelo</TableHead>
-                        <TableHead className="text-[11px]">Marca</TableHead>
-                        <TableHead className="text-[11px]">Talla</TableHead>
-                        <TableHead className="text-[11px]">Color</TableHead>
-                        <TableHead className="text-[11px] font-mono">Barcode</TableHead>
-                        <TableHead className="text-right text-[11px]">Disp.</TableHead>
-                        <TableHead className="text-center text-[11px]">LQ</TableHead>
-                        <TableHead className="text-center text-[11px]">Negro</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {detalle.items.length === 0 ? (
-                        <TableRow><TableCell colSpan={9} className="h-16 text-center text-slate-400 text-[11px]">Sin datos</TableCell></TableRow>
-                      ) : detalle.items.map((r, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="text-[11px]">{r.tienda}</TableCell>
-                          <TableCell className="text-[11px] font-medium">{r.modelo}</TableCell>
-                          <TableCell className="text-[11px] text-slate-500">{r.marca || "-"}</TableCell>
-                          <TableCell className="text-[11px]">{r.talla || "-"}</TableCell>
-                          <TableCell className="text-[11px]">{r.color || "-"}</TableCell>
-                          <TableCell className="font-mono text-[10px] text-slate-400">{r.barcode || "-"}</TableCell>
-                          <TableCell className={`text-right font-mono text-[11px] ${qtyClass(Number(r.available_qty))}`}>{Math.round(Number(r.available_qty))}</TableCell>
-                          <TableCell className="text-center text-[11px]">{r.es_lq ? "Si" : ""}</TableCell>
-                          <TableCell className="text-center text-[11px]">{r.es_negro ? "Si" : ""}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <table className="w-full text-[10px] border-collapse">
+                  <thead className="sticky top-0 bg-slate-100 z-10">
+                    <tr>
+                      <th className="text-left px-2 py-1 font-semibold">Tienda</th>
+                      <th className="text-left px-2 py-1 font-semibold">Modelo</th>
+                      <th className="text-left px-2 py-1 font-semibold">Marca</th>
+                      <th className="text-left px-2 py-1 font-semibold">Talla</th>
+                      <th className="text-left px-2 py-1 font-semibold">Color</th>
+                      <th className="text-left px-2 py-1 font-semibold font-mono">Barcode</th>
+                      <th className="text-right px-2 py-1 font-semibold">Disp.</th>
+                      <th className="text-center px-2 py-1 font-semibold">LQ</th>
+                      <th className="text-center px-2 py-1 font-semibold">Negro</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detalle.items.length === 0 ? (
+                      <tr><td colSpan={9} className="text-center py-4 text-slate-400">Sin datos</td></tr>
+                    ) : detalle.items.map((r, i) => (
+                      <tr key={i} className={i % 2 ? "bg-slate-50/50" : ""}>
+                        <td className="px-2 py-0.5">{r.tienda}</td>
+                        <td className="px-2 py-0.5 font-medium">{r.modelo}</td>
+                        <td className="px-2 py-0.5 text-slate-500">{r.marca || "-"}</td>
+                        <td className="px-2 py-0.5">{r.talla || "-"}</td>
+                        <td className="px-2 py-0.5">{r.color || "-"}</td>
+                        <td className="px-2 py-0.5 font-mono text-slate-400">{r.barcode || "-"}</td>
+                        <td className="px-2 py-0.5 text-right font-mono font-medium">{Math.round(Number(r.available_qty))}</td>
+                        <td className="px-2 py-0.5 text-center">{r.es_lq ? "Si" : ""}</td>
+                        <td className="px-2 py-0.5 text-center">{r.es_negro ? "Si" : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
                 {detallePages > 1 && (
-                  <div className="px-4 py-1.5 border-t border-border flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500">Pag {detallePage} de {detallePages}</span>
+                  <div className="flex items-center justify-between px-3 py-1 border-t text-[10px] text-slate-500">
+                    <span>Pag {detallePage} de {detallePages}</span>
                     <div className="flex gap-1">
-                      <Button variant="outline" size="sm" className="h-6 w-6 p-0" disabled={detallePage <= 1} onClick={() => setDetallePage(p => p - 1)}>
-                        <ChevronLeft size={13} />
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-6 w-6 p-0" disabled={detallePage >= detallePages} onClick={() => setDetallePage(p => p + 1)}>
-                        <ChevronRight size={13} />
-                      </Button>
+                      <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={detallePage <= 1} onClick={() => loadDetalle(detallePage - 1)}>Ant</button>
+                      <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={detallePage >= detallePages} onClick={() => loadDetalle(detallePage + 1)}>Sig</button>
                     </div>
                   </div>
                 )}
               </>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  );
-}
-
-function KpiCard({ icon, label, value, loading: ld, testId }) {
-  return (
-    <Card className="shadow-sm border-border" data-testid={testId}>
-      <CardContent className="p-3 flex items-center gap-2.5">
-        <div className="p-1.5 rounded-md bg-slate-100 text-slate-600">{icon}</div>
-        <div>
-          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{label}</p>
-          {ld ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400 mt-0.5" /> : (
-            <p className="text-lg font-bold text-slate-900 font-mono leading-tight" data-testid={`${testId}-value`}>{value}</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
