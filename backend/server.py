@@ -264,16 +264,17 @@ async def get_cuentas(
                 rp_col_names = [r['column_name'] for r in rp_cols]
                 has_ck = 'company_key' in rp_col_names
                 ck_filter = "AND rp.company_key = 'GLOBAL'" if has_ck else ""
-                name_col = 'name' if 'name' in rp_col_names else "'Sin nombre'"
-                phone_col = 'phone' if 'phone' in rp_col_names else "NULL"
-                email_col = 'email' if 'email' in rp_col_names else "NULL"
-                city_col = 'city' if 'city' in rp_col_names else "NULL"
+                name_expr = 'rp.name' if 'name' in rp_col_names else "'Sin nombre'"
+                phone_expr = 'rp.phone::text' if 'phone' in rp_col_names else 'NULL'
+                email_expr = 'rp.email::text' if 'email' in rp_col_names else 'NULL'
+                city_expr = 'rp.city::text' if 'city' in rp_col_names else 'NULL'
                 partner_join = f"LEFT JOIN odoo.res_partner rp ON rp.odoo_id = c.cuenta_partner_odoo_id {ck_filter}"
-                partner_select = f"COALESCE(rp.{name_col}, 'Sin nombre') as partner_nombre, COALESCE(rp.{phone_col}::text, '') as partner_phone, COALESCE(rp.{email_col}::text, '') as partner_email, COALESCE(rp.{city_col}::text, '') as partner_city"
+                partner_select = f"COALESCE({name_expr}, 'Sin nombre') as partner_nombre, COALESCE({phone_expr}, '') as partner_phone, COALESCE({email_expr}, '') as partner_email, COALESCE({city_expr}, '') as partner_city"
 
+                search_col = 'rp.name' if 'name' in rp_col_names else 'c.asignado_a'
                 if search:
                     params.append(f"%{search}%")
-                    where += f" AND (rp.{name_col} ILIKE ${len(params)} OR c.asignado_a ILIKE ${len(params)})"
+                    where += f" AND ({search_col} ILIKE ${len(params)} OR c.asignado_a ILIKE ${len(params)})"
 
             count = await conn.fetchval(f"SELECT COUNT(*) FROM crm.cuenta c {partner_join} {where}", *params)
             params.extend([limit, offset])
