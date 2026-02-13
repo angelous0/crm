@@ -349,8 +349,9 @@ async def _create_views(conn):
         has_stock_loc = 'v_stock_by_product_location' in odoo_tables
         has_stock_loc_sl_f = 'stock_location' in odoo_tables
         if has_stock_loc and has_stock_loc_sl_f and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
+            await conn.execute("DROP VIEW IF EXISTS crm.v_catalogo_con_stock_variantes_loc;")
             await conn.execute("""
-                CREATE OR REPLACE VIEW crm.v_catalogo_con_stock_variantes_loc AS
+                CREATE VIEW crm.v_catalogo_con_stock_variantes_loc AS
                 SELECT
                     vv.product_tmpl_id,
                     vv.product_product_id,
