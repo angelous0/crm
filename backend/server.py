@@ -404,15 +404,14 @@ async def get_cuenta_ventas(cuenta_id: str, page: int = 1, limit: int = 50, user
             if not view_exists:
                 return {"items": [], "total": 0}
 
+            await conn.execute("SET statement_timeout = '15s'")
             offset = (page - 1) * limit
-            count = await conn.fetchval(
-                "SELECT COUNT(*) FROM crm.v_ventas_pos_filtradas WHERE cuenta_partner_id = $1",
-                cuenta['cuenta_partner_odoo_id']
-            )
             rows = await conn.fetch(
                 "SELECT * FROM crm.v_ventas_pos_filtradas WHERE cuenta_partner_id = $1 ORDER BY date_order DESC LIMIT $2 OFFSET $3",
                 cuenta['cuenta_partner_odoo_id'], limit, offset
             )
+            count = len(rows) if len(rows) < limit else offset + limit + 1
+            await conn.execute("SET statement_timeout = '0'")
             return {"items": records_to_list(rows), "total": count}
         except Exception as e:
             logger.warning(f"Error fetching ventas for cuenta: {e}")
