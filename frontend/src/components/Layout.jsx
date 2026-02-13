@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
   CalendarClock, ShoppingCart, LogOut, ChevronRight, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Grid3X3
+  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
