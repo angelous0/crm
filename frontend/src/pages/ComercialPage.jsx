@@ -356,12 +356,12 @@ export default function ComercialPage() {
                 )}
               </div>
               {/* Pagination */}
-              {totalPages > 1 && (
+              {(page > 1 || detail.has_next) && (
                 <div className="flex items-center justify-between px-3 py-1.5 border-t text-[10px] text-slate-500 shrink-0">
-                  <span>Pag {page} de {totalPages}</span>
+                  <span>Pagina {page}</span>
                   <div className="flex gap-1">
                     <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={page <= 1} onClick={() => fetchDetail(page - 1)} data-testid="prev-page">Ant</button>
-                    <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={page >= totalPages} onClick={() => fetchDetail(page + 1)} data-testid="next-page">Sig</button>
+                    <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={!detail.has_next} onClick={() => fetchDetail(page + 1)} data-testid="next-page">Sig</button>
                   </div>
                 </div>
               )}
