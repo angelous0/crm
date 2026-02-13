@@ -2732,4 +2732,6 @@ from routers.stock_balance import router as stock_balance_router
 app.include_router(stock_balance_router)
 from routers.reposicion import router as reposicion_router
 app.include_router(reposicion_router)
+from routers.comercial import router as comercial_router
+app.include_router(comercial_router)
 app.include_router(sync_router)
