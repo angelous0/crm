@@ -329,7 +329,8 @@ export default function CuentaDetalle() {
             <Tabs defaultValue="contactos">
               <TabsList className="mb-4" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
-                <TabsTrigger value="ventas">Ventas ({ventas.length})</TabsTrigger>
+                <TabsTrigger value="ventas">Ventas ({ventas.kpis?.orders || 0})</TabsTrigger>
+                <TabsTrigger value="reservas">Reservas</TabsTrigger>
                 <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
                 <TabsTrigger value="tareas">Tareas ({tareas.length})</TabsTrigger>
               </TabsList>
