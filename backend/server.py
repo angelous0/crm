@@ -656,28 +656,103 @@ async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
 
 
 @cuentas_router.get("/{cuenta_id}/ventas")
-async def get_cuenta_ventas(cuenta_id: str, page: int = 1, limit: int = 50, user=Depends(get_current_user)):
+async def get_cuenta_ventas(
+    cuenta_id: str,
+    doc_tipo: str = "SALE",
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(get_current_user)
+):
+    """Sales/reservations for a cuenta using v_comercial_mov_flat + v_cuenta_partners."""
     p = await get_pool()
     async with p.acquire() as conn:
         odoo_id = int(cuenta_id)
 
-        try:
-            view_exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM information_schema.views WHERE table_schema='crm' AND table_name='v_ventas_pos_filtradas')")
-            if not view_exists:
-                return {"items": [], "total": 0}
+        # Ensure crm.cuenta row exists
+        await conn.execute("""
+            INSERT INTO crm.cuenta (cuenta_partner_odoo_id)
+            VALUES ($1) ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
+        """, odoo_id)
 
-            await conn.execute("SET statement_timeout = '15s'")
-            offset = (page - 1) * limit
-            rows = await conn.fetch(
-                "SELECT * FROM crm.v_ventas_pos_filtradas WHERE cuenta_partner_id = $1 ORDER BY date_order DESC LIMIT $2 OFFSET $3",
-                odoo_id, limit, offset
-            )
-            count = len(rows) if len(rows) < limit else offset + limit + 1
-            await conn.execute("SET statement_timeout = '0'")
-            return {"items": records_to_list(rows), "total": count}
-        except Exception as e:
-            logger.warning(f"Error fetching ventas for cuenta: {e}")
-            return {"items": [], "total": 0, "error": str(e)}
+        # Get cuenta UUID
+        cuenta_row = await conn.fetchrow(
+            "SELECT id FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id
+        )
+        if not cuenta_row:
+            return {"kpis": {"qty_total": 0, "orders": 0, "clientes_distintos": 0},
+                    "items": [], "page": page, "limit": limit, "has_next": False,
+                    "debug": {"msg": "Cuenta no encontrada"}}
+
+        cuenta_uuid = cuenta_row['id']
+
+        # Get all partner_ids for this cuenta
+        partner_rows = await conn.fetch(
+            "SELECT DISTINCT partner_id FROM crm.v_cuenta_partners WHERE cuenta_id = $1",
+            cuenta_uuid
+        )
+        partner_ids = [r['partner_id'] for r in partner_rows]
+
+        if not partner_ids:
+            return {"kpis": {"qty_total": 0, "orders": 0, "clientes_distintos": 0},
+                    "items": [], "page": page, "limit": limit, "has_next": False,
+                    "debug": {"msg": "Esta cuenta no tiene partner Odoo vinculado",
+                              "cuenta_partner_odoo_id": odoo_id, "partners_count": 0}}
+
+        # Build WHERE
+        params = [partner_ids, doc_tipo]
+        where = "WHERE partner_id = ANY($1) AND doc_tipo = $2"
+
+        if fecha_desde:
+            params.append(fecha_desde)
+            where += f" AND fecha >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            where += f" AND fecha <= ${len(params)}::text::timestamptz"
+
+        # KPIs
+        kpi = await conn.fetchrow(f"""
+            SELECT COALESCE(SUM(qty),0) AS qty_total,
+                   COUNT(DISTINCT order_id) AS orders,
+                   COUNT(DISTINCT partner_id) AS clientes_distintos
+            FROM crm.v_comercial_mov_flat {where}
+        """, *params)
+
+        # Paginated rows
+        offset = (page - 1) * limit
+        p2 = list(params)
+        p2.append(limit + 1)
+        p2.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT fecha, order_id, owner_partner_name,
+                   modelo_display, marca, tipo, entalle, tela, hilo,
+                   talla, color, barcode, qty, price_unit,
+                   product_tmpl_id, product_product_id
+            FROM crm.v_comercial_mov_flat {where}
+            ORDER BY fecha DESC, order_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
+
+        has_next = len(rows) > limit
+        items = rows[:limit]
+
+        return {
+            "kpis": {
+                "qty_total": float(kpi['qty_total']),
+                "orders": kpi['orders'],
+                "clientes_distintos": kpi['clientes_distintos'],
+            },
+            "items": items,
+            "page": page,
+            "limit": limit,
+            "has_next": has_next,
+            "debug": {
+                "cuenta_partner_odoo_id": odoo_id,
+                "partners_count": len(partner_ids),
+                "partner_ids": partner_ids[:20],
+            }
+        }
 
 
 @cuentas_router.get("/{cuenta_id}/interacciones")
