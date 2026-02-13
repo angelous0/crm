@@ -87,6 +87,10 @@ class ContactoUpdateInput(BaseModel):
 class RevincularInput(BaseModel):
     cuenta_partner_odoo_id: int
 
+class VincularContactoInput(BaseModel):
+    contacto_partner_odoo_id: int
+    nota: Optional[str] = None
+
 
 # ─── APP SETUP ─────────────────────────────────────────────────────────────────
 
