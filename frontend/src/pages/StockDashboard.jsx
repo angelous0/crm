@@ -253,9 +253,7 @@ export default function StockDashboard() {
     return p;
   }, [f]);
 
-  useEffect(() => {
-    api.get("/stock-dashboard/filters").then(r => setFilterOpts(r.data || {})).catch(() => {});
-  }, []);
+  const optsVersionRef = useRef(0);
 
   const fetchAll = useCallback(async () => {
     const p = buildParams();
@@ -272,9 +270,44 @@ export default function StockDashboard() {
     finally { setLoading(false); }
   }, [buildParams]);
 
+  const fetchFilterOpts = useCallback(async () => {
+    const p = buildParams();
+    const ver = ++optsVersionRef.current;
+    try {
+      const r = await api.get("/stock-dashboard/filter-options", { params: p });
+      if (ver !== optsVersionRef.current) return;
+      const opts = r.data || {};
+      setFilterOpts(opts);
+      const MAP = { tienda: 'tienda_canonicas', marca: 'marcas', tipo: 'tipos',
+        entalle: 'entalles', tela: 'telas', talla: 'tallas', color: 'colores' };
+      setF(prev => {
+        let changed = false;
+        const next = { ...prev };
+        const cleaned = [];
+        for (const [fk, ok] of Object.entries(MAP)) {
+          if (!next[fk].length || !opts[ok]) continue;
+          const valid = new Set(opts[ok]);
+          const inv = next[fk].filter(v => !valid.has(v));
+          if (inv.length) {
+            next[fk] = next[fk].filter(v => valid.has(v));
+            cleaned.push(fk.charAt(0).toUpperCase() + fk.slice(1));
+            changed = true;
+          }
+        }
+        if (changed) {
+          setTimeout(() => cleaned.forEach(m =>
+            toast.info(`${m} limpiado: sin datos con selección actual`)
+          ), 0);
+          return next;
+        }
+        return prev;
+      });
+    } catch {}
+  }, [buildParams]);
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(fetchAll, 300);
+    debounceRef.current = setTimeout(() => { fetchAll(); fetchFilterOpts(); }, 300);
     return () => clearTimeout(debounceRef.current);
   }, [f]); // eslint-disable-line
 
