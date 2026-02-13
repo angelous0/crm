@@ -235,6 +235,28 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_partner_account_final: {e}")
 
+    # 3.1a) v_cuenta_partners – all partner_ids belonging to a cuenta
+    try:
+        await conn.execute("""
+            CREATE OR REPLACE VIEW crm.v_cuenta_partners AS
+            SELECT c.id AS cuenta_id, c.cuenta_partner_odoo_id AS partner_id
+            FROM crm.cuenta c
+            WHERE c.cuenta_partner_odoo_id IS NOT NULL
+            UNION
+            SELECT cv.cuenta_id, cv.odoo_partner_id AS partner_id
+            FROM crm.cuenta_vinculo cv
+            WHERE cv.activo = true
+            UNION
+            SELECT c.id AS cuenta_id, paf.contacto_partner_odoo_id AS partner_id
+            FROM crm.cuenta c
+            JOIN crm.v_partner_account_final paf
+                ON paf.cuenta_partner_odoo_id = c.cuenta_partner_odoo_id
+            WHERE c.cuenta_partner_odoo_id IS NOT NULL;
+        """)
+        logger.info("View crm.v_cuenta_partners created")
+    except Exception as e:
+        logger.warning(f"Could not create v_cuenta_partners: {e}")
+
     # 3.1b) v_cuentas_libres - partners whose principal IS themselves
     try:
         await conn.execute("""
