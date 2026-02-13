@@ -318,7 +318,7 @@ export default function Catalogo() {
 
       {/* Matrix Dialog */}
       <Dialog open={showMatriz} onOpenChange={setShowMatriz}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="matriz-dialog">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="matriz-dialog" aria-describedby="matriz-description">
           <DialogHeader>
             <DialogTitle className="font-heading text-lg">
               {selectedProduct?.nombre}
