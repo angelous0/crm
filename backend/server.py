@@ -763,33 +763,48 @@ async def get_cuenta_ventas_orders(
         if not partner_ids:
             return {"metrics": {"orders_count": 0, "qty_total": 0},
                     "rows": [], "page": page, "limit": limit, "has_next": False}
-        params = [partner_ids, doc_tipo]
-        where = "WHERE partner_id = ANY($1) AND doc_tipo = $2"
+        params = [partner_ids]
+        doc_filter = _POS_RESERVA_FILTER if doc_tipo == "RESERVA" else _POS_SALE_FILTER
+        extra = ""
         if fecha_desde:
             params.append(fecha_desde)
-            where += f" AND date_order >= ${len(params)}::text::timestamptz"
+            extra += f" AND po.date_order >= ${len(params)}::text::timestamptz"
         if fecha_hasta:
             params.append(fecha_hasta + "T23:59:59")
-            where += f" AND date_order <= ${len(params)}::text::timestamptz"
+            extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
+
         met = await conn.fetchrow(f"""
-            SELECT COUNT(*) AS orders_count, COALESCE(SUM(qty_total), 0) AS qty_total
-            FROM crm.v_comercial_order_header {where}
+            SELECT COUNT(*) AS orders_count
+            {_POS_CUENTA_BASE} {doc_filter} {extra}
         """, *params)
-        p2 = list(params)
+
         offset = (page - 1) * limit
+        p2 = list(params)
         p2.append(limit + 1)
         p2.append(offset)
         rows = records_to_list(await conn.fetch(f"""
-            SELECT doc_tipo, order_id, order_name, date_order, state,
-                   amount_total, owner_partner_id, owner_partner_name,
-                   qty_total, lines_count
-            FROM crm.v_comercial_order_header {where}
-            ORDER BY date_order DESC, order_id DESC
+            SELECT po.odoo_id AS order_id, po.name AS order_name,
+                   po.date_order, po.state, po.amount_total,
+                   po.partner_id AS owner_partner_id,
+                   rp.name AS owner_partner_name,
+                   COALESCE(agg.qty_total, 0) AS qty_total,
+                   COALESCE(agg.lines_count, 0) AS lines_count
+            FROM odoo.pos_order po
+            LEFT JOIN (
+                SELECT order_id, SUM(qty) AS qty_total, COUNT(*) AS lines_count
+                FROM odoo.pos_order_line GROUP BY order_id
+            ) agg ON agg.order_id = po.odoo_id
+            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = po.partner_id AND rp.company_key = 'GLOBAL'
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              {doc_filter} {extra}
+            ORDER BY po.date_order DESC, po.odoo_id DESC
             LIMIT ${len(p2)-1} OFFSET ${len(p2)}
         """, *p2))
         has_next = len(rows) > limit
         return {
-            "metrics": {"orders_count": met['orders_count'], "qty_total": float(met['qty_total'])},
+            "metrics": {"orders_count": met['orders_count'], "qty_total": 0},
             "rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next,
         }
 
