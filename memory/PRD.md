@@ -80,6 +80,20 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - GET /api/cuentas/{id}/ventas/lines (account-specific, direct SQL)
 - GET /api/cuentas/{id}/creditos/lines (account-specific, direct SQL)
 
+### 8. Info Ventas Tab - Clasificacion (DONE - Feb 2026)
+**Feature:** New "Info Ventas" tab in CuentaDetalle showing sales summary by classification (marca, tipo, entalle).
+
+**Data:**
+- Only SALE orders (no reservas, no cancelled)
+- Aggregated: marca, tipo, entalle, ultima_fecha_compra (MAX), cantidad (SUM qty), ventas (SUM subtotal), compras (COUNT DISTINCT orders)
+- Sorted by ventas DESC
+- Click row -> drawer with drilldown individual lines (paginated)
+- Date filters (fecha_desde, fecha_hasta)
+
+**New Endpoints:**
+- GET /api/cuentas/{id}/ventas/clasificacion (aggregated by marca/tipo/entalle)
+- GET /api/cuentas/{id}/ventas/clasificacion/detail (drilldown lines for specific item)
+
 ## Backlog
 - P1: Refactor stock dashboard endpoints from server.py to own router
 - P1: Persist dashboard filter state in URL
