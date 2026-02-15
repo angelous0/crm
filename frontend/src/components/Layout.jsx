@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
   CalendarClock, ShoppingCart, LogOut, ChevronRight, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag
+  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/stock-dashboard", icon: BarChart3, label: "Stock Dashboard" },
   { to: "/balance-tallas", icon: Grid3X3, label: "Balance de Tallas" },
   { to: "/comercial", icon: ShoppingBag, label: "Ventas y Reservas" },
+  { to: "/creditos", icon: FileText, label: "Creditos" },
   { to: "/catalogo", icon: Package, label: "Catalogo" },
   { to: "/cuentas", icon: Users, label: "Cuentas" },
   { to: "/contactos", icon: UserCircle, label: "Contactos" },
