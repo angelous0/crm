@@ -44,6 +44,17 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - qty_total = SUM(qty) — units
 - Ventas y Reservas module KPIs: Ordenes, Unidades, Clientes (no Subtotal)
 
+### 7. Creditos Module (DONE - Feb 2026)
+- **crm.v_credito_flat** view: invoice credit lines joined with cuenta partners + products
+  - Deduped via DISTINCT ON (partner_id) to avoid multiplied rows
+  - Includes: invoice_id, number, date, state, partner, amount_total/residual, product info (marca, tipo, entalle, tela, hilo, talla, color)
+- **Cuenta tab**: "Creditos (Facturas: N)" with chips "Uds: N" and "Saldo: S/ N"
+  - Endpoints: GET /api/cuentas/{id}/creditos/metrics + GET /api/cuentas/{id}/creditos
+- **Global page**: /creditos with filterable KPIs + paginated detail table
+  - Endpoints: GET /api/creditos/metrics + GET /api/creditos + GET /api/creditos/filter-options
+  - Filters: fecha, state, marca, tipo, entalle, tela, hilo, modelo, cliente, solo_con_saldo
+  - Click on client name navigates to cuenta detail
+
 ## Key Views
 - `crm.v_comercial_mov_flat` - Unified SALE+RESERVA with owner mapping, modelo_display
 - `crm.v_cuenta_partners` - All partner_ids for a cuenta (main + manual + auto-linked)
