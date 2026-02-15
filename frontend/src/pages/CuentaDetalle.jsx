@@ -16,7 +16,8 @@ import { OrderLinesDrawer, InvoiceLinesDrawer } from "@/components/DetailDrawers
 import {
   ArrowLeft, Save, Loader2, Phone, Mail, MapPin,
   MessageSquare, PhoneCall, Footprints, StickyNote, Plus,
-  Search, UserPlus, Link2, ChevronLeft, ChevronRight, List
+  Search, UserPlus, Link2, ChevronLeft, ChevronRight, List,
+  Calendar, BarChart3, X
 } from "lucide-react";
 
 const ESTADOS = ["NUEVO", "ACTIVO", "SEGUIMIENTO", "DORMIDO", "NO_VOLVER"];
