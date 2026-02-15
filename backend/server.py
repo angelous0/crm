@@ -682,6 +682,7 @@ async def get_cuenta_ventas(
         )
         if not cuenta_row:
             return {"kpis": {"qty_total": 0, "orders": 0, "clientes_distintos": 0},
+                    "total_rows": 0,
                     "items": [], "page": page, "limit": limit, "has_next": False,
                     "debug": {"msg": "Cuenta no encontrada"}}
 
@@ -696,6 +697,7 @@ async def get_cuenta_ventas(
 
         if not partner_ids:
             return {"kpis": {"qty_total": 0, "orders": 0, "clientes_distintos": 0},
+                    "total_rows": 0,
                     "items": [], "page": page, "limit": limit, "has_next": False,
                     "debug": {"msg": "Esta cuenta no tiene partner Odoo vinculado",
                               "cuenta_partner_odoo_id": odoo_id, "partners_count": 0}}
