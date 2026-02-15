@@ -29,7 +29,6 @@ function fmtDate(d) { return d ? new Date(d).toLocaleDateString("es-PE", { day: 
 
 /* ── Ventas/Reservas sub-tab component ── */
 function VentasCuentaTab({ data, loading, page, onPageChange }) {
-  const kpis = data?.kpis || {};
   const items = data?.items || [];
   const hasNext = data?.has_next || false;
   const debug = data?.debug || {};
@@ -40,28 +39,11 @@ function VentasCuentaTab({ data, loading, page, onPageChange }) {
 
   return (
     <div className="space-y-4" data-testid="ventas-cuenta-tab">
-      {/* Debug info if no partners */}
       {debug.partners_count === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800" data-testid="ventas-no-partner-msg">
           Esta cuenta no tiene partner Odoo vinculado (odoo_id: {debug.cuenta_partner_odoo_id})
         </div>
       )}
-
-      {/* KPIs row */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm">
-          <Hash size={14} className="text-slate-400" />
-          <div><p className="text-[10px] text-slate-500 uppercase">Cantidad</p><p className="text-base font-bold">{fmtNum(kpis.qty_total)}</p></div>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm">
-          <ShoppingBag size={14} className="text-slate-400" />
-          <div><p className="text-[10px] text-slate-500 uppercase">Ordenes</p><p className="text-base font-bold">{fmtNum(kpis.orders)}</p></div>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm">
-          <Users size={14} className="text-slate-400" />
-          <div><p className="text-[10px] text-slate-500 uppercase">Contactos</p><p className="text-base font-bold">{fmtNum(kpis.clientes_distintos)}</p></div>
-        </div>
-      </div>
 
       {/* Detail table */}
       <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
