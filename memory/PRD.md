@@ -94,6 +94,35 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - GET /api/cuentas/{id}/ventas/clasificacion (aggregated by marca/tipo/entalle)
 - GET /api/cuentas/{id}/ventas/clasificacion/detail (drilldown lines for specific item)
 
+### 9. Product Catalog Filter (DONE - Feb 2026)
+**Feature:** Global filter excluding "unimportant" products from all commercial views and endpoints.
+
+**Filter criteria (on product_template pt):**
+- `pt.sale_ok = true`
+- `pt.purchase_ok = false`
+- `pt.name NOT ILIKE '%correa%'`
+- `pt.name NOT ILIKE '%saco%'`
+- `pt.name NOT ILIKE '%bolsa%'`
+- `pt.name NOT ILIKE '%probador%'`
+- `pt.name NOT ILIKE '%paneton%'`
+- `pt.name NOT ILIKE '%publicitario%'`
+- Lines with `product_id IS NULL` are excluded
+- Orders with 0 remaining lines after filter are excluded
+
+**Modified Views (db.py):**
+- `crm.v_comercial_mov_flat` - Added INNER JOINs + catalog filter in WHERE
+- `crm.v_comercial_order_header` - Aggregates from filtered lines only (INNER JOIN + catalog filter in subquery)
+
+**Modified Endpoints (server.py):**
+- Uses reusable `_CATALOG_JOIN` and `_CATALOG_FILTER` constants
+- `/api/cuentas/{id}/ventas/metrics` - Combined query with catalog filter
+- `/api/cuentas/{id}/ventas/orders` - Filtered agg subquery (INNER JOIN)
+- `/api/cuentas/{id}/ventas/clasificacion` - INNER JOIN + catalog filter
+- `/api/cuentas/{id}/ventas/clasificacion/detail` - INNER JOIN + catalog filter
+- `/api/cuentas/{id}/ventas/lines` - INNER JOIN + catalog filter
+
+**No toggle** - filter always active by default (toggle deferred).
+
 ## Backlog
 - P1: Refactor stock dashboard endpoints from server.py to own router
 - P1: Persist dashboard filter state in URL
