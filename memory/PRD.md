@@ -60,6 +60,26 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - `crm.v_partner_account_final` - Partner account linking
 - `crm.v_stock_dashboard_base` - Stock dashboard base
 
+### 7. Detail Mode Toggle (DONE - Feb 2026)
+**Feature:** Toggle "Modo detalle (lineas)" on all data pages to switch between header and line-level views.
+
+**Global pages (ComercialPage, CreditosPage):**
+- Toggle in filter bar switches between header table (orders/invoices) and lines table (individual product lines)
+- KPIs remain consistent in both modes (computed from header view)
+- Drawer only available in header mode
+- "LINEAS" badge visible when detail mode active
+
+**Cuenta detail (CuentaDetalle):**
+- Single toggle bar affects Ventas, Reservas, and Creditos tabs
+- Header mode: order/invoice headers with drawer
+- Detail mode: product-level line data directly in table
+
+**New Endpoints:**
+- GET /api/comercial/lines (global paginated lines)
+- GET /api/creditos/lines (global paginated lines)
+- GET /api/cuentas/{id}/ventas/lines (account-specific, direct SQL)
+- GET /api/cuentas/{id}/creditos/lines (account-specific, direct SQL)
+
 ## Backlog
 - P1: Refactor stock dashboard endpoints from server.py to own router
 - P1: Persist dashboard filter state in URL
