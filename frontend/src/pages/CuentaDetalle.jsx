@@ -145,6 +145,121 @@ function InvoiceHeadersTab({ data, loading, page, onPageChange, onSelectInvoice 
   );
 }
 
+/* ── Lines-level sub-tab components (detail mode) ── */
+function OrderLinesTab({ data, loading, page, onPageChange }) {
+  const rows = data?.rows || [];
+  const hasNext = data?.has_next || false;
+
+  if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
+
+  return (
+    <div className="space-y-3" data-testid="ventas-lines-cuenta-tab">
+      <div className="rounded-md border border-cyan-200 bg-white overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-cyan-50/50">
+                <TableHead className="text-xs">Fecha</TableHead>
+                <TableHead className="text-xs">Orden</TableHead>
+                <TableHead className="text-xs">Modelo</TableHead>
+                <TableHead className="text-xs">Marca</TableHead>
+                <TableHead className="text-xs">Talla</TableHead>
+                <TableHead className="text-xs">Color</TableHead>
+                <TableHead className="text-xs text-right">Qty</TableHead>
+                <TableHead className="text-xs text-right">P.Unit</TableHead>
+                <TableHead className="text-xs text-right">Subtotal</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow><TableCell colSpan={9} className="h-20 text-center text-slate-500">Sin lineas</TableCell></TableRow>
+              ) : rows.map((r, i) => (
+                <TableRow key={`${r.order_id}-${r.line_id}`} className={`${i % 2 ? "bg-slate-50/30" : ""} hover:bg-cyan-50/50`}
+                  data-testid={`line-row-${r.line_id}`}>
+                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.fecha)}</TableCell>
+                  <TableCell className="text-xs font-mono text-slate-500">{r.order_name || r.order_id}</TableCell>
+                  <TableCell className="text-xs font-medium truncate max-w-[140px]">{r.modelo_display || "-"}</TableCell>
+                  <TableCell className="text-xs text-slate-500">{r.marca || "-"}</TableCell>
+                  <TableCell className="text-xs">{r.talla || "-"}</TableCell>
+                  <TableCell className="text-xs">{r.color || "-"}</TableCell>
+                  <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.qty)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(r.price_unit)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(r.subtotal)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {(page > 1 || hasNext) && (
+          <div className="flex items-center justify-between px-3 py-2 border-t text-xs text-slate-500">
+            <span>Pagina {page}</span>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="ventas-lines-prev-page"><ChevronLeft size={14} /></Button>
+              <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="ventas-lines-next-page"><ChevronRight size={14} /></Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InvoiceLinesTab({ data, loading, page, onPageChange }) {
+  const rows = data?.rows || [];
+  const hasNext = data?.has_next || false;
+
+  if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
+
+  return (
+    <div className="space-y-3" data-testid="creditos-lines-cuenta-tab">
+      <div className="rounded-md border border-cyan-200 bg-white overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-cyan-50/50">
+                <TableHead className="text-xs">Fecha</TableHead>
+                <TableHead className="text-xs">Factura</TableHead>
+                <TableHead className="text-xs">Modelo</TableHead>
+                <TableHead className="text-xs">Talla</TableHead>
+                <TableHead className="text-xs">Color</TableHead>
+                <TableHead className="text-xs text-right">Qty</TableHead>
+                <TableHead className="text-xs text-right">P.Unit</TableHead>
+                <TableHead className="text-xs text-right">Subtotal</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="h-20 text-center text-slate-500">Sin lineas</TableCell></TableRow>
+              ) : rows.map((r, i) => (
+                <TableRow key={`${r.invoice_id}-${r.line_id}`} className={`${i % 2 ? "bg-slate-50/30" : ""} hover:bg-cyan-50/50`}
+                  data-testid={`line-row-${r.line_id}`}>
+                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.date_invoice ? r.date_invoice + "T00:00:00" : null)}</TableCell>
+                  <TableCell className="text-xs font-mono text-slate-500">{r.invoice_number || "-"}</TableCell>
+                  <TableCell className="text-xs font-medium truncate max-w-[140px]">{r.modelo_display || r.line_description || "-"}</TableCell>
+                  <TableCell className="text-xs">{r.talla || "-"}</TableCell>
+                  <TableCell className="text-xs">{r.color || "-"}</TableCell>
+                  <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.qty)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(r.price_unit)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(r.price_subtotal)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {(page > 1 || hasNext) && (
+          <div className="flex items-center justify-between px-3 py-2 border-t text-xs text-slate-500">
+            <span>Pagina {page}</span>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="creditos-lines-prev-page"><ChevronLeft size={14} /></Button>
+              <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="creditos-lines-next-page"><ChevronRight size={14} /></Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CuentaDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
