@@ -941,6 +941,28 @@ export default function CuentaDetalle() {
                 )}
               </TabsContent>
 
+              {/* Info Ventas Tab (Clasificacion) */}
+              <TabsContent value="info_ventas">
+                <ClasificacionTab
+                  data={clasifData} loading={clasifLoading}
+                  fechaDesde={clasifFechaDesde} fechaHasta={clasifFechaHasta}
+                  onFechaDesdeChange={(v) => { setClasifFechaDesde(v); }}
+                  onFechaHastaChange={(v) => { setClasifFechaHasta(v); }}
+                  onApplyFilters={fetchClasificacion}
+                  onSelectItem={(item) => { setClasifSelected(item); fetchClasifDetail(item, 1); }}
+                />
+                {clasifSelected && (
+                  <ClasifDetailDrawer
+                    item={clasifSelected}
+                    data={clasifDetail}
+                    loading={clasifDetailLoading}
+                    page={clasifDetailPage}
+                    onPageChange={(pg) => fetchClasifDetail(clasifSelected, pg)}
+                    onClose={() => setClasifSelected(null)}
+                  />
+                )}
+              </TabsContent>
+
               {/* Interacciones Tab */}
               <TabsContent value="interacciones">
                 <div className="mb-4">
