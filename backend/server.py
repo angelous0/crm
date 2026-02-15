@@ -965,6 +965,69 @@ async def get_cuenta_ventas_clasificacion_detail(
         return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
 
 
+@cuentas_router.get("/{cuenta_id}/ventas/clasificacion/orders")
+async def get_cuenta_ventas_clasificacion_orders(
+    cuenta_id: str,
+    marca: str = "",
+    tipo: str = "",
+    entalle: str = "",
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": [], "page": page, "limit": limit, "has_next": False}
+        params = [partner_ids]
+        extra = ""
+        if fecha_desde:
+            params.append(fecha_desde)
+            extra += f" AND m.fecha >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            extra += f" AND m.fecha <= ${len(params)}::text::timestamptz"
+        if marca:
+            params.append(marca)
+            extra += f" AND COALESCE(m.marca, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(m.marca, '') = ''"
+        if tipo:
+            params.append(tipo)
+            extra += f" AND COALESCE(m.tipo, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(m.tipo, '') = ''"
+        if entalle:
+            params.append(entalle)
+            extra += f" AND COALESCE(m.entalle, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(m.entalle, '') = ''"
+
+        offset = (page - 1) * limit
+        params.append(limit + 1)
+        params.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT m.order_id,
+                   po.name AS order_name,
+                   MAX(m.fecha) AS date_order,
+                   SUM(m.qty) AS qty_item,
+                   SUM(m.subtotal) AS ventas_item,
+                   COUNT(*) AS lines_count
+            FROM crm.v_comercial_mov_flat m
+            JOIN odoo.pos_order po ON po.odoo_id = m.order_id
+            WHERE m.doc_tipo = 'SALE'
+              AND m.partner_id = ANY($1)
+              {extra}
+            GROUP BY m.order_id, po.name
+            ORDER BY MAX(m.fecha) DESC
+            LIMIT ${len(params)-1} OFFSET ${len(params)}
+        """, *params))
+        has_next = len(rows) > limit
+        return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
+
 
 @cuentas_router.get("/{cuenta_id}/ventas/lines")
 async def get_cuenta_ventas_lines(
