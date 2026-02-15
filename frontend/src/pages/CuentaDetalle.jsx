@@ -135,6 +135,7 @@ export default function CuentaDetalle() {
   const [ventasPage, setVentasPage] = useState(1);
   const [ventasDocTipo, setVentasDocTipo] = useState("SALE");
   const [ventasLoading, setVentasLoading] = useState(false);
+  const [tabCounts, setTabCounts] = useState({ sale: null, reserva: null });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState({});
