@@ -32,11 +32,17 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 ### 6. Ventas Tab in Cuentas (DONE - Feb 2026)
 - **crm.cuenta_vinculo** table for manual partner linking
 - **crm.v_cuenta_partners** view combining: main partner + manual links + Odoo auto-links
-- Endpoint: GET /api/cuentas/{cuenta_id}/ventas with doc_tipo, pagination, total_rows
-- KPIs per cuenta: qty_total, orders, clientes_distintos
-- Tabs: Ventas + Reservas in cuenta detail with row counts in tab labels
+- Endpoint: GET /api/cuentas/{cuenta_id}/ventas/metrics (orders_count, lines_count, qty_total, date range)
+- Endpoint: GET /api/cuentas/{cuenta_id}/ventas (paginated line detail)
+- Tab labels: "Ventas (Ordenes: N)" + chip "Uds: N", same for Reservas
+- Metrics loaded on mount via lightweight /metrics calls, detail loaded on tab click
 - Debug info: partners_count, partner_ids
-- Tab counters loaded on mount via lightweight limit=1 calls
+
+### Key KPI Definitions
+- orders_count = COUNT(DISTINCT order_id) — primary counter
+- lines_count = COUNT(*) — informational only
+- qty_total = SUM(qty) — units
+- Ventas y Reservas module KPIs: Ordenes, Unidades, Clientes (no Subtotal)
 
 ## Key Views
 - `crm.v_comercial_mov_flat` - Unified SALE+RESERVA with owner mapping, modelo_display
