@@ -1,0 +1,85 @@
+{
+  "summary": "Product Catalog Filter Implementation Tested. Backend: 24/24 pytest tests pass (100%). All commercial endpoints correctly filter out 'unimportant' products. Filter excludes products where: product_id IS NULL, sale_ok != true, purchase_ok != false, or name matches patterns: correa, saco, bolsa, probador, paneton, publicitario. Orders with 0 remaining lines after filtering are excluded from results. Frontend: ComercialPage and CuentaDetalle pages load correctly but external Odoo database queries are very slow (41+ seconds).",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/comercial/orders", "issue": "Slow response time due to external Odoo database (41+ seconds)", "priority": "LOW - External DB issue, not code issue"}
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Backend: /api/comercial/orders requires authentication (401)",
+    "Backend: /api/comercial/orders returns orders with lines_count > 0 only (no empty orders)",
+    "Backend: /api/comercial/lines requires authentication (401)",
+    "Backend: /api/comercial/lines returns no excluded products (correa, saco, bolsa, probador, paneton, publicitario)",
+    "Backend: /api/comercial/lines returns positive metrics (orders_count > 0, qty_total > 0)",
+    "Backend: /api/cuentas/{id}/ventas/metrics requires authentication (401)",
+    "Backend: /api/cuentas/{id}/ventas/metrics returns filtered counts for account",
+    "Backend: /api/cuentas/{id}/ventas/orders requires authentication (401)",
+    "Backend: /api/cuentas/{id}/ventas/orders returns orders with lines_count > 0 only",
+    "Backend: /api/cuentas/{id}/ventas/clasificacion requires authentication (401)",
+    "Backend: /api/cuentas/{id}/ventas/clasificacion returns classification without excluded products",
+    "Backend: /api/cuentas/{id}/ventas/clasificacion/detail requires authentication (401)",
+    "Backend: /api/cuentas/{id}/ventas/clasificacion/detail returns line details without excluded products",
+    "Backend: /api/cuentas/{id}/ventas/lines requires authentication (401)",
+    "Backend: /api/cuentas/{id}/ventas/lines returns only filtered lines",
+    "Backend: /api/cuentas/{id}/ventas/lines with SALE doc_tipo returns filtered data",
+    "Backend: KPI consistency - orders_count matches between /orders and /lines endpoints",
+    "Backend: Cuenta orders all have positive lines_count",
+    "Backend: No 'correa' in commercial lines",
+    "Backend: No 'saco' in commercial lines (Camisaco is valid)",
+    "Backend: No 'bolsa' in commercial lines",
+    "Backend: No 'probador' in commercial lines",
+    "Backend: No 'paneton' in commercial lines",
+    "Backend: No 'publicitario' in commercial lines",
+    "Frontend: ComercialPage loads and navigates correctly",
+    "Frontend: CuentaDetalle page loads and displays Info Ventas tab",
+    "Frontend: Classification table shows 93 rows of filtered data",
+    "Frontend: No excluded product patterns in UI content"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_product_catalog_filter.py",
+    "/app/test_reports/pytest/pytest_product_catalog_filter.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "db.py v_comercial_mov_flat view (line ~859): Correctly applies catalog filter with INNER JOIN to product_template and filters sale_ok=true, purchase_ok=false, and NOT ILIKE patterns",
+    "db.py v_comercial_order_header view (line ~959): Aggregates qty_total and lines_count from filtered pos_order_line rows, ensuring orders with 0 valid lines are excluded",
+    "server.py _CATALOG_JOIN/_CATALOG_FILTER constants (line ~700): Reusable filter patterns applied to all cuenta-level ventas endpoints",
+    "routers/comercial.py reads from filtered views crm.v_comercial_order_header and crm.v_comercial_mov_flat correctly",
+    "'Camisaco' is NOT filtered because it's a valid clothing type (shirt-jacket), not 'saco' (bag)"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_product_catalog_filter.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (24/24 pytest tests pass)",
+    "frontend": "100% (pages load correctly, data displays filtered results)"
+  },
+
+  "test_credentials": {
+    "email": "admin@crm.com",
+    "password": "admin123",
+    "test_cuenta_id": 8
+  },
+
+  "seed_data_creation": "None - used existing PostgreSQL data from external Odoo database",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Product Catalog Filter verified. Filter logic in db.py views: v_comercial_mov_flat (line ~859) and v_comercial_order_header (line ~959). Filter criteria: product_id IS NOT NULL, sale_ok=true, purchase_ok=false, name NOT ILIKE patterns (correa, saco, bolsa, probador, paneton, publicitario). Account-level endpoints in server.py use _CATALOG_JOIN/_CATALOG_FILTER constants (line ~700). 'Camisaco' is NOT filtered (valid clothing type). Test file: /app/backend/tests/test_product_catalog_filter.py (24 tests). Note: External Odoo DB queries are slow (41+ seconds for /comercial/orders)."
+}
