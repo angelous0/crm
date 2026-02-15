@@ -1177,16 +1177,37 @@ export default function CuentaDetalle() {
                   onFechaDesdeChange={(v) => { setClasifFechaDesde(v); }}
                   onFechaHastaChange={(v) => { setClasifFechaHasta(v); }}
                   onApplyFilters={fetchClasificacion}
-                  onSelectItem={(item) => { setClasifSelected(item); fetchClasifDetail(item, 1); }}
+                  onSelectItem={(item) => {
+                    setClasifSelected(item);
+                    setClasifSelectedOrder(null);
+                    setClasifOrderLines({ items: [], has_next: false });
+                    fetchClasifOrders(item, 1);
+                  }}
                 />
                 {clasifSelected && (
                   <ClasifDetailDrawer
                     item={clasifSelected}
-                    data={clasifDetail}
-                    loading={clasifDetailLoading}
-                    page={clasifDetailPage}
-                    onPageChange={(pg) => fetchClasifDetail(clasifSelected, pg)}
-                    onClose={() => setClasifSelected(null)}
+                    ordersData={clasifOrders}
+                    ordersLoading={clasifOrdersLoading}
+                    ordersPage={clasifOrdersPage}
+                    onOrdersPageChange={(pg) => fetchClasifOrders(clasifSelected, pg)}
+                    selectedOrder={clasifSelectedOrder}
+                    orderLines={clasifOrderLines}
+                    orderLinesLoading={clasifOrderLinesLoading}
+                    orderLinesPage={clasifOrderLinesPage}
+                    onOrderLinesPageChange={(pg) => fetchClasifOrderLines(clasifSelectedOrder.order_id, pg)}
+                    onSelectOrder={(order) => {
+                      setClasifSelectedOrder(order);
+                      fetchClasifOrderLines(order.order_id, 1);
+                    }}
+                    onBackToOrders={() => {
+                      setClasifSelectedOrder(null);
+                      setClasifOrderLines({ items: [], has_next: false });
+                    }}
+                    onClose={() => {
+                      setClasifSelected(null);
+                      setClasifSelectedOrder(null);
+                    }}
                   />
                 )}
               </TabsContent>
