@@ -532,9 +532,13 @@ export default function CuentaDetalle() {
   const [clasifFechaDesde, setClasifFechaDesde] = useState("");
   const [clasifFechaHasta, setClasifFechaHasta] = useState("");
   const [clasifSelected, setClasifSelected] = useState(null);
-  const [clasifDetail, setClasifDetail] = useState({ rows: [], has_next: false });
-  const [clasifDetailPage, setClasifDetailPage] = useState(1);
-  const [clasifDetailLoading, setClasifDetailLoading] = useState(false);
+  const [clasifOrders, setClasifOrders] = useState({ rows: [], has_next: false });
+  const [clasifOrdersPage, setClasifOrdersPage] = useState(1);
+  const [clasifOrdersLoading, setClasifOrdersLoading] = useState(false);
+  const [clasifSelectedOrder, setClasifSelectedOrder] = useState(null);
+  const [clasifOrderLines, setClasifOrderLines] = useState({ items: [], has_next: false });
+  const [clasifOrderLinesPage, setClasifOrderLinesPage] = useState(1);
+  const [clasifOrderLinesLoading, setClasifOrderLinesLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
