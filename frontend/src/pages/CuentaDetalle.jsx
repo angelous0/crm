@@ -260,6 +260,20 @@ export default function CuentaDetalle() {
     if (!loading && cuenta) fetchVentas(1, ventasDocTipo);
   }, [loading, cuenta, ventasDocTipo]); // eslint-disable-line
 
+  // ── Fetch creditos for this cuenta ──
+  const fetchCreditos = useCallback(async (pg = 1) => {
+    setCreditosLoading(true);
+    try {
+      const r = await api.get(`/cuentas/${id}/creditos`, { params: { page: pg, limit: 50 } });
+      setCreditos(r.data || { items: [], has_next: false, debug: {} });
+      setCreditosPage(pg);
+    } catch {
+      toast.error("Error cargando creditos");
+    } finally {
+      setCreditosLoading(false);
+    }
+  }, [id]);
+
   // ── Vincular contacto logic ──
   const fetchUnlinked = useCallback(async (searchVal, pg, dni, tel) => {
     if (!searchVal || searchVal.length < 2) {
