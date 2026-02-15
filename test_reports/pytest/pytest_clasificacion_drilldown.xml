@@ -1,38 +1,26 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="16" time="120.859" timestamp="2026-02-15T15:59:51.684092+00:00" hostname="agent-env-1e6a8519-4d5e-4bbe-9b80-c077b8260d87"><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionBase" name="test_clasificacion_base_endpoint_works" time="35.161" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_requires_auth" time="0.158" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_returns_orders" time="2.214" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_row_structure" time="1.999" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_pagination" time="1.903" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_page_2" time="3.954" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_date_filters" time="1.425" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_empty_filters" time="1.125" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_requires_auth" time="0.121" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_returns_items" time="0.582" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_row_structure" time="0.447" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_pagination" time="0.462" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_nonexistent_order" time="0.434" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestDrilldownDataConsistency" name="test_orders_qty_sum_matches_classification" time="65.844"><failure message="assert 520 == 200&#10; +  where 520 = &lt;Response [520]&gt;.status_code">self = &lt;test_clasificacion_drilldown.TestDrilldownDataConsistency object at 0xfc7bbe67b8d0&gt;
-auth_header = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNTA0MTgwYy1hMmIzLTQ3MjMtOTJhNC0xZTRhYTZjMGVlOWIiLCJlbWFpbCI6ImFkbWluQGNybS5jb20iLCJleHAiOjE3NzEzNDQwMTl9.panDSDhA6WXv3KYlgqGvqCzOtCiakifoxasMZoWJVUM'}
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="16" time="90.612" timestamp="2026-02-15T16:05:09.794922+00:00" hostname="agent-env-1e6a8519-4d5e-4bbe-9b80-c077b8260d87"><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionBase" name="test_clasificacion_base_endpoint_works" time="6.166" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_requires_auth" time="0.123" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_returns_orders" time="1.919" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_row_structure" time="1.829" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_pagination" time="1.994" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_page_2" time="62.077"><failure message="assert 520 == 200&#10; +  where 520 = &lt;Response [520]&gt;.status_code">self = &lt;test_clasificacion_drilldown.TestClasificacionOrdersEndpoint object at 0xfe4c5ea11850&gt;
+auth_header = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNTA0MTgwYy1hMmIzLTQ3MjMtOTJhNC0xZTRhYTZjMGVlOWIiLCJlbWFpbCI6ImFkbWluQGNybS5jb20iLCJleHAiOjE3NzEzNDQzMTB9.OsbXiIw-ELafYzFzTeEjyqWsiUhjCBodtBpe5So57rQ'}
 
-    def test_orders_qty_sum_matches_classification(self, auth_header):
-        """Sum of qty_item in orders should match cantidad in classification"""
-        # Get classification row
-        clasif_response = requests.get(
-            f"{BASE_URL}/api/cuentas/{TEST_CUENTA_ID}/ventas/clasificacion",
-            headers=auth_header,
-            timeout=120
-        )
-        assert clasif_response.status_code == 200
-        clasif_data = clasif_response.json()
-    
-        # Find target classification
-        target_clasif = None
-        for row in clasif_data["rows"]:
-            if (row.get("marca") == TEST_MARCA and
-                row.get("tipo") == TEST_TIPO and
-                row.get("entalle") == TEST_ENTALLE):
-                target_clasif = row
-                break
-    
-        if target_clasif is None:
-            pytest.skip(f"Classification {TEST_MARCA}/{TEST_TIPO}/{TEST_ENTALLE} not found in cuenta {TEST_CUENTA_ID}")
-    
-        # Get all orders for this classification (use reasonable limit to avoid timeout)
-        orders_response = requests.get(
+    def test_clasificacion_orders_page_2(self, auth_header):
+        """Page 2 should have different orders"""
+        response1 = requests.get(
             f"{BASE_URL}/api/cuentas/{TEST_CUENTA_ID}/ventas/clasificacion/orders",
             headers=auth_header,
-            params={"marca": TEST_MARCA, "tipo": TEST_TIPO, "entalle": TEST_ENTALLE, "limit": 100},
+            params={"marca": TEST_MARCA, "tipo": TEST_TIPO, "entalle": TEST_ENTALLE, "page": 1, "limit": 3},
             timeout=120
         )
-&gt;       assert orders_response.status_code == 200
-E       assert 520 == 200
-E        +  where 520 = &lt;Response [520]&gt;.status_code
+        assert response1.status_code == 200
+        data1 = response1.json()
+    
+        if data1.get("has_next", False):
+            response2 = requests.get(
+                f"{BASE_URL}/api/cuentas/{TEST_CUENTA_ID}/ventas/clasificacion/orders",
+                headers=auth_header,
+                params={"marca": TEST_MARCA, "tipo": TEST_TIPO, "entalle": TEST_ENTALLE, "page": 2, "limit": 3},
+                timeout=120
+            )
+&gt;           assert response2.status_code == 200
+E           assert 520 == 200
+E            +  where 520 = &lt;Response [520]&gt;.status_code
 
-backend/tests/test_clasificacion_drilldown.py:329: AssertionError</failure></testcase><testcase classname="backend.tests.test_clasificacion_drilldown.TestDrilldownDataConsistency" name="test_order_lines_exist_for_orders" time="4.430" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestKnownOrderLines" name="test_known_order_has_lines" time="0.496" /></testsuite></testsuites>
+backend/tests/test_clasificacion_drilldown.py:176: AssertionError</failure></testcase><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_date_filters" time="2.010" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestClasificacionOrdersEndpoint" name="test_clasificacion_orders_empty_filters" time="1.229" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_requires_auth" time="0.120" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_returns_items" time="0.610" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_row_structure" time="0.488" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_pagination" time="0.476" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestOrderLinesEndpoint" name="test_order_lines_nonexistent_order" time="0.459" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestDrilldownDataConsistency" name="test_orders_qty_sum_matches_classification" time="7.803" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestDrilldownDataConsistency" name="test_order_lines_exist_for_orders" time="2.700" /><testcase classname="backend.tests.test_clasificacion_drilldown.TestKnownOrderLines" name="test_known_order_has_lines" time="0.499" /></testsuite></testsuites>
