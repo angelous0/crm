@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { OrderLinesDrawer, InvoiceLinesDrawer } from "@/components/DetailDrawers";
 import {
   ArrowLeft, Save, Loader2, Phone, Mail, MapPin,
   MessageSquare, PhoneCall, Footprints, StickyNote, Plus,
