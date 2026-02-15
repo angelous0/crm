@@ -482,6 +482,42 @@ export default function CuentaDetalle() {
     }
   }, [id]);
 
+  // ── Fetch clasificacion (Info Ventas) ──
+  const fetchClasificacion = useCallback(async () => {
+    setClasifLoading(true);
+    try {
+      const params = { top: 200 };
+      if (clasifFechaDesde) params.fecha_desde = clasifFechaDesde;
+      if (clasifFechaHasta) params.fecha_hasta = clasifFechaHasta;
+      const r = await api.get(`/cuentas/${id}/ventas/clasificacion`, { params });
+      setClasifData(r.data || { rows: [] });
+    } catch {
+      toast.error("Error cargando clasificacion");
+    } finally {
+      setClasifLoading(false);
+    }
+  }, [id, clasifFechaDesde, clasifFechaHasta]);
+
+  // ── Fetch clasificacion drilldown detail ──
+  const fetchClasifDetail = useCallback(async (item, pg = 1) => {
+    setClasifDetailLoading(true);
+    try {
+      const params = {
+        marca: item.marca || "", tipo: item.tipo || "", entalle: item.entalle || "",
+        page: pg, limit: 50
+      };
+      if (clasifFechaDesde) params.fecha_desde = clasifFechaDesde;
+      if (clasifFechaHasta) params.fecha_hasta = clasifFechaHasta;
+      const r = await api.get(`/cuentas/${id}/ventas/clasificacion/detail`, { params });
+      setClasifDetail(r.data || { rows: [], has_next: false });
+      setClasifDetailPage(pg);
+    } catch {
+      toast.error("Error cargando detalle");
+    } finally {
+      setClasifDetailLoading(false);
+    }
+  }, [id, clasifFechaDesde, clasifFechaHasta]);
+
   // ── Vincular contacto logic ──
   const fetchUnlinked = useCallback(async (searchVal, pg, dni, tel) => {
     if (!searchVal || searchVal.length < 2) {
