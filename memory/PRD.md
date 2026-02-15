@@ -29,31 +29,30 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 ### 5. CRM Module (DONE)
 - Cuentas, Contactos, Interacciones, Tareas, Agenda
 
-### 6. Ventas Tab in Cuentas (DONE - Feb 2026)
-- **crm.cuenta_vinculo** table for manual partner linking
-- **crm.v_cuenta_partners** view combining: main partner + manual links + Odoo auto-links
-- Endpoint: GET /api/cuentas/{cuenta_id}/ventas/metrics (orders_count, lines_count, qty_total, date range)
-- Endpoint: GET /api/cuentas/{cuenta_id}/ventas (paginated line detail)
-- Tab labels: "Ventas (Ordenes: N)" + chip "Uds: N", same for Reservas
-- Metrics loaded on mount via lightweight /metrics calls, detail loaded on tab click
-- Debug info: partners_count, partner_ids
+### 6. Ventas/Reservas/Creditos - "Power BI feel" (DONE - Feb 2026)
+**Architecture:**
+- Header views: `crm.v_comercial_order_header` (1 row per POS order), `crm.v_credito_invoice_header` (1 row per invoice)
+- Line views: `crm.v_comercial_mov_flat` (POS lines), `crm.v_credito_flat` (invoice lines)
+- Per-cuenta endpoints use direct queries (not views) for performance
 
-### Key KPI Definitions
-- orders_count = COUNT(DISTINCT order_id) — primary counter
-- lines_count = COUNT(*) — informational only
-- qty_total = SUM(qty) — units
-- Ventas y Reservas module KPIs: Ordenes, Unidades, Clientes (no Subtotal)
+**Global pages:**
+- /comercial: Order headers table + KPIs (Ordenes, Unidades, Clientes) + Drawer for lines
+- /creditos: Invoice headers table + KPIs (Facturas, Unidades, Saldo, Clientes) + Drawer for lines
+- Click any row -> Drawer opens on right with on-demand line detail
 
-### 7. Creditos Module (DONE - Feb 2026)
-- **crm.v_credito_flat** view: invoice credit lines joined with cuenta partners + products
-  - Deduped via DISTINCT ON (partner_id) to avoid multiplied rows
-  - Includes: invoice_id, number, date, state, partner, amount_total/residual, product info (marca, tipo, entalle, tela, hilo, talla, color)
-- **Cuenta tab**: "Creditos (Facturas: N)" with chips "Uds: N" and "Saldo: S/ N"
-  - Endpoints: GET /api/cuentas/{id}/creditos/metrics + GET /api/cuentas/{id}/creditos
-- **Global page**: /creditos with filterable KPIs + paginated detail table
-  - Endpoints: GET /api/creditos/metrics + GET /api/creditos + GET /api/creditos/filter-options
-  - Filters: fecha, state, marca, tipo, entalle, tela, hilo, modelo, cliente, solo_con_saldo
-  - Click on client name navigates to cuenta detail
+**Cuenta detail tabs:**
+- Ventas: Order headers (doc_tipo=SALE) + click -> drawer
+- Reservas: Order headers (doc_tipo=RESERVA) + click -> drawer
+- Creditos: Invoice headers + click -> drawer
+- Tab labels: "Ventas (Ordenes: N)" chip "Uds: N", "Creditos (Facturas: N)" chip "Uds: N" + "Saldo: S/ N"
+
+**Endpoints:**
+- GET /api/comercial/orders (global headers)
+- GET /api/comercial/orders/{order_id}/lines (on-demand detail)
+- GET /api/creditos/invoices (global headers)
+- GET /api/creditos/invoices/{invoice_id}/lines (on-demand detail)
+- GET /api/cuentas/{id}/ventas/metrics, /ventas/orders (per-cuenta, direct SQL)
+- GET /api/cuentas/{id}/creditos/metrics, /creditos/invoices (per-cuenta, direct SQL)
 
 ## Key Views
 - `crm.v_comercial_mov_flat` - Unified SALE+RESERVA with owner mapping, modelo_display
