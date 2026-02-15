@@ -915,8 +915,10 @@ async def _create_views(conn):
                 FROM odoo.account_invoice_credit ic
                 JOIN odoo.account_invoice_credit_line il
                     ON il.invoice_id = ic.odoo_id
-                LEFT JOIN crm.v_cuenta_partners vcp
-                    ON ic.partner_id = vcp.partner_id
+                LEFT JOIN (
+                    SELECT DISTINCT ON (partner_id) partner_id, cuenta_id
+                    FROM crm.v_cuenta_partners ORDER BY partner_id
+                ) vcp ON ic.partner_id = vcp.partner_id
                 LEFT JOIN odoo.res_partner rp
                     ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
                 LEFT JOIN odoo.v_product_variant_flat vv
