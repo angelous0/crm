@@ -249,10 +249,10 @@ export default function CuentaDetalle() {
   const fetchVentas = useCallback(async (pg = 1, docTipo = ventasDocTipo) => {
     setVentasLoading(true);
     try {
-      const r = await api.get(`/cuentas/${id}/ventas`, {
+      const r = await api.get(`/cuentas/${id}/ventas/orders`, {
         params: { doc_tipo: docTipo, page: pg, limit: 50 }
       });
-      setVentas(r.data || { items: [], has_next: false, debug: {} });
+      setVentas(r.data || { metrics: {}, rows: [], has_next: false });
       setVentasPage(pg);
     } catch {
       toast.error("Error cargando ventas");
@@ -265,12 +265,12 @@ export default function CuentaDetalle() {
     if (!loading && cuenta) fetchVentas(1, ventasDocTipo);
   }, [loading, cuenta, ventasDocTipo]); // eslint-disable-line
 
-  // ── Fetch creditos for this cuenta ──
+  // ── Fetch creditos invoices for this cuenta ──
   const fetchCreditos = useCallback(async (pg = 1) => {
     setCreditosLoading(true);
     try {
-      const r = await api.get(`/cuentas/${id}/creditos`, { params: { page: pg, limit: 50 } });
-      setCreditos(r.data || { items: [], has_next: false, debug: {} });
+      const r = await api.get(`/cuentas/${id}/creditos/invoices`, { params: { page: pg, limit: 50 } });
+      setCreditos(r.data || { metrics: {}, rows: [], has_next: false });
       setCreditosPage(pg);
     } catch {
       toast.error("Error cargando creditos");
