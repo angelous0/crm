@@ -258,7 +258,7 @@ export default function CuentaDetalle() {
       const r = await api.get(`/cuentas/${id}/ventas`, {
         params: { doc_tipo: docTipo, page: pg, limit: 50 }
       });
-      setVentas(r.data || { items: [], kpis: {}, has_next: false, debug: {} });
+      setVentas(r.data || { items: [], has_next: false, debug: {} });
       setVentasPage(pg);
     } catch {
       toast.error("Error cargando ventas");
