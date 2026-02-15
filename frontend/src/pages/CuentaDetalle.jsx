@@ -329,67 +329,138 @@ function ClasificacionTab({ data, loading, fechaDesde, fechaHasta, onFechaDesdeC
   );
 }
 
-/* ── Clasificacion Detail Drawer ── */
-function ClasifDetailDrawer({ item, data, loading, page, onPageChange, onClose }) {
-  const rows = data?.rows || [];
-  const hasNext = data?.has_next || false;
+/* ── Clasificacion Detail Drawer (2-level: Orders → Lines) ── */
+function ClasifDetailDrawer({ item, ordersData, ordersLoading, ordersPage, onOrdersPageChange,
+                              selectedOrder, orderLines, orderLinesLoading, orderLinesPage, onOrderLinesPageChange,
+                              onSelectOrder, onBackToOrders, onClose }) {
   const title = [item.marca, item.tipo, item.entalle].filter(Boolean).join(" / ") || "Sin clasificacion";
+  const showingLines = !!selectedOrder;
 
   return (
     <div className="fixed inset-0 z-50 flex" data-testid="clasif-detail-drawer">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="ml-auto w-full max-w-2xl bg-white shadow-2xl flex flex-col relative z-10 animate-in slide-in-from-right">
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-slate-800 text-white shrink-0">
-          <div>
-            <h3 className="text-sm font-bold">{title}</h3>
-            <p className="text-[10px] text-slate-300">
-              {fmtNum(item.cantidad)} uds | {fmtMoney(item.ventas)} | {fmtNum(item.compras)} ordenes
-            </p>
+        {/* Header with breadcrumb */}
+        <div className="px-4 py-3 border-b bg-slate-800 text-white shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              {showingLines && (
+                <button onClick={onBackToOrders} className="text-slate-300 hover:text-white shrink-0" data-testid="clasif-back-to-orders">
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold truncate">{title}</h3>
+                <div className="flex items-center gap-1 text-[10px] text-slate-300">
+                  <span className={showingLines ? "cursor-pointer hover:text-white underline" : ""}
+                    onClick={showingLines ? onBackToOrders : undefined}>Ordenes</span>
+                  {showingLines && (
+                    <>
+                      <ChevronRight size={10} />
+                      <span className="text-white font-medium truncate">{selectedOrder.order_name || `#${selectedOrder.order_id}`}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-slate-300 hover:text-white shrink-0" data-testid="close-clasif-drawer"><X size={18} /></button>
           </div>
-          <button onClick={onClose} className="text-slate-300 hover:text-white" data-testid="close-clasif-drawer"><X size={18} /></button>
-        </div>
-        <div className="flex-1 overflow-auto min-h-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
-          ) : (
-            <table className="w-full text-[10px] border-collapse">
-              <thead className="sticky top-0 bg-slate-100 z-10">
-                <tr>
-                  <th className="text-left px-2 py-1.5 font-semibold">Fecha</th>
-                  <th className="text-left px-2 py-1.5 font-semibold">Orden</th>
-                  <th className="text-left px-2 py-1.5 font-semibold">Modelo</th>
-                  <th className="text-left px-2 py-1.5 font-semibold">Talla</th>
-                  <th className="text-left px-2 py-1.5 font-semibold">Color</th>
-                  <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
-                  <th className="text-right px-2 py-1.5 font-semibold">P.Unit</th>
-                  <th className="text-right px-2 py-1.5 font-semibold">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-8 text-slate-400">Sin lineas</td></tr>
-                ) : rows.map((r, i) => (
-                  <tr key={`${r.order_id}-${r.line_id}`} className={`${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50/50`}>
-                    <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.fecha)}</td>
-                    <td className="px-2 py-1 font-mono text-slate-500 text-[9px]">{r.order_name || r.order_id}</td>
-                    <td className="px-2 py-1 truncate max-w-[120px]">{r.modelo_display || "-"}</td>
-                    <td className="px-2 py-1">{r.talla || "-"}</td>
-                    <td className="px-2 py-1">{r.color || "-"}</td>
-                    <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty)}</td>
-                    <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.price_unit)}</td>
-                    <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.subtotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {showingLines && (
+            <div className="mt-1 text-[10px] text-slate-400">
+              {fmtDate(selectedOrder.date_order)} | {fmtNum(selectedOrder.qty_item)} uds | {fmtMoney(selectedOrder.ventas_item)}
+            </div>
           )}
         </div>
-        {(page > 1 || hasNext) && (
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto min-h-0">
+          {!showingLines ? (
+            /* Level 1: Orders */
+            ordersLoading ? (
+              <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+            ) : (
+              <table className="w-full text-[11px] border-collapse">
+                <thead className="sticky top-0 bg-slate-100 z-10">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold">Fecha</th>
+                    <th className="text-left px-3 py-2 font-semibold">Orden</th>
+                    <th className="text-right px-3 py-2 font-semibold">Lineas</th>
+                    <th className="text-right px-3 py-2 font-semibold">Qty</th>
+                    <th className="text-right px-3 py-2 font-semibold">Ventas (S/)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(ordersData?.rows || []).length === 0 ? (
+                    <tr><td colSpan={5} className="text-center py-8 text-slate-400">Sin ordenes</td></tr>
+                  ) : (ordersData.rows).map((r, i) => (
+                    <tr key={r.order_id}
+                      className={`cursor-pointer ${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50 transition-colors`}
+                      onClick={() => onSelectOrder(r)} data-testid={`clasif-order-row-${i}`}>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(r.date_order)}</td>
+                      <td className="px-3 py-1.5 font-mono text-[10px]">{r.order_name || r.order_id}</td>
+                      <td className="px-3 py-1.5 text-right font-mono">{fmtNum(r.lines_count)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono font-semibold">{fmtNum(r.qty_item)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-emerald-700 font-semibold">{fmtMoney(r.ventas_item)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : (
+            /* Level 2: Order Lines */
+            orderLinesLoading ? (
+              <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+            ) : (
+              <table className="w-full text-[10px] border-collapse">
+                <thead className="sticky top-0 bg-slate-100 z-10">
+                  <tr>
+                    <th className="text-left px-2 py-1.5 font-semibold">Modelo</th>
+                    <th className="text-left px-2 py-1.5 font-semibold">Talla</th>
+                    <th className="text-left px-2 py-1.5 font-semibold">Color</th>
+                    <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
+                    <th className="text-right px-2 py-1.5 font-semibold">P.Unit</th>
+                    <th className="text-right px-2 py-1.5 font-semibold">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(orderLines?.items || []).length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-8 text-slate-400">Sin lineas</td></tr>
+                  ) : (orderLines.items).map((r, i) => (
+                    <tr key={`${r.order_id}-${r.line_id}`} className={`${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50/50`}>
+                      <td className="px-2 py-1 truncate max-w-[140px]">{r.modelo_display || "-"}</td>
+                      <td className="px-2 py-1">{r.talla || "-"}</td>
+                      <td className="px-2 py-1">{r.color || "-"}</td>
+                      <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty)}</td>
+                      <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.price_unit)}</td>
+                      <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.subtotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+        </div>
+
+        {/* Pagination */}
+        {!showingLines && (ordersPage > 1 || (ordersData?.has_next)) && (
           <div className="flex items-center justify-between px-3 py-2 border-t text-[10px] text-slate-500 shrink-0">
-            <span>Pagina {page}</span>
+            <span>Pagina {ordersPage}</span>
             <div className="flex gap-1">
-              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="clasif-detail-prev"><ChevronLeft size={12} /></button>
-              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="clasif-detail-next"><ChevronRight size={12} /></button>
+              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={ordersPage <= 1}
+                onClick={() => onOrdersPageChange(ordersPage - 1)} data-testid="clasif-orders-prev"><ChevronLeft size={12} /></button>
+              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={!ordersData?.has_next}
+                onClick={() => onOrdersPageChange(ordersPage + 1)} data-testid="clasif-orders-next"><ChevronRight size={12} /></button>
+            </div>
+          </div>
+        )}
+        {showingLines && (orderLinesPage > 1 || (orderLines?.has_next)) && (
+          <div className="flex items-center justify-between px-3 py-2 border-t text-[10px] text-slate-500 shrink-0">
+            <span>Pagina {orderLinesPage}</span>
+            <div className="flex gap-1">
+              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={orderLinesPage <= 1}
+                onClick={() => onOrderLinesPageChange(orderLinesPage - 1)} data-testid="clasif-lines-prev"><ChevronLeft size={12} /></button>
+              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={!orderLines?.has_next}
+                onClick={() => onOrderLinesPageChange(orderLinesPage + 1)} data-testid="clasif-lines-next"><ChevronRight size={12} /></button>
             </div>
           </div>
         )}
