@@ -717,9 +717,15 @@ export default function CuentaDetalle() {
                 if (detailMode) fetchCreditosLines(1);
                 else fetchCreditos(1);
               }
+              if (v === "info_ventas") {
+                fetchClasificacion();
+              }
             }}>
-              <TabsList className="mb-4" data-testid="cuenta-tabs">
+              <TabsList className="mb-4 flex-wrap" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
+                <TabsTrigger value="info_ventas" data-testid="tab-info-ventas">
+                  <BarChart3 size={14} className="mr-1" />Info Ventas
+                </TabsTrigger>
                 <TabsTrigger value="ventas" data-testid="tab-ventas">
                   Ventas{metrics.sale ? ` (Ordenes: ${fmtNum(metrics.sale.orders_count)})` : ""}
                   {metrics.sale && metrics.sale.qty_total > 0 && (
