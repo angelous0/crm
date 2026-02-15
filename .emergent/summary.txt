@@ -1,477 +1,88 @@
 <analysis>**original_problem_statement:**
-The user's initial goal was to build a Stock Dashboard with a Power BI Feel. This has expanded to include:
-1.  A Balance de Tallas report.
-2.  A refactored Reposición (Replenishment) module.
-3.  **New in this session:** A Ventas y Reservas (Sales and Reservations) module to bring in and display sales and reservation data linked to products and customers, with extensive filtering capabilities. The backend should handle all aggregations for performance.
-4.  **New in this session:** An Owner/Account Linking feature, where sales from multiple individual contacts () are grouped under a single main account (). All reports must filter and aggregate by this main account.
-5.  **BUG:** The user is now reporting an error when trying to access the newly created Ventas y Reservas page.
+The user's initial problem was a critical error preventing access to the Ventas y Reservas page. However, upon starting, the user provided a large set of new requirements and changes for both the Ventas y Reservas module and the Cuentas (Accounts) module.
+
+**PRODUCT REQUIREMENTS:**
+1.  **Ventas y Reservas Overhaul:**
+    *   Add new filters (Tienda - *deferred*, Doc Tipo, Cliente by owner, Modelo) with cascading logic for product attributes.
+    *   Remove the Subtotal KPI and related columns.
+    *   Update KPIs to show: Cantidad total, Órdenes, Clientes.
+    *   Modify Top 10 Productos to group by a combination of attributes (Marca, Tipo, Entalle, Tela, Hilo) instead of by individual model.
+    *   Improve data quality by excluding sales lines with null products and using a  field to show IDs/barcode for products with no name.
+    *   Add a toggle to exclude Clientes Varios from Top 10 lists.
+2.  **Cuentas (Accounts) Module Fix & Enhancement:**
+    *   Fix the Ventas tab within an Account's detail page, which incorrectly showed 0 sales.
+    *   Implement a robust system for linking multiple Odoo contacts () to a single main Account.
+    *   Ensure that sales are rolled up from all linked contacts, including those related via Odoo's  and .
+    *   Display the correctly aggregated sales and reservations in paginated tables within the Account detail view.
+3.  **Bug Fixes:**
+    *   Address a regression where the  database view would disappear on server restarts, causing the Ventas y Reservas page to fail.
 
 **User's preferred language**: Spanish
 
 **what currently exists?**
-A full-stack application with a React/Shadcn frontend and a FastAPI/PostgreSQL backend. It features:
-- An interactive stock dashboard and a replenishment module.
-- A Balance de Tallas report.
-- A new Ventas y Reservas page accessible from the sidebar. This page includes tabs for Sales and Reservations, KPIs, filter options, and a paginated detail table. It implements an account linking logic where transactions are grouped by a main owner account.
-- The backend includes performance optimizations like parallel queries and cursor-based pagination.
+A full-stack application with a React/Shadcn frontend and a FastAPI/PostgreSQL backend.
+- The Ventas y Reservas module is now functional and incorporates all user-requested changes: new filters, updated KPIs, a custom aggregated Top 10 Productos chart, and improved data display logic.
+- The Cuentas (Accounts) module has been fixed. The Ventas and Reservas tabs within an account's detail page now correctly fetch and display all sales data rolled up from the main contact and any linked child/commercial contacts.
+- The database schema has been updated with a  table and several views (, ) to support the account linking logic.
+- The database view creation scripts have been made more robust using  to prevent recurrence of the view-disappearing bug.
 
 **Last working item**:
--   Last item agent was working: The user reported a new critical bug: me sale error al entrar ventas y reservas (I get an error when entering sales and reservations). The agent acknowledged the issue and was about to begin the investigation.
+-   Last item agent was working: The agent just finished implementing the user's final request: updating the  view to include the product  in the  field when a product's name is missing.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? The agent must first reproduce the issue. A combination of checking backend logs (==> /var/log/supervisor/backend.err.log <==
-               ^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/backend/routers/comercial.py", line 116, in comercial_summary
-    kpi, top_p, top_c = await asyncio.gather(_kpis(), _top_prod(), _top_cli())
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/backend/routers/comercial.py", line 107, in _top_cli
-    return records_to_list(await conn.fetch(f"""
-                           ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
-    return await self._execute(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1873, in _execute
-    result, _ = await self.__execute(
-                ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1970, in __execute
-    result, stmt = await self._do_execute(
-                   ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 2021, in _do_execute
-    stmt = await self._get_statement(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 443, in _get_statement
-    statement = await self._protocol.prepare(
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
-ERROR:    Exception in ASGI application
-Traceback (most recent call last):
-  File "/root/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 408, in run_asgi
-    result = await app(  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/applications.py", line 1054, in __call__
-    await super().__call__(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/applications.py", line 123, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    raise exc
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    await self.app(scope, receive, _send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/cors.py", line 85, in __call__
-    await self.app(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 65, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
-    raise exc
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    await app(scope, receive, sender)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 756, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 776, in app
-    await route.handle(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 297, in handle
-    await self.app(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 77, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
-    raise exc
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    await app(scope, receive, sender)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 72, in app
-    response = await func(request)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/backend/routers/comercial.py", line 194, in comercial_detail
-    rows = records_to_list(await conn.fetch(f"""
-                           ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
-    return await self._execute(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1873, in _execute
-    result, _ = await self.__execute(
-                ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1970, in __execute
-    result, stmt = await self._do_execute(
-                   ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 2021, in _do_execute
-    stmt = await self._get_statement(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 443, in _get_statement
-    statement = await self._protocol.prepare(
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
-INFO:     Will watch for changes in these directories: ['/app/backend']
-INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-INFO:     Started reloader process [42] using WatchFiles
-INFO:     Started server process [90]
-INFO:     Waiting for application startup.
-
-==> /var/log/supervisor/backend.out.log <==
-INFO:     10.64.132.108:56388 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=100 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:35632 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:48418 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:48418 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=10&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=20&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:48418 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=50&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:47060 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIENTES HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46558 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5&cliente=ANGELINO HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57268 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57268 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=3 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:47838 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:53840 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
-INFO:     10.64.129.70:47838 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.108:34062 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:38168 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46560 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIEN HTTP/1.1" 200 OK
-INFO:     10.64.132.134:41568 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:41568 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:58640 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33838 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33848 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:58640 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58798 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58798 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.108:45462 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.108:45472 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:60004 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:45462 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:50326 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:50172 - "GET /api/comercial/filter-options?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:60140 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:60148 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
-INFO:     10.64.132.134:34976 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
-INFO:     10.64.132.134:34984 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
-INFO:     10.64.132.134:34988 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=a&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=an&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=ang&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=ange&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angel&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=angelito+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelito+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57178 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51360 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51368 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelito&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelit&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:53022 - "GET /api/cuentas?search=angelino+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelino+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas/948/ventas HTTP/1.1" 200 OK
-INFO:     10.64.129.70:47874 - "GET /api/cuentas/948/contactos HTTP/1.1" 200 OK
-INFO:     10.64.129.70:47886 - "GET /api/cuentas/948/tareas HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38772 - "GET /api/cuentas/948/interacciones HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas/948 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:50160 - "GET /api/ventas?page=1&limit=100&excluir_canceladas=true HTTP/1.1" 200 OK
-INFO:     10.64.132.108:41250 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:49016 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:52158 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:54218 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.129.70:54218 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:52442 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.134:52442 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.133.74:59432 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:59444 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:59454 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:39918 - "GET /api/stock-balance/matrix?limit=300&page=1 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:49016 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:39918 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:36080 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.132.134:38276 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
-INFO:     10.64.133.74:36086 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
-INFO:     10.64.132.108:49022 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38284 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
-INFO:     10.64.133.74:36094 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
-INFO:     10.64.133.74:36094 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.132.108:49022 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.132.134:38284 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:36086 - "GET /api/contactos?search=&page=1&limit=50&solo_dni=false&solo_telefono=false HTTP/1.1" 200 OK) and using the  tool with the  flag on the  page is the recommended first step to capture any backend or frontend console errors.
+-   Which testing method agent to use? The agent should test the backend and frontend.
+    1.  **Backend:** Use  on the  endpoint and  for  to verify that the new  format (including ) appears in the response.
+    2.  **Frontend:** Use the  tool on the  page to visually confirm the updated display in the details table for products without a name.
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1 (P0): Error loading Ventas y Reservas page.** The user is reporting an error immediately after the feature was delivered. This is a critical regression blocking the new functionality.
--   **Issue 2 (P2): Automated Login Test Failure.** The testing agent's initial login test script consistently fails.
+-   **Issue 1 (P0): Verify final  change.** The last code change to include the barcode in the display for products without a name needs to be tested and confirmed.
+-   **Issue 2 (P2): Automated Login Test Failure.** The testing agent's initial login test script consistently fails. This is a low-priority technical debt item carried over from previous sessions.
 
 **Issues Detail:**
--   **Issue 1: Error loading Ventas y Reservas page**
-    -   Attempted fixes: None yet. Investigation just started.
+-   **Issue 1: Verify final  change**
+    -   Attempted fixes: The code has been written in .
     -   Next debug checklist:
-        1.  **Backend Logs:** Examine backend logs for errors that occurred when the user tried to access the page: ==> /var/log/supervisor/backend.err.log <==
-               ^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/backend/routers/comercial.py", line 116, in comercial_summary
-    kpi, top_p, top_c = await asyncio.gather(_kpis(), _top_prod(), _top_cli())
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/backend/routers/comercial.py", line 107, in _top_cli
-    return records_to_list(await conn.fetch(f"""
-                           ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
-    return await self._execute(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1873, in _execute
-    result, _ = await self.__execute(
-                ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1970, in __execute
-    result, stmt = await self._do_execute(
-                   ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 2021, in _do_execute
-    stmt = await self._get_statement(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 443, in _get_statement
-    statement = await self._protocol.prepare(
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
-ERROR:    Exception in ASGI application
-Traceback (most recent call last):
-  File "/root/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 408, in run_asgi
-    result = await app(  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/applications.py", line 1054, in __call__
-    await super().__call__(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/applications.py", line 123, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    raise exc
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    await self.app(scope, receive, _send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/cors.py", line 85, in __call__
-    await self.app(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 65, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
-    raise exc
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    await app(scope, receive, sender)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 756, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 776, in app
-    await route.handle(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 297, in handle
-    await self.app(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 77, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 64, in wrapped_app
-    raise exc
-  File "/root/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    await app(scope, receive, sender)
-  File "/root/.venv/lib/python3.11/site-packages/starlette/routing.py", line 72, in app
-    response = await func(request)
-               ^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 278, in app
-    raw_response = await run_endpoint_function(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 191, in run_endpoint_function
-    return await dependant.call(**values)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/backend/routers/comercial.py", line 194, in comercial_detail
-    rows = records_to_list(await conn.fetch(f"""
-                           ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 694, in fetch
-    return await self._execute(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1873, in _execute
-    result, _ = await self.__execute(
-                ^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 1970, in __execute
-    result, stmt = await self._do_execute(
-                   ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 2021, in _do_execute
-    stmt = await self._get_statement(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/root/.venv/lib/python3.11/site-packages/asyncpg/connection.py", line 443, in _get_statement
-    statement = await self._protocol.prepare(
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
-asyncpg.exceptions.UndefinedTableError: relation "crm.v_comercial_mov_flat" does not exist
-INFO:     Will watch for changes in these directories: ['/app/backend']
-INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-INFO:     Started reloader process [42] using WatchFiles
-INFO:     Started server process [90]
-INFO:     Waiting for application startup.
-
-==> /var/log/supervisor/backend.out.log <==
-INFO:     10.64.132.108:56388 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=100 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:35632 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:48418 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:48418 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=10&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:37748 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=20&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:48418 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=50&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:47060 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIENTES HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46558 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5&cliente=ANGELINO HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57268 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:57268 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=3 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:47838 - "GET /api/comercial/summary HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.134:53840 - "GET /api/comercial/detail HTTP/1.1" 401 Unauthorized
-INFO:     10.64.129.70:47838 - "GET /api/comercial/filter-options HTTP/1.1" 401 Unauthorized
-INFO:     10.64.132.108:34062 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.133.74:38168 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46560 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:46422 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:46560 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&cliente=CLIEN HTTP/1.1" 200 OK
-INFO:     10.64.132.134:41568 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:41568 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-01&fecha_hasta=2026-02-13&page=1&limit=5 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:58640 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33838 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33838 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:33848 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:58640 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58798 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.129.70:60004 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:58798 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.108:45462 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.108:45472 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:60004 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:45462 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:50326 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.129.70:50172 - "GET /api/comercial/filter-options?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:60140 - "GET /api/comercial/summary?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:60148 - "GET /api/comercial/detail?doc_tipo=RESERVA&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
-INFO:     10.64.132.134:34976 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
-INFO:     10.64.132.134:34984 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
-INFO:     10.64.132.134:34988 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=a&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=an&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=ang&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=ange&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angel&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51340 - "GET /api/cuentas?search=angelito+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelito+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57178 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51360 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51368 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelito+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelito&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelit&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas?search=angeli&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51356 - "GET /api/cuentas?search=angelino&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:51324 - "GET /api/cuentas?search=angelin&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas?search=angelino+&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:53022 - "GET /api/cuentas?search=angelino+m&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38772 - "GET /api/cuentas?search=angelino+mo&estado=&clasificacion=&page=1&limit=50 HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57164 - "GET /api/cuentas/948/ventas HTTP/1.1" 200 OK
-INFO:     10.64.129.70:47874 - "GET /api/cuentas/948/contactos HTTP/1.1" 200 OK
-INFO:     10.64.129.70:47886 - "GET /api/cuentas/948/tareas HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38772 - "GET /api/cuentas/948/interacciones HTTP/1.1" 200 OK
-INFO:     10.64.133.74:57154 - "GET /api/cuentas/948 HTTP/1.1" 200 OK
-INFO:     10.64.132.134:50160 - "GET /api/ventas?page=1&limit=100&excluir_canceladas=true HTTP/1.1" 200 OK
-INFO:     10.64.132.108:41250 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:49016 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:52158 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:54218 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.129.70:54218 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.132.134:52442 - "GET /api/auth/me HTTP/1.1" 200 OK
-INFO:     10.64.132.134:52442 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     10.64.133.74:59432 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:59444 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:59454 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:39918 - "GET /api/stock-balance/matrix?limit=300&page=1 HTTP/1.1" 200 OK
-INFO:     10.64.132.108:49016 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.129.70:39918 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:36080 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.132.134:38276 - "GET /api/catalogo/marcas HTTP/1.1" 200 OK
-INFO:     10.64.133.74:36086 - "GET /api/catalogo/tipos HTTP/1.1" 200 OK
-INFO:     10.64.132.108:49022 - "GET /api/catalogo?search=&page=1&limit=50&orden=stock HTTP/1.1" 200 OK
-INFO:     10.64.132.134:38284 - "GET /api/catalogo/telas HTTP/1.1" 200 OK
-INFO:     10.64.133.74:36094 - "GET /api/catalogo/entalles HTTP/1.1" 200 OK
-INFO:     10.64.133.74:36094 - "GET /api/comercial/filter-options?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.132.108:49022 - "GET /api/comercial/summary?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.132.134:38284 - "GET /api/comercial/detail?doc_tipo=SALE&fecha_desde=2025-11-13&fecha_hasta=2026-02-13&page=1&limit=50 HTTP/1.1" 500 Internal Server Error
-INFO:     10.64.133.74:36086 - "GET /api/contactos?search=&page=1&limit=50&solo_dni=false&solo_telefono=false HTTP/1.1" 200 OK.
-        2.  **Frontend Check:** Use the  tool on the  page with  to capture any JavaScript errors in the browser console.
-        3.  **API Health Check:** Manually  the authenticated endpoints that power the page: , , and . Check for errors, timeouts, or unexpected responses.
-        4.  **Code Review:** Review the latest changes, particularly in  (the  join) and . The error could be a data integrity issue where a  or  doesn't exist in the  table, causing the  to fail or return nulls where they aren't expected.
-    -   Why fix this issue and what will be achieved with the fix? This is a critical bug blocking a newly delivered feature. Fixing it will make the Ventas y Reservas module usable.
+        -   Execute  to check if the barcode appears in the backend response.
+        -   Use  on the  page to check the frontend table.
+    -   Why fix this issue and what will be achieved with the fix? This completes the user's latest request for better data debugging in the UI.
     -   Status: IN PROGRESS
     -   Is recurring issue? N
     -   Should Test frontend/backend/both after fix? Both.
     -   Blocked on other issue: None.
 
 -   **Issue 2: Automated Login Test Failure**
-    -   Attempted fixes: None.
-    -   Next debug checklist: Investigate the Playwright test script for missing  attributes, race conditions, or timing issues on the login page.
-    -   Why fix this issue and what will be achieved with this? Fixing it would enable more robust end-to-end automated testing. It is a low-priority, non-blocking technical debt item.
+    -   Attempted fixes: None in this session.
+    -   Next debug checklist: Investigate the Playwright test script for missing  attributes or timing issues on the login page.
+    -   Why fix this issue and what will be achieved with this? Fixing it would enable more robust end-to-end automated testing.
     -   Status: NOT STARTED
     -   Is recurring issue? Y
     -   Should Test frontend/backend/both after fix? frontend
     -   Blocked on other issue: None.
 
 **In progress Task List**:
--   There are no tasks currently in progress, as the focus is on the critical bug fix.
+-   There are no other in-progress tasks. The focus is on verifying the last change.
 
 **Upcoming and Future Tasks**
 *   **Refactoring (P1):** Move the stock dashboard-related endpoints (, , ) from  into a dedicated router file (e.g., ).
 *   **Dashboard Features (P1):**
-    *   Persist the dashboard's filter state in the URL to allow sharing specific views.
+    *   Persist the stock dashboard's filter state in the URL to allow sharing specific views.
     *   Implement the frontend UI for the Detalle de Stock paginated table (backend endpoint  already exists).
 *   **Dashboard Features (P2):**
-    *   Implement the Por Arreglar filter, which is currently a placeholder.
+    *   Implement the Por Arreglar filter on the stock dashboard, which is currently a placeholder.
 
 **Completed work in this session**
--   **Ventas y Reservas Module (DONE, but now has a bug):**
-    -   Backend: Created  view. Developed a new router  with authenticated endpoints (, , ). Implemented performance optimizations, including parallel queries for KPIs and cursor-based pagination.
-    -   Frontend: Created , adding a new route and navigation link. The page features tabs, filters, KPIs, and a detail table.
--   **Client Account Linking (DONE, but now has a bug):**
-    -   Backend: Modified  to join with  and added  and  to group transactions by a main account.
-    -   Frontend: Updated  to filter by and display the main account () while also showing the original contact ().
--   **Initial Bug Investigation (Resolved/Not Reproduced):** The Stock Dashboard not loading bug from the previous session could not be reproduced. The agent verified that the dashboard, replenishment, and balance de tallas pages were all fully functional before starting new work.
+-   **Ventas y Reservas Module Overhaul (DONE):**
+    -   Backend: Rewrote  to support cascading filters, new KPIs, custom Top 10 aggregation, and an exclude clients toggle.
+    -   Frontend: Rewrote  to reflect all UI changes.
+-   **Cuentas Module Sales Integration (DONE):**
+    -   Backend: Created a new endpoint  in  to serve correctly aggregated sales data for an account.
+    -   Frontend: Refactored  to use the new endpoint and display sales/reservations data in tabs.
+-   **Database Enhancements (DONE):**
+    -   Created  table and ,  views in  to enable robust rollup of sales data.
+    -   Updated  view to include  logic with IDs and barcode.
+-   **Critical Bug Fix (DONE):**
+    -   Resolved a regression where  would disappear. The fix involved changing view creation logic in  to use .
 
 **Earlier issues found/mentioned but not fixed**
 -   The recurring failure of the automated login test remains unresolved.
@@ -485,65 +96,66 @@ INFO:     10.64.133.74:36086 - "GET /api/contactos?search=&page=1&limit=50&solo_
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, PostgreSQL, .
+-   **Backend:** FastAPI, PostgreSQL, , Parallel queries ().
 -   **Frontend:** React, Shadcn/UI, Tailwind CSS, Axios.
--   **Performance Optimization:**
-    -   Backend in-memory aggregation of data fetched from the DB.
-    -   Running multiple aggregate queries in parallel () for dashboard KPIs.
-    -   Cursor-style pagination (using  flag) to avoid expensive  operations on large tables.
+-   **Database:** Advanced view creation with , s, , and  statements. Using  to ensure idempotent schema setup and prevent race conditions.
+-   **Data Modeling:** Implemented a linking table () and rollup views (, ) to handle complex hierarchical and indirect relationships between entities.
 
 **key DB schema**
--   **crm.v_comercial_mov_flat:** **NEW** view that unifies sales and reservations from , links them to product/customer details, and includes the  for account linking.
--   **crm.v_partner_account_final:** **Existing** view used to map an original  to a main account .
+-   **crm.cuenta_vinculo:** **NEW** table to link multiple Odoo s to a single CRM .
+-   **crm.v_partner_rollup:** **NEW** view to find the ultimate commercial parent for any given .
+-   **crm.v_cuenta_partners:** **NEW** view that uses the above to create a definitive list of all s belonging to a single account.
+-   **crm.v_comercial_mov_flat:** **HEAVILY MODIFIED** view that is the source for the Ventas y Reservas module. Now includes  logic.
 
 **All files of reference**
--   : **Modified** to create the  view.
--   : **NEW**, contains all logic for the Ventas y Reservas feature.
--   : **Modified** to register the new  router.
--   : **NEW**, the entire UI for the Ventas y Reservas feature.
--   : **Modified** to add the  route.
--   : **Modified** to add the Ventas y Reservas link to the sidebar.
--   : **Modified** to add functions for calling the new  endpoints.
+-   : **Modified** to add new tables/views, update existing views, and use .
+-   : **Rewritten** to implement new business logic for the comercial page.
+-   : **Modified** to update the logic for the  endpoint.
+-   : **Rewritten** to build the new UI for the comercial page.
+-   : **Heavily Modified** to integrate the new sales/reservations tabs.
 
 **Areas that need refactoring**:
 -   The original stock dashboard endpoints (, , ) are still in the main  file. They should be moved to their own router.
 
 **key api endpoints**
--   : **NEW**, provides aggregated KPIs for the commercial page.
--   : **NEW**, provides paginated detail rows for the commercial page.
--   : **NEW**, provides distinct values for populating filter dropdowns.
+-   
+-   
+-   
+-   : **MODIFIED** to use the new account linking and data rollup logic.
 
 **Critical Info for New Agent**
--   The immediate and only priority is to fix the critical bug: me sale error al entrar ventas y reservas.
--   The previous critical bug (stock dashboard not loading) was a false alarm or transient. The agent extensively tested all existing features, and they were working correctly before the new Ventas y Reservas feature was built. Do not get sidetracked investigating old issues.
--   The new bug likely stems from the latest changes for the Ventas y Reservas feature, especially the account linking logic which added a  to the main view. A data inconsistency (e.g., a missing partner in ) is a strong possibility.
+-   The immediate priority is to test and verify the last change made (adding  to ).
+-   The user pivots frequently but provides excellent, detailed technical specifications. Follow them closely.
+-   The database view  proved to be a critical dependency that failed silently. The fix was to use . This pattern should be applied to other views in  if they use , to improve application stability.
+-   Changes in  can have wide-ranging effects across different modules (e.g., Comercial and Cuentas). Always consider the cross-cutting impact of database schema changes.
 
 **documents and test reports created in this job**
--   : Successful test run after implementing Ventas y Reservas feature (before account linking).
--   : Successful test run after adding authentication to commercial endpoints.
--   : Successful test run after implementing client account linking.
--   : Updated with completion of Ventas y Reservas and Client Account Linking.
+-   None.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** Provided a detailed spec for the Ventas y Reservas module.
-2.  ... (Agent implements, optimizes performance, adds auth, and tests the feature) ...
-3.  **Agent:** Finished the Ventas y Reservas task.
-4.  **User:** Provided a detailed spec for the Client Account Linking feature.
-5.  ... (Agent implements and tests the account linking feature) ...
-6.  **Agent:** Finished the Client Account Linking task.
-7.  **User:** me sale error al entrar ventas y reservas (I get an error when entering sales and reservations) - **This is the current pending issue.**
-8.  **Agent:** Acknowledged the bug report and started the investigation.
+1.  **User:** Reports the Cuentas - entrar a ventas y reserva me sale error cargando detalle.
+5.  ... (Agent investigates and finds the view  does not exist) ...
+6.  **Agent:** Fixes the issue by changing  to  and confirms the page now loads.
+7.  **User:** Provides a new requirement for more robust contact matching in Cuentas using .
+8.  ... (Agent implements the robust matching) ...
+9.  **User:** Provides the final requirement: include  in the  when a model name is empty.
+10. ... (Agent implements the barcode display logic) ...
 
 **Project Health Check:**
--   **Broken:** A newly delivered core feature (Ventas y Reservas) is inaccessible due to an error, constituting a critical regression.
+-   **Broken:** No. The application is functional, but the very last change is pending verification.
+-   **Mocked:** None.
 
 **3rd Party Integrations**
--   **Odoo:** Used for data synchronization via a PostgreSQL connection (not XML-RPC as previously assumed).
+-   **Odoo:** Data is sourced from an Odoo instance via a direct PostgreSQL connection to its database.
 
 **Testing status**
--   Testing agent used after significant changes: YES. It was used successfully after the Ventas y Reservas implementation and again after the Account Linking implementation.
+-   Testing agent used after significant changes: NO. All testing in this session was done manually with  and the  tool.
+-   Troubleshoot agent used after agent stuck in loop: NO.
 -   Test files created: None.
--   Known regressions: The Ventas y Reservas page is now throwing an error for the user, even though it passed automated testing.
+-   Known regressions: A critical regression ( disappearing) occurred during this session and was fixed.
+
+**Credentials to test flow:**
+- Credentials are not explicitly mentioned but are available in the environment for the agent to use for testing.
 
 **What agent forgot to execute**
--   The agent has not yet refactored the original stock dashboard endpoints out of  and into their own dedicated router file. This remains a pending technical debt item.</analysis>
+-   The agent did not start any of the pending tasks from the initial handoff summary, such as refactoring the stock dashboard endpoints or implementing new dashboard features. The user's new, higher-priority requests took precedence.</analysis>
