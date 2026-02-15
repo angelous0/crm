@@ -715,7 +715,8 @@ async def get_cuenta_ventas(
         kpi = await conn.fetchrow(f"""
             SELECT COALESCE(SUM(qty),0) AS qty_total,
                    COUNT(DISTINCT order_id) AS orders,
-                   COUNT(DISTINCT partner_id) AS clientes_distintos
+                   COUNT(DISTINCT partner_id) AS clientes_distintos,
+                   COUNT(*) AS total_rows
             FROM crm.v_comercial_mov_flat {where}
         """, *params)
 
@@ -743,6 +744,7 @@ async def get_cuenta_ventas(
                 "orders": kpi['orders'],
                 "clientes_distintos": kpi['clientes_distintos'],
             },
+            "total_rows": kpi['total_rows'],
             "items": items,
             "page": page,
             "limit": limit,
