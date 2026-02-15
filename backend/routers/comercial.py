@@ -1,7 +1,8 @@
 """Comercial (Ventas y Reservas) router – order-header + line-detail endpoints."""
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-import asyncio, logging
+import asyncio
+import logging
 from db import get_pool, records_to_list
 
 logger = logging.getLogger(__name__)
