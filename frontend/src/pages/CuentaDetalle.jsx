@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Save, Loader2, Phone, Mail, MapPin,
   MessageSquare, PhoneCall, Footprints, StickyNote, Plus,
-  Search, UserPlus, Link2, ChevronLeft, ChevronRight, Hash, ShoppingBag, Users
+  Search, UserPlus, Link2, ChevronLeft, ChevronRight
 } from "lucide-react";
 
 const ESTADOS = ["NUEVO", "ACTIVO", "SEGUIMIENTO", "DORMIDO", "NO_VOLVER"];
