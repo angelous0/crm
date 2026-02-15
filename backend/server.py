@@ -809,6 +809,120 @@ async def get_cuenta_ventas_orders(
         }
 
 
+@cuentas_router.get("/{cuenta_id}/ventas/lines")
+async def get_cuenta_ventas_lines(
+    cuenta_id: str,
+    doc_tipo: str = "SALE",
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": [], "page": page, "limit": limit, "has_next": False}
+        params = [partner_ids]
+        doc_filter = _POS_RESERVA_FILTER if doc_tipo == "RESERVA" else _POS_SALE_FILTER
+        extra = ""
+        if fecha_desde:
+            params.append(fecha_desde)
+            extra += f" AND po.date_order >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
+
+        offset = (page - 1) * limit
+        p2 = list(params)
+        p2.append(limit + 1)
+        p2.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT pol.odoo_id AS line_id,
+                   po.odoo_id AS order_id, po.name AS order_name,
+                   po.date_order AS fecha,
+                   po.partner_id AS owner_partner_id,
+                   rp.name AS owner_partner_name,
+                   pol.product_id AS product_product_id,
+                   vv.product_tmpl_id,
+                   COALESCE(pt.name, '') AS modelo_display,
+                   pt.marca, pt.tipo, pt.entalle, pt.tela,
+                   COALESCE(pt.hilo::text, '') AS hilo,
+                   vv.talla, vv.color, vv.barcode,
+                   pol.qty, pol.price_unit, pol.price_subtotal AS subtotal
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = po.partner_id AND rp.company_key = 'GLOBAL'
+            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              {doc_filter} {extra}
+            ORDER BY po.date_order DESC, pol.odoo_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
+        has_next = len(rows) > limit
+        return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
+
+
+@cuentas_router.get("/{cuenta_id}/creditos/lines")
+async def get_cuenta_creditos_lines(
+    cuenta_id: str,
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
+    state: str = "",
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": [], "page": page, "limit": limit, "has_next": False}
+        params = [partner_ids]
+        extra = ""
+        if state:
+            params.append(state)
+            extra += f" AND ic.state = ${len(params)}"
+        if fecha_desde:
+            params.append(fecha_desde)
+            extra += f" AND ic.date_invoice >= ${len(params)}::text::date"
+        if fecha_hasta:
+            params.append(fecha_hasta)
+            extra += f" AND ic.date_invoice <= ${len(params)}::text::date"
+
+        offset = (page - 1) * limit
+        p2 = list(params)
+        p2.append(limit + 1)
+        p2.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT il.odoo_id AS line_id,
+                   ic.odoo_id AS invoice_id, ic.number AS invoice_number,
+                   ic.date_invoice, ic.state,
+                   ic.partner_id, rp.name AS partner_name,
+                   ic.amount_total, ic.amount_residual,
+                   il.product_id, il.name AS line_description,
+                   il.quantity AS qty, il.price_unit, il.price_subtotal,
+                   COALESCE(pt.name, il.name, '') AS modelo_display,
+                   vv.product_tmpl_id, vv.barcode, vv.talla, vv.color,
+                   pt.marca, pt.tipo, pt.entalle, pt.tela,
+                   COALESCE(pt.hilo::text, '') AS hilo
+            FROM odoo.account_invoice_credit_line il
+            JOIN odoo.account_invoice_credit ic ON il.invoice_id = ic.odoo_id
+            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
+            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = il.product_id AND vv.company_key = 'GLOBAL'
+            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            WHERE ic.partner_id = ANY($1) {extra}
+            ORDER BY ic.date_invoice DESC, il.odoo_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
+        has_next = len(rows) > limit
+        return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
+
+
 @cuentas_router.get("/{cuenta_id}/creditos/metrics")
 async def get_cuenta_creditos_metrics(
     cuenta_id: str,
