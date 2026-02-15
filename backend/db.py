@@ -870,3 +870,62 @@ async def _create_views(conn):
             logger.warning("Missing tables for v_comercial_mov_flat")
     except Exception as e:
         logger.warning(f"Could not create v_comercial_mov_flat: {e}")
+
+
+    # 3.6) v_credito_flat – credit invoices joined with cuenta partners + products
+    try:
+        has_ic = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='account_invoice_credit')")
+        has_il = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='account_invoice_credit_line')")
+        if has_ic and has_il:
+            await conn.execute("DROP VIEW IF EXISTS crm.v_credito_flat CASCADE;")
+            await conn.execute("""
+                CREATE VIEW crm.v_credito_flat AS
+                SELECT
+                    ic.odoo_id       AS invoice_id,
+                    ic.number        AS invoice_number,
+                    ic.date_invoice,
+                    ic.state,
+                    ic.partner_id,
+                    rp.name          AS partner_name,
+                    vcp.cuenta_id,
+                    ic.amount_total,
+                    ic.amount_residual,
+                    il.odoo_id       AS line_id,
+                    il.product_id,
+                    il.name          AS line_description,
+                    il.quantity       AS qty,
+                    il.price_unit,
+                    il.price_subtotal,
+                    CASE
+                        WHEN pt.name IS NOT NULL AND TRIM(pt.name) <> ''
+                            THEN pt.name
+                        ELSE CONCAT('[VAR ', il.product_id, ' | LINE ', il.odoo_id, ']')
+                    END AS modelo_display,
+                    vv.product_tmpl_id,
+                    vv.barcode,
+                    vv.talla,
+                    vv.color,
+                    pt.marca,
+                    pt.tipo,
+                    pt.entalle,
+                    pt.tela,
+                    pt.hilo
+                FROM odoo.account_invoice_credit ic
+                JOIN odoo.account_invoice_credit_line il
+                    ON il.invoice_id = ic.odoo_id
+                LEFT JOIN crm.v_cuenta_partners vcp
+                    ON ic.partner_id = vcp.partner_id
+                LEFT JOIN odoo.res_partner rp
+                    ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
+                LEFT JOIN odoo.v_product_variant_flat vv
+                    ON vv.product_product_id = il.product_id AND vv.company_key = 'GLOBAL'
+                LEFT JOIN odoo.product_template pt
+                    ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL';
+            """)
+            logger.info("View crm.v_credito_flat created")
+        else:
+            logger.warning("Missing tables for v_credito_flat")
+    except Exception as e:
+        logger.warning(f"Could not create v_credito_flat: {e}")
