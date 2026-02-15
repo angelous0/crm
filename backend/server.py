@@ -699,6 +699,19 @@ _POS_CUENTA_BASE = """
 _POS_SALE_FILTER = " AND (COALESCE(po.reserva, false) = false)"
 _POS_RESERVA_FILTER = " AND (COALESCE(po.reserva, false) = true AND COALESCE(po.reserva_use_id, 0) = 0)"
 
+_CATALOG_JOIN = """
+    JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+    JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'"""
+_CATALOG_FILTER = """
+    AND pol.product_id IS NOT NULL
+    AND pt.sale_ok = true AND pt.purchase_ok = false
+    AND pt.name NOT ILIKE '%correa%'
+    AND pt.name NOT ILIKE '%saco%'
+    AND pt.name NOT ILIKE '%bolsa%'
+    AND pt.name NOT ILIKE '%probador%'
+    AND pt.name NOT ILIKE '%paneton%'
+    AND pt.name NOT ILIKE '%publicitario%'"""
+
 
 @cuentas_router.get("/{cuenta_id}/ventas/metrics")
 async def get_cuenta_ventas_metrics(
@@ -725,23 +738,22 @@ async def get_cuenta_ventas_metrics(
             params.append(fecha_hasta + "T23:59:59")
             extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
         row = await conn.fetchrow(f"""
-            SELECT COUNT(*) AS orders_count,
+            SELECT COUNT(DISTINCT po.odoo_id) AS orders_count,
+                   COALESCE(SUM(pol.qty), 0) AS qty_total,
                    MAX(po.date_order) AS last_order_date,
                    MIN(po.date_order) AS first_order_date
-            {_POS_CUENTA_BASE} {doc_filter} {extra}
-        """, *params)
-        qty_row = await conn.fetchrow(f"""
-            SELECT COALESCE(SUM(pol.qty), 0) AS qty_total
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_CATALOG_JOIN}
             WHERE po.partner_id = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
+              {_CATALOG_FILTER}
               {doc_filter} {extra}
         """, *params)
         return {
             "orders_count": row['orders_count'],
-            "qty_total": float(qty_row['qty_total']),
+            "qty_total": float(row['qty_total']),
             "last_order_date": str(row['last_order_date']) if row['last_order_date'] else None,
             "first_order_date": str(row['first_order_date']) if row['first_order_date'] else None,
         }
@@ -774,8 +786,15 @@ async def get_cuenta_ventas_orders(
             extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
 
         met = await conn.fetchrow(f"""
-            SELECT COUNT(*) AS orders_count
-            {_POS_CUENTA_BASE} {doc_filter} {extra}
+            SELECT COUNT(DISTINCT po.odoo_id) AS orders_count
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_CATALOG_JOIN}
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              {_CATALOG_FILTER}
+              {doc_filter} {extra}
         """, *params)
 
         offset = (page - 1) * limit
@@ -787,12 +806,23 @@ async def get_cuenta_ventas_orders(
                    po.date_order, po.state, po.amount_total,
                    po.partner_id AS owner_partner_id,
                    rp.name AS owner_partner_name,
-                   COALESCE(agg.qty_total, 0) AS qty_total,
-                   COALESCE(agg.lines_count, 0) AS lines_count
+                   agg.qty_total,
+                   agg.lines_count
             FROM odoo.pos_order po
-            LEFT JOIN (
-                SELECT order_id, SUM(qty) AS qty_total, COUNT(*) AS lines_count
-                FROM odoo.pos_order_line GROUP BY order_id
+            JOIN (
+                SELECT pol2.order_id, COALESCE(SUM(pol2.qty), 0) AS qty_total, COUNT(*) AS lines_count
+                FROM odoo.pos_order_line pol2
+                JOIN odoo.v_product_variant_flat vv2 ON vv2.product_product_id = pol2.product_id AND vv2.company_key = 'GLOBAL'
+                JOIN odoo.product_template pt2 ON pt2.odoo_id = vv2.product_tmpl_id AND pt2.company_key = 'GLOBAL'
+                WHERE pol2.product_id IS NOT NULL
+                  AND pt2.sale_ok = true AND pt2.purchase_ok = false
+                  AND pt2.name NOT ILIKE '%correa%'
+                  AND pt2.name NOT ILIKE '%saco%'
+                  AND pt2.name NOT ILIKE '%bolsa%'
+                  AND pt2.name NOT ILIKE '%probador%'
+                  AND pt2.name NOT ILIKE '%paneton%'
+                  AND pt2.name NOT ILIKE '%publicitario%'
+                GROUP BY pol2.order_id
             ) agg ON agg.order_id = po.odoo_id
             LEFT JOIN odoo.res_partner rp ON rp.odoo_id = po.partner_id AND rp.company_key = 'GLOBAL'
             WHERE po.partner_id = ANY($1)
@@ -853,12 +883,12 @@ async def get_cuenta_ventas_clasificacion(
                    COUNT(DISTINCT po.odoo_id) AS compras
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
-            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            {_CATALOG_JOIN}
             WHERE po.partner_id = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               AND COALESCE(po.reserva, false) = false
+              {_CATALOG_FILTER}
               {extra}
             GROUP BY pt.marca, pt.tipo, pt.entalle
             ORDER BY ventas DESC
@@ -921,12 +951,12 @@ async def get_cuenta_ventas_clasificacion_detail(
                    pol.qty, pol.price_unit, pol.price_subtotal AS subtotal
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
-            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            {_CATALOG_JOIN}
             WHERE po.partner_id = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               AND COALESCE(po.reserva, false) = false
+              {_CATALOG_FILTER}
               {extra}
             ORDER BY po.date_order DESC, pol.odoo_id DESC
             LIMIT ${len(params)-1} OFFSET ${len(params)}
@@ -981,11 +1011,11 @@ async def get_cuenta_ventas_lines(
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
             LEFT JOIN odoo.res_partner rp ON rp.odoo_id = po.partner_id AND rp.company_key = 'GLOBAL'
-            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            {_CATALOG_JOIN}
             WHERE po.partner_id = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
+              {_CATALOG_FILTER}
               {doc_filter} {extra}
             ORDER BY po.date_order DESC, pol.odoo_id DESC
             LIMIT ${len(p2)-1} OFFSET ${len(p2)}
