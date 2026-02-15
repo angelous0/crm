@@ -444,6 +444,7 @@ export default function CuentaDetalle() {
             <Tabs defaultValue="contactos" onValueChange={(v) => {
               if (v === "ventas") { setVentasDocTipo("SALE"); }
               if (v === "reservas") { setVentasDocTipo("RESERVA"); }
+              if (v === "creditos") { fetchCreditos(1); }
             }}>
               <TabsList className="mb-4" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
@@ -457,6 +458,15 @@ export default function CuentaDetalle() {
                   Reservas{metrics.reserva ? ` (Ordenes: ${fmtNum(metrics.reserva.orders_count)})` : ""}
                   {metrics.reserva && metrics.reserva.qty_total > 0 && (
                     <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.reserva.qty_total)}</span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="creditos" data-testid="tab-creditos">
+                  Creditos{metrics.creditos ? ` (Facturas: ${fmtNum(metrics.creditos.invoices_count)})` : ""}
+                  {metrics.creditos && metrics.creditos.qty_total > 0 && (
+                    <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.creditos.qty_total)}</span>
+                  )}
+                  {metrics.creditos && metrics.creditos.saldo_total > 0 && (
+                    <span className="ml-1.5 text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-normal">Saldo: {fmtMoney(metrics.creditos.saldo_total)}</span>
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
