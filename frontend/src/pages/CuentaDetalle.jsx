@@ -444,8 +444,18 @@ export default function CuentaDetalle() {
             }}>
               <TabsList className="mb-4" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
-                <TabsTrigger value="ventas" data-testid="tab-ventas">Ventas{tabCounts.sale !== null ? ` (${tabCounts.sale})` : ""}</TabsTrigger>
-                <TabsTrigger value="reservas" data-testid="tab-reservas">Reservas{tabCounts.reserva !== null ? ` (${tabCounts.reserva})` : ""}</TabsTrigger>
+                <TabsTrigger value="ventas" data-testid="tab-ventas">
+                  Ventas{metrics.sale ? ` (Ordenes: ${fmtNum(metrics.sale.orders_count)})` : ""}
+                  {metrics.sale && metrics.sale.qty_total > 0 && (
+                    <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.sale.qty_total)}</span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="reservas" data-testid="tab-reservas">
+                  Reservas{metrics.reserva ? ` (Ordenes: ${fmtNum(metrics.reserva.orders_count)})` : ""}
+                  {metrics.reserva && metrics.reserva.qty_total > 0 && (
+                    <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.reserva.qty_total)}</span>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
                 <TabsTrigger value="tareas">Tareas ({tareas.length})</TabsTrigger>
               </TabsList>
