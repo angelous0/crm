@@ -173,10 +173,12 @@ export default function CuentaDetalle() {
         Promise.all([
           api.get(`/cuentas/${id}/ventas/metrics`, { params: { doc_tipo: "SALE" } }),
           api.get(`/cuentas/${id}/ventas/metrics`, { params: { doc_tipo: "RESERVA" } }),
-        ]).then(([saleRes, resRes]) => {
+          api.get(`/cuentas/${id}/creditos/metrics`),
+        ]).then(([saleRes, resRes, credRes]) => {
           setMetrics({
             sale: saleRes.data,
             reserva: resRes.data,
+            creditos: credRes.data,
           });
         }).catch(() => {});
       } catch (err) {
