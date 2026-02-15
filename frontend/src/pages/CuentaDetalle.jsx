@@ -261,6 +261,145 @@ function InvoiceLinesTab({ data, loading, page, onPageChange }) {
   );
 }
 
+/* ── Clasificacion Tab (Info Ventas) ── */
+function ClasificacionTab({ data, loading, fechaDesde, fechaHasta, onFechaDesdeChange, onFechaHastaChange, onApplyFilters, onSelectItem }) {
+  const rows = data?.rows || [];
+
+  return (
+    <div className="space-y-3" data-testid="info-ventas-tab">
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap bg-white border border-border rounded-lg px-4 py-2.5 shadow-sm" data-testid="clasif-filters">
+        <Calendar size={14} className="text-slate-400" />
+        <input type="date" className="h-7 text-xs rounded px-2 bg-slate-100 border border-slate-200 outline-none"
+          value={fechaDesde} onChange={e => onFechaDesdeChange(e.target.value)} data-testid="clasif-fecha-desde" />
+        <span className="text-xs text-slate-400">a</span>
+        <input type="date" className="h-7 text-xs rounded px-2 bg-slate-100 border border-slate-200 outline-none"
+          value={fechaHasta} onChange={e => onFechaHastaChange(e.target.value)} data-testid="clasif-fecha-hasta" />
+        <Button variant="outline" size="sm" onClick={onApplyFilters} data-testid="clasif-apply-filters" className="text-xs h-7">
+          Aplicar
+        </Button>
+        <span className="ml-auto text-[10px] text-slate-400">{rows.length} clasificaciones</span>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+      ) : (
+        <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/50">
+                  <TableHead className="text-xs font-semibold">Marca</TableHead>
+                  <TableHead className="text-xs font-semibold">Tipo</TableHead>
+                  <TableHead className="text-xs font-semibold">Entalle</TableHead>
+                  <TableHead className="text-xs font-semibold">Ultima compra</TableHead>
+                  <TableHead className="text-xs text-right font-semibold">Cantidad</TableHead>
+                  <TableHead className="text-xs text-right font-semibold">Ventas (S/)</TableHead>
+                  <TableHead className="text-xs text-right font-semibold">Compras (#)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="h-20 text-center text-slate-500">Sin datos de ventas</TableCell></TableRow>
+                ) : rows.map((r, i) => (
+                  <TableRow key={`${r.marca}-${r.tipo}-${r.entalle}`}
+                    className={`cursor-pointer ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50 transition-colors`}
+                    onClick={() => onSelectItem(r)} data-testid={`clasif-row-${i}`}>
+                    <TableCell className="text-xs font-medium">{r.marca || <span className="text-slate-400 italic">sin marca</span>}</TableCell>
+                    <TableCell className="text-xs">{r.tipo || <span className="text-slate-400 italic">sin tipo</span>}</TableCell>
+                    <TableCell className="text-xs">{r.entalle || <span className="text-slate-400 italic">sin entalle</span>}</TableCell>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.ultima_fecha_compra)}</TableCell>
+                    <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.cantidad)}</TableCell>
+                    <TableCell className="text-xs text-right font-mono text-emerald-700 font-semibold">{fmtMoney(r.ventas)}</TableCell>
+                    <TableCell className="text-xs text-right font-mono">{fmtNum(r.compras)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {rows.length > 0 && (
+            <div className="px-3 py-2 border-t text-[10px] text-slate-500 flex items-center justify-between">
+              <span>{rows.length} items</span>
+              <span>Total: <b className="text-emerald-700">{fmtMoney(rows.reduce((s, r) => s + (r.ventas || 0), 0))}</b> | {fmtNum(rows.reduce((s, r) => s + (r.cantidad || 0), 0))} uds</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Clasificacion Detail Drawer ── */
+function ClasifDetailDrawer({ item, data, loading, page, onPageChange, onClose }) {
+  const rows = data?.rows || [];
+  const hasNext = data?.has_next || false;
+  const title = [item.marca, item.tipo, item.entalle].filter(Boolean).join(" / ") || "Sin clasificacion";
+
+  return (
+    <div className="fixed inset-0 z-50 flex" data-testid="clasif-detail-drawer">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="ml-auto w-full max-w-2xl bg-white shadow-2xl flex flex-col relative z-10 animate-in slide-in-from-right">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-slate-800 text-white shrink-0">
+          <div>
+            <h3 className="text-sm font-bold">{title}</h3>
+            <p className="text-[10px] text-slate-300">
+              {fmtNum(item.cantidad)} uds | {fmtMoney(item.ventas)} | {fmtNum(item.compras)} ordenes
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-300 hover:text-white" data-testid="close-clasif-drawer"><X size={18} /></button>
+        </div>
+        <div className="flex-1 overflow-auto min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+          ) : (
+            <table className="w-full text-[10px] border-collapse">
+              <thead className="sticky top-0 bg-slate-100 z-10">
+                <tr>
+                  <th className="text-left px-2 py-1.5 font-semibold">Fecha</th>
+                  <th className="text-left px-2 py-1.5 font-semibold">Orden</th>
+                  <th className="text-left px-2 py-1.5 font-semibold">Modelo</th>
+                  <th className="text-left px-2 py-1.5 font-semibold">Talla</th>
+                  <th className="text-left px-2 py-1.5 font-semibold">Color</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">P.Unit</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center py-8 text-slate-400">Sin lineas</td></tr>
+                ) : rows.map((r, i) => (
+                  <tr key={`${r.order_id}-${r.line_id}`} className={`${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50/50`}>
+                    <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.fecha)}</td>
+                    <td className="px-2 py-1 font-mono text-slate-500 text-[9px]">{r.order_name || r.order_id}</td>
+                    <td className="px-2 py-1 truncate max-w-[120px]">{r.modelo_display || "-"}</td>
+                    <td className="px-2 py-1">{r.talla || "-"}</td>
+                    <td className="px-2 py-1">{r.color || "-"}</td>
+                    <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty)}</td>
+                    <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.price_unit)}</td>
+                    <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.subtotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {(page > 1 || hasNext) && (
+          <div className="flex items-center justify-between px-3 py-2 border-t text-[10px] text-slate-500 shrink-0">
+            <span>Pagina {page}</span>
+            <div className="flex gap-1">
+              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="clasif-detail-prev"><ChevronLeft size={12} /></button>
+              <button className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="clasif-detail-next"><ChevronRight size={12} /></button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+
 export default function CuentaDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
