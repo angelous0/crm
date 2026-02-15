@@ -306,6 +306,15 @@ export default function CuentaDetalle() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
+  // Detail mode state
+  const [detailMode, setDetailMode] = useState(false);
+  const [ventasLines, setVentasLines] = useState({ rows: [], has_next: false });
+  const [ventasLinesPage, setVentasLinesPage] = useState(1);
+  const [ventasLinesLoading, setVentasLinesLoading] = useState(false);
+  const [creditosLines, setCreditosLines] = useState({ rows: [], has_next: false });
+  const [creditosLinesPage, setCreditosLinesPage] = useState(1);
+  const [creditosLinesLoading, setCreditosLinesLoading] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
