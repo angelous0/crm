@@ -638,10 +638,38 @@ export default function CuentaDetalle() {
 
           {/* Right: Tabs */}
           <div className="col-span-12 lg:col-span-8">
+            {/* Detail mode toggle */}
+            <div className="flex items-center gap-3 mb-4 bg-white border border-border rounded-lg px-4 py-2.5 shadow-sm" data-testid="detail-mode-toggle-bar">
+              <Switch checked={detailMode} onCheckedChange={(v) => {
+                setDetailMode(v);
+                if (v) {
+                  fetchVentasLines(1, ventasDocTipo);
+                  fetchCreditosLines(1);
+                }
+              }} className="data-[state=checked]:bg-cyan-500" />
+              <div>
+                <span className={`text-sm font-medium ${detailMode ? "text-cyan-700" : "text-slate-600"}`}>
+                  <List size={14} className="inline mr-1 -mt-0.5" />
+                  Modo detalle (lineas)
+                </span>
+                <p className="text-[10px] text-slate-400">{detailMode ? "Mostrando lineas de producto individuales" : "Mostrando cabeceras de ordenes/facturas"}</p>
+              </div>
+              {detailMode && <span className="ml-auto text-[9px] text-cyan-600 font-semibold bg-cyan-50 px-2 py-1 rounded border border-cyan-200">ACTIVO</span>}
+            </div>
+
             <Tabs defaultValue="contactos" onValueChange={(v) => {
-              if (v === "ventas") { setVentasDocTipo("SALE"); }
-              if (v === "reservas") { setVentasDocTipo("RESERVA"); }
-              if (v === "creditos") { fetchCreditos(1); }
+              if (v === "ventas") {
+                setVentasDocTipo("SALE");
+                if (detailMode) fetchVentasLines(1, "SALE");
+              }
+              if (v === "reservas") {
+                setVentasDocTipo("RESERVA");
+                if (detailMode) fetchVentasLines(1, "RESERVA");
+              }
+              if (v === "creditos") {
+                if (detailMode) fetchCreditosLines(1);
+                else fetchCreditos(1);
+              }
             }}>
               <TabsList className="mb-4" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
