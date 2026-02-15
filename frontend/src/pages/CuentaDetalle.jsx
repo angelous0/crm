@@ -712,9 +712,9 @@ export default function CuentaDetalle() {
     }
   }, [id, clasifFechaDesde, clasifFechaHasta]);
 
-  // ── Fetch clasificacion drilldown detail ──
-  const fetchClasifDetail = useCallback(async (item, pg = 1) => {
-    setClasifDetailLoading(true);
+  // ── Fetch clasificacion orders (Level 1) ──
+  const fetchClasifOrders = useCallback(async (item, pg = 1) => {
+    setClasifOrdersLoading(true);
     try {
       const params = {
         marca: item.marca || "", tipo: item.tipo || "", entalle: item.entalle || "",
@@ -722,15 +722,29 @@ export default function CuentaDetalle() {
       };
       if (clasifFechaDesde) params.fecha_desde = clasifFechaDesde;
       if (clasifFechaHasta) params.fecha_hasta = clasifFechaHasta;
-      const r = await api.get(`/cuentas/${id}/ventas/clasificacion/detail`, { params });
-      setClasifDetail(r.data || { rows: [], has_next: false });
-      setClasifDetailPage(pg);
+      const r = await api.get(`/cuentas/${id}/ventas/clasificacion/orders`, { params });
+      setClasifOrders(r.data || { rows: [], has_next: false });
+      setClasifOrdersPage(pg);
     } catch {
-      toast.error("Error cargando detalle");
+      toast.error("Error cargando ordenes");
     } finally {
-      setClasifDetailLoading(false);
+      setClasifOrdersLoading(false);
     }
   }, [id, clasifFechaDesde, clasifFechaHasta]);
+
+  // ── Fetch order lines (Level 2) ──
+  const fetchClasifOrderLines = useCallback(async (orderId, pg = 1) => {
+    setClasifOrderLinesLoading(true);
+    try {
+      const r = await api.get(`/comercial/orders/${orderId}/lines`, { params: { page: pg, limit: 100 } });
+      setClasifOrderLines(r.data || { items: [], has_next: false });
+      setClasifOrderLinesPage(pg);
+    } catch {
+      toast.error("Error cargando lineas");
+    } finally {
+      setClasifOrderLinesLoading(false);
+    }
+  }, []);
 
   // ── Vincular contacto logic ──
   const fetchUnlinked = useCallback(async (searchVal, pg, dni, tel) => {
