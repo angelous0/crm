@@ -205,7 +205,7 @@ function HeadersTable({ rows, onSelect }) {
         {!rows.length ? (
           <tr><td colSpan={7} className="text-center py-8 text-slate-400">Sin datos</td></tr>
         ) : rows.map((r, i) => (
-          <tr key={r.order_id} className={`cursor-pointer ${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50 transition-colors`}
+          <tr key={`${r.order_id}-${i}`} className={`cursor-pointer ${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50 transition-colors`}
             onClick={() => onSelect(r)} data-testid={`order-row-${r.order_id}`}>
             <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.date_order)}</td>
             <td className="px-2 py-1 font-mono text-slate-600 text-[9px]">{r.order_name || r.order_id}</td>
