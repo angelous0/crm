@@ -316,6 +316,16 @@ export default function CuentaDetalle() {
   const [creditosLinesPage, setCreditosLinesPage] = useState(1);
   const [creditosLinesLoading, setCreditosLinesLoading] = useState(false);
 
+  // Clasificacion (Info Ventas) state
+  const [clasifData, setClasifData] = useState({ rows: [] });
+  const [clasifLoading, setClasifLoading] = useState(false);
+  const [clasifFechaDesde, setClasifFechaDesde] = useState("");
+  const [clasifFechaHasta, setClasifFechaHasta] = useState("");
+  const [clasifSelected, setClasifSelected] = useState(null);
+  const [clasifDetail, setClasifDetail] = useState({ rows: [], has_next: false });
+  const [clasifDetailPage, setClasifDetailPage] = useState(1);
+  const [clasifDetailLoading, setClasifDetailLoading] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
