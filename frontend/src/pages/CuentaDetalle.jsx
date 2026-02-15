@@ -29,24 +29,14 @@ function fmtMoney(n) { return "S/ " + Number(n || 0).toLocaleString("es-PE", { m
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "-"; }
 
 /* ── Ventas/Reservas sub-tab component ── */
-function VentasCuentaTab({ data, loading, page, onPageChange }) {
-  const items = data?.items || [];
+function OrderHeadersTab({ data, loading, page, onPageChange, onSelectOrder }) {
+  const rows = data?.rows || [];
   const hasNext = data?.has_next || false;
-  const debug = data?.debug || {};
 
-  if (loading) {
-    return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
-  }
+  if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
 
   return (
-    <div className="space-y-4" data-testid="ventas-cuenta-tab">
-      {debug.partners_count === 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800" data-testid="ventas-no-partner-msg">
-          Esta cuenta no tiene partner Odoo vinculado (odoo_id: {debug.cuenta_partner_odoo_id})
-        </div>
-      )}
-
-      {/* Detail table */}
+    <div className="space-y-3" data-testid="ventas-cuenta-tab">
       <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <Table>
@@ -54,31 +44,28 @@ function VentasCuentaTab({ data, loading, page, onPageChange }) {
               <TableRow className="bg-slate-50/50">
                 <TableHead className="text-xs">Fecha</TableHead>
                 <TableHead className="text-xs">Orden</TableHead>
-                <TableHead className="text-xs">Modelo</TableHead>
-                <TableHead className="text-xs">Marca</TableHead>
-                <TableHead className="text-xs">Tipo</TableHead>
-                <TableHead className="text-xs">Talla</TableHead>
-                <TableHead className="text-xs">Color</TableHead>
-                <TableHead className="text-xs text-right">Qty</TableHead>
-                <TableHead className="text-xs text-right">P.Unit</TableHead>
+                <TableHead className="text-xs">Estado</TableHead>
+                <TableHead className="text-xs text-right">Total</TableHead>
+                <TableHead className="text-xs text-right">Uds</TableHead>
+                <TableHead className="text-xs text-right">Lineas</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="h-20 text-center text-slate-500">
-                  {debug.partners_count === 0 ? "Sin partner vinculado" : "No hay ventas en el rango seleccionado"}
-                </TableCell></TableRow>
-              ) : items.map((v, i) => (
-                <TableRow key={i} className={i % 2 ? "bg-slate-50/30" : ""}>
-                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(v.fecha)}</TableCell>
-                  <TableCell className="text-xs font-mono text-slate-500">{v.order_id}</TableCell>
-                  <TableCell className="text-xs font-medium truncate max-w-[120px]">{v.modelo_display || "-"}</TableCell>
-                  <TableCell className="text-xs text-slate-500">{v.marca || "-"}</TableCell>
-                  <TableCell className="text-xs text-slate-500">{v.tipo || "-"}</TableCell>
-                  <TableCell className="text-xs">{v.talla || "-"}</TableCell>
-                  <TableCell className="text-xs">{v.color || "-"}</TableCell>
-                  <TableCell className="text-xs text-right font-mono">{fmtNum(v.qty)}</TableCell>
-                  <TableCell className="text-xs text-right font-mono">{fmtMoney(v.price_unit)}</TableCell>
+              {rows.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="h-20 text-center text-slate-500">Sin ordenes</TableCell></TableRow>
+              ) : rows.map((r, i) => (
+                <TableRow key={r.order_id} className={`cursor-pointer ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50`}
+                  onClick={() => onSelectOrder(r)} data-testid={`order-row-${r.order_id}`}>
+                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.date_order)}</TableCell>
+                  <TableCell className="text-xs font-mono text-slate-500">{r.order_name || r.order_id}</TableCell>
+                  <TableCell className="text-xs">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "paid" ? "bg-emerald-100 text-emerald-700" : r.state === "done" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
+                      {r.state}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(r.amount_total)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.qty_total)}</TableCell>
+                  <TableCell className="text-xs text-right text-slate-500">{r.lines_count}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -88,21 +75,72 @@ function VentasCuentaTab({ data, loading, page, onPageChange }) {
           <div className="flex items-center justify-between px-3 py-2 border-t text-xs text-slate-500">
             <span>Pagina {page}</span>
             <div className="flex gap-1">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="ventas-prev-page">
-                <ChevronLeft size={14} />
-              </Button>
-              <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="ventas-next-page">
-                <ChevronRight size={14} />
-              </Button>
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="ventas-prev-page"><ChevronLeft size={14} /></Button>
+              <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="ventas-next-page"><ChevronRight size={14} /></Button>
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Debug: partner count */}
-      {debug.partners_count > 0 && (
-        <p className="text-[10px] text-slate-400">Partners vinculados: {debug.partners_count} | IDs: {(debug.partner_ids || []).slice(0, 10).join(", ")}{debug.partner_ids?.length > 10 ? "..." : ""}</p>
-      )}
+function InvoiceHeadersTab({ data, loading, page, onPageChange, onSelectInvoice }) {
+  const rows = data?.rows || [];
+  const hasNext = data?.has_next || false;
+
+  if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>;
+
+  return (
+    <div className="space-y-3" data-testid="creditos-cuenta-tab">
+      <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50/50">
+                <TableHead className="text-xs">Fecha</TableHead>
+                <TableHead className="text-xs">Factura</TableHead>
+                <TableHead className="text-xs">Estado</TableHead>
+                <TableHead className="text-xs text-right">Total</TableHead>
+                <TableHead className="text-xs text-right">Saldo</TableHead>
+                <TableHead className="text-xs text-right">Uds</TableHead>
+                <TableHead className="text-xs text-right">Lineas</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="h-20 text-center text-slate-500">Sin facturas</TableCell></TableRow>
+              ) : rows.map((r, i) => (
+                <TableRow key={r.invoice_id} className={`cursor-pointer ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50`}
+                  onClick={() => onSelectInvoice(r)} data-testid={`invoice-row-${r.invoice_id}`}>
+                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.date_invoice ? r.date_invoice + "T00:00:00" : null)}</TableCell>
+                  <TableCell className="text-xs font-mono text-slate-500">{r.invoice_number || "-"}</TableCell>
+                  <TableCell className="text-xs">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "open" ? "bg-amber-100 text-amber-700" : r.state === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                      {r.state === "open" ? "Abierta" : r.state === "paid" ? "Pagada" : r.state === "cancel" ? "Cancelada" : r.state}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-xs text-right font-mono">{fmtMoney(r.amount_total)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">
+                    {r.amount_residual > 0 ? <span className="text-red-600 font-semibold">{fmtMoney(r.amount_residual)}</span> : <span className="text-slate-400">{fmtMoney(0)}</span>}
+                  </TableCell>
+                  <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.qty_total)}</TableCell>
+                  <TableCell className="text-xs text-right text-slate-500">{r.lines_count}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {(page > 1 || hasNext) && (
+          <div className="flex items-center justify-between px-3 py-2 border-t text-xs text-slate-500">
+            <span>Pagina {page}</span>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="creditos-prev-page"><ChevronLeft size={14} /></Button>
+              <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => onPageChange(page + 1)} data-testid="creditos-next-page"><ChevronRight size={14} /></Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
