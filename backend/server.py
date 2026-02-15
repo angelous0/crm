@@ -825,27 +825,33 @@ async def get_cuenta_creditos_metrics(
         if not partner_ids:
             return empty
         params = [partner_ids]
-        where = "WHERE partner_id = ANY($1)"
+        extra = ""
         if state:
             params.append(state)
-            where += f" AND state = ${len(params)}"
+            extra += f" AND ic.state = ${len(params)}"
         if fecha_desde:
             params.append(fecha_desde)
-            where += f" AND date_invoice >= ${len(params)}::text::date"
+            extra += f" AND ic.date_invoice >= ${len(params)}::text::date"
         if fecha_hasta:
             params.append(fecha_hasta)
-            where += f" AND date_invoice <= ${len(params)}::text::date"
+            extra += f" AND ic.date_invoice <= ${len(params)}::text::date"
         row = await conn.fetchrow(f"""
             SELECT COUNT(*) AS invoices_count,
-                   COALESCE(SUM(qty_total), 0) AS qty_total,
-                   COALESCE(SUM(amount_residual), 0) AS saldo_total,
-                   COALESCE(SUM(amount_total), 0) AS total_facturado,
-                   MAX(date_invoice) AS last_invoice_date
-            FROM crm.v_credito_invoice_header {where}
+                   COALESCE(SUM(ic.amount_residual), 0) AS saldo_total,
+                   COALESCE(SUM(ic.amount_total), 0) AS total_facturado,
+                   MAX(ic.date_invoice) AS last_invoice_date
+            FROM odoo.account_invoice_credit ic
+            WHERE ic.partner_id = ANY($1) {extra}
+        """, *params)
+        qty_row = await conn.fetchrow(f"""
+            SELECT COALESCE(SUM(il.quantity), 0) AS qty_total
+            FROM odoo.account_invoice_credit_line il
+            JOIN odoo.account_invoice_credit ic ON il.invoice_id = ic.odoo_id
+            WHERE ic.partner_id = ANY($1) {extra}
         """, *params)
         return {
             "invoices_count": row['invoices_count'],
-            "qty_total": float(row['qty_total']),
+            "qty_total": float(qty_row['qty_total']),
             "saldo_total": float(row['saldo_total']),
             "total_facturado": float(row['total_facturado']),
             "last_invoice_date": str(row['last_invoice_date']) if row['last_invoice_date'] else None,
