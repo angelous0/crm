@@ -689,6 +689,17 @@ def _cuenta_where(params, partner_ids, doc_tipo, fecha_desde="", fecha_hasta="")
 
 
 
+# Optimized: query pos_order directly for cuenta-level endpoints (faster than scanning the full view)
+_POS_CUENTA_BASE = """
+    FROM odoo.pos_order po
+    WHERE po.partner_id = ANY($1)
+      AND COALESCE(po.is_cancel, false) = false
+      AND COALESCE(po.order_cancel, false) = false
+"""
+_POS_SALE_FILTER = " AND (COALESCE(po.reserva, false) = false)"
+_POS_RESERVA_FILTER = " AND (COALESCE(po.reserva, false) = true AND COALESCE(po.reserva_use_id, 0) = 0)"
+
+
 @cuentas_router.get("/{cuenta_id}/ventas/metrics")
 async def get_cuenta_ventas_metrics(
     cuenta_id: str,
@@ -704,24 +715,33 @@ async def get_cuenta_ventas_metrics(
         partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
         if not partner_ids:
             return empty
-        params = [partner_ids, doc_tipo]
-        where = "WHERE partner_id = ANY($1) AND doc_tipo = $2"
+        params = [partner_ids]
+        doc_filter = _POS_RESERVA_FILTER if doc_tipo == "RESERVA" else _POS_SALE_FILTER
+        extra = ""
         if fecha_desde:
             params.append(fecha_desde)
-            where += f" AND date_order >= ${len(params)}::text::timestamptz"
+            extra += f" AND po.date_order >= ${len(params)}::text::timestamptz"
         if fecha_hasta:
             params.append(fecha_hasta + "T23:59:59")
-            where += f" AND date_order <= ${len(params)}::text::timestamptz"
+            extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
         row = await conn.fetchrow(f"""
             SELECT COUNT(*) AS orders_count,
-                   COALESCE(SUM(qty_total), 0) AS qty_total,
-                   MAX(date_order) AS last_order_date,
-                   MIN(date_order) AS first_order_date
-            FROM crm.v_comercial_order_header {where}
+                   MAX(po.date_order) AS last_order_date,
+                   MIN(po.date_order) AS first_order_date
+            {_POS_CUENTA_BASE} {doc_filter} {extra}
+        """, *params)
+        qty_row = await conn.fetchrow(f"""
+            SELECT COALESCE(SUM(pol.qty), 0) AS qty_total
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              {doc_filter} {extra}
         """, *params)
         return {
             "orders_count": row['orders_count'],
-            "qty_total": float(row['qty_total']),
+            "qty_total": float(qty_row['qty_total']),
             "last_order_date": str(row['last_order_date']) if row['last_order_date'] else None,
             "first_order_date": str(row['first_order_date']) if row['first_order_date'] else None,
         }
