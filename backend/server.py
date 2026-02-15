@@ -688,6 +688,7 @@ def _cuenta_where(params, partner_ids, doc_tipo, fecha_desde="", fecha_hasta="")
     return where
 
 
+
 @cuentas_router.get("/{cuenta_id}/ventas/metrics")
 async def get_cuenta_ventas_metrics(
     cuenta_id: str,
@@ -696,35 +697,38 @@ async def get_cuenta_ventas_metrics(
     fecha_hasta: str = "",
     user=Depends(get_current_user)
 ):
-    """Lightweight metrics for tab counters: orders_count, lines_count, qty_total, date range."""
-    empty = {"orders_count": 0, "lines_count": 0, "qty_total": 0,
+    empty = {"orders_count": 0, "qty_total": 0,
              "last_order_date": None, "first_order_date": None}
     p = await get_pool()
     async with p.acquire() as conn:
         partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
         if not partner_ids:
             return empty
-        params = []
-        where = _cuenta_where(params, partner_ids, doc_tipo, fecha_desde, fecha_hasta)
+        params = [partner_ids, doc_tipo]
+        where = "WHERE partner_id = ANY($1) AND doc_tipo = $2"
+        if fecha_desde:
+            params.append(fecha_desde)
+            where += f" AND date_order >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            where += f" AND date_order <= ${len(params)}::text::timestamptz"
         row = await conn.fetchrow(f"""
-            SELECT COUNT(DISTINCT order_id) AS orders_count,
-                   COUNT(*) AS lines_count,
-                   COALESCE(SUM(qty),0) AS qty_total,
-                   MAX(fecha) AS last_order_date,
-                   MIN(fecha) AS first_order_date
-            FROM crm.v_comercial_mov_flat {where}
+            SELECT COUNT(*) AS orders_count,
+                   COALESCE(SUM(qty_total), 0) AS qty_total,
+                   MAX(date_order) AS last_order_date,
+                   MIN(date_order) AS first_order_date
+            FROM crm.v_comercial_order_header {where}
         """, *params)
         return {
             "orders_count": row['orders_count'],
-            "lines_count": row['lines_count'],
             "qty_total": float(row['qty_total']),
             "last_order_date": str(row['last_order_date']) if row['last_order_date'] else None,
             "first_order_date": str(row['first_order_date']) if row['first_order_date'] else None,
         }
 
 
-@cuentas_router.get("/{cuenta_id}/ventas")
-async def get_cuenta_ventas(
+@cuentas_router.get("/{cuenta_id}/ventas/orders")
+async def get_cuenta_ventas_orders(
     cuenta_id: str,
     doc_tipo: str = "SALE",
     fecha_desde: str = "",
@@ -733,41 +737,40 @@ async def get_cuenta_ventas(
     limit: int = 50,
     user=Depends(get_current_user)
 ):
-    """Paginated line-level detail for a cuenta."""
     p = await get_pool()
     async with p.acquire() as conn:
         partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
         if not partner_ids:
-            return {"items": [], "page": page, "limit": limit, "has_next": False,
-                    "debug": {"cuenta_partner_odoo_id": odoo_id, "partners_count": 0}}
-
-        params = []
-        where = _cuenta_where(params, partner_ids, doc_tipo, fecha_desde, fecha_hasta)
-
+            return {"metrics": {"orders_count": 0, "qty_total": 0},
+                    "rows": [], "page": page, "limit": limit, "has_next": False}
+        params = [partner_ids, doc_tipo]
+        where = "WHERE partner_id = ANY($1) AND doc_tipo = $2"
+        if fecha_desde:
+            params.append(fecha_desde)
+            where += f" AND date_order >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            where += f" AND date_order <= ${len(params)}::text::timestamptz"
+        met = await conn.fetchrow(f"""
+            SELECT COUNT(*) AS orders_count, COALESCE(SUM(qty_total), 0) AS qty_total
+            FROM crm.v_comercial_order_header {where}
+        """, *params)
+        p2 = list(params)
         offset = (page - 1) * limit
-        params.append(limit + 1)
-        params.append(offset)
+        p2.append(limit + 1)
+        p2.append(offset)
         rows = records_to_list(await conn.fetch(f"""
-            SELECT fecha, order_id, owner_partner_name,
-                   modelo_display, marca, tipo, entalle, tela, hilo,
-                   talla, color, barcode, qty, price_unit,
-                   product_tmpl_id, product_product_id
-            FROM crm.v_comercial_mov_flat {where}
-            ORDER BY fecha DESC, order_id DESC
-            LIMIT ${len(params)-1} OFFSET ${len(params)}
-        """, *params))
-
+            SELECT doc_tipo, order_id, order_name, date_order, state,
+                   amount_total, owner_partner_id, owner_partner_name,
+                   qty_total, lines_count
+            FROM crm.v_comercial_order_header {where}
+            ORDER BY date_order DESC, order_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
         has_next = len(rows) > limit
         return {
-            "items": rows[:limit],
-            "page": page,
-            "limit": limit,
-            "has_next": has_next,
-            "debug": {
-                "cuenta_partner_odoo_id": odoo_id,
-                "partners_count": len(partner_ids),
-                "partner_ids": partner_ids[:20],
-            }
+            "metrics": {"orders_count": met['orders_count'], "qty_total": float(met['qty_total'])},
+            "rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next,
         }
 
 
@@ -779,10 +782,8 @@ async def get_cuenta_creditos_metrics(
     state: str = "",
     user=Depends(get_current_user)
 ):
-    """Lightweight credit metrics for a cuenta."""
-    empty = {"invoices_count": 0, "lines_count": 0, "qty_total": 0,
-             "saldo_total": 0, "total_facturado": 0,
-             "last_invoice_date": None, "first_invoice_date": None}
+    empty = {"invoices_count": 0, "qty_total": 0, "saldo_total": 0,
+             "total_facturado": 0, "last_invoice_date": None}
     p = await get_pool()
     async with p.acquire() as conn:
         partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
@@ -799,51 +800,39 @@ async def get_cuenta_creditos_metrics(
         if fecha_hasta:
             params.append(fecha_hasta)
             where += f" AND date_invoice <= ${len(params)}::text::date"
-
         row = await conn.fetchrow(f"""
-            SELECT COUNT(DISTINCT invoice_id) AS invoices_count,
-                   COUNT(*) AS lines_count,
-                   COALESCE(SUM(qty), 0) AS qty_total,
-                   MAX(date_invoice) AS last_invoice_date,
-                   MIN(date_invoice) AS first_invoice_date
-            FROM crm.v_credito_flat {where}
-        """, *params)
-        saldo = await conn.fetchrow(f"""
-            SELECT COALESCE(SUM(amount_residual), 0) AS saldo_total,
-                   COALESCE(SUM(amount_total), 0) AS total_facturado
-            FROM (SELECT DISTINCT invoice_id, amount_residual, amount_total
-                  FROM crm.v_credito_flat {where}) sub
+            SELECT COUNT(*) AS invoices_count,
+                   COALESCE(SUM(qty_total), 0) AS qty_total,
+                   COALESCE(SUM(amount_residual), 0) AS saldo_total,
+                   COALESCE(SUM(amount_total), 0) AS total_facturado,
+                   MAX(date_invoice) AS last_invoice_date
+            FROM crm.v_credito_invoice_header {where}
         """, *params)
         return {
             "invoices_count": row['invoices_count'],
-            "lines_count": row['lines_count'],
             "qty_total": float(row['qty_total']),
-            "saldo_total": float(saldo['saldo_total']),
-            "total_facturado": float(saldo['total_facturado']),
+            "saldo_total": float(row['saldo_total']),
+            "total_facturado": float(row['total_facturado']),
             "last_invoice_date": str(row['last_invoice_date']) if row['last_invoice_date'] else None,
-            "first_invoice_date": str(row['first_invoice_date']) if row['first_invoice_date'] else None,
         }
 
 
-@cuentas_router.get("/{cuenta_id}/creditos")
-async def get_cuenta_creditos(
+@cuentas_router.get("/{cuenta_id}/creditos/invoices")
+async def get_cuenta_creditos_invoices(
     cuenta_id: str,
     fecha_desde: str = "",
     fecha_hasta: str = "",
     state: str = "",
-    search: str = "",
     page: int = 1,
     limit: int = 50,
     user=Depends(get_current_user)
 ):
-    """Paginated credit lines for a cuenta."""
     p = await get_pool()
     async with p.acquire() as conn:
         partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
         if not partner_ids:
-            return {"items": [], "page": page, "limit": limit, "has_next": False,
-                    "debug": {"cuenta_partner_odoo_id": odoo_id, "partners_count": 0}}
-
+            return {"metrics": {"invoices_count": 0, "qty_total": 0, "saldo_total": 0},
+                    "rows": [], "page": page, "limit": limit, "has_next": False}
         params = [partner_ids]
         where = "WHERE partner_id = ANY($1)"
         if state:
@@ -855,35 +844,28 @@ async def get_cuenta_creditos(
         if fecha_hasta:
             params.append(fecha_hasta)
             where += f" AND date_invoice <= ${len(params)}::text::date"
-        if search:
-            params.append(f"%{search}%")
-            where += f" AND (invoice_number ILIKE ${len(params)} OR modelo_display ILIKE ${len(params)} OR line_description ILIKE ${len(params)})"
-
+        met = await conn.fetchrow(f"""
+            SELECT COUNT(*) AS invoices_count,
+                   COALESCE(SUM(qty_total), 0) AS qty_total,
+                   COALESCE(SUM(amount_residual), 0) AS saldo_total
+            FROM crm.v_credito_invoice_header {where}
+        """, *params)
+        p2 = list(params)
         offset = (page - 1) * limit
-        params.append(limit + 1)
-        params.append(offset)
+        p2.append(limit + 1)
+        p2.append(offset)
         rows = records_to_list(await conn.fetch(f"""
             SELECT invoice_id, invoice_number, date_invoice, state,
-                   partner_id, partner_name,
-                   amount_total, amount_residual,
-                   line_id, product_id, line_description, qty, price_unit, price_subtotal,
-                   modelo_display, product_tmpl_id, barcode, talla, color,
-                   marca, tipo, entalle, tela, hilo
-            FROM crm.v_credito_flat {where}
-            ORDER BY date_invoice DESC, invoice_id DESC, line_id DESC
-            LIMIT ${len(params)-1} OFFSET ${len(params)}
-        """, *params))
-
+                   partner_id, partner_name, owner_partner_id, owner_partner_name,
+                   amount_total, amount_residual, qty_total, lines_count
+            FROM crm.v_credito_invoice_header {where}
+            ORDER BY date_invoice DESC, invoice_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
         has_next = len(rows) > limit
         return {
-            "items": rows[:limit],
-            "page": page,
-            "limit": limit,
-            "has_next": has_next,
-            "debug": {
-                "cuenta_partner_odoo_id": odoo_id,
-                "partners_count": len(partner_ids),
-            }
+            "metrics": {"invoices_count": met['invoices_count'], "qty_total": float(met['qty_total']), "saldo_total": float(met['saldo_total'])},
+            "rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next,
         }
 
 
