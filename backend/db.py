@@ -235,25 +235,44 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create v_partner_account_final: {e}")
 
-    # 3.1a) v_cuenta_partners – all partner_ids belonging to a cuenta
+    # 3.1a) v_cuenta_partners – all partner_ids belonging to a cuenta (robust match)
     try:
         await conn.execute("""
             CREATE OR REPLACE VIEW crm.v_cuenta_partners AS
+            -- Main partner
             SELECT c.id AS cuenta_id, c.cuenta_partner_odoo_id AS partner_id
             FROM crm.cuenta c
             WHERE c.cuenta_partner_odoo_id IS NOT NULL
             UNION
+            -- Manual links
             SELECT cv.cuenta_id, cv.odoo_partner_id AS partner_id
             FROM crm.cuenta_vinculo cv
             WHERE cv.activo = true
             UNION
+            -- Odoo auto-linked (from v_partner_account_final)
             SELECT c.id AS cuenta_id, paf.contacto_partner_odoo_id AS partner_id
             FROM crm.cuenta c
             JOIN crm.v_partner_account_final paf
                 ON paf.cuenta_partner_odoo_id = c.cuenta_partner_odoo_id
+            WHERE c.cuenta_partner_odoo_id IS NOT NULL
+            UNION
+            -- Children: partners whose commercial_partner_id matches the account
+            SELECT c.id AS cuenta_id, rp.odoo_id AS partner_id
+            FROM crm.cuenta c
+            JOIN odoo.res_partner rp
+                ON rp.company_key = 'GLOBAL'
+                AND rp.commercial_partner_id = c.cuenta_partner_odoo_id
+            WHERE c.cuenta_partner_odoo_id IS NOT NULL
+            UNION
+            -- Children: partners whose parent_id matches the account
+            SELECT c.id AS cuenta_id, rp.odoo_id AS partner_id
+            FROM crm.cuenta c
+            JOIN odoo.res_partner rp
+                ON rp.company_key = 'GLOBAL'
+                AND rp.parent_id = c.cuenta_partner_odoo_id
             WHERE c.cuenta_partner_odoo_id IS NOT NULL;
         """)
-        logger.info("View crm.v_cuenta_partners created")
+        logger.info("View crm.v_cuenta_partners created (with commercial/parent rollup)")
     except Exception as e:
         logger.warning(f"Could not create v_cuenta_partners: {e}")
 
