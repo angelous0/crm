@@ -143,6 +143,11 @@ export default function CuentaDetalle() {
   const debounceRef = useRef(null);
   const unlinkPageSize = 20;
 
+  // Creditos states
+  const [creditos, setCreditos] = useState({ items: [], has_next: false, debug: {} });
+  const [creditosPage, setCreditosPage] = useState(1);
+  const [creditosLoading, setCreditosLoading] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
