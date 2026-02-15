@@ -441,6 +441,36 @@ export default function CuentaDetalle() {
     }
   }, [id]);
 
+  // ── Fetch ventas lines for detail mode ──
+  const fetchVentasLines = useCallback(async (pg = 1, docTipo = ventasDocTipo) => {
+    setVentasLinesLoading(true);
+    try {
+      const r = await api.get(`/cuentas/${id}/ventas/lines`, {
+        params: { doc_tipo: docTipo, page: pg, limit: 50 }
+      });
+      setVentasLines(r.data || { rows: [], has_next: false });
+      setVentasLinesPage(pg);
+    } catch {
+      toast.error("Error cargando lineas de ventas");
+    } finally {
+      setVentasLinesLoading(false);
+    }
+  }, [id, ventasDocTipo]);
+
+  // ── Fetch creditos lines for detail mode ──
+  const fetchCreditosLines = useCallback(async (pg = 1) => {
+    setCreditosLinesLoading(true);
+    try {
+      const r = await api.get(`/cuentas/${id}/creditos/lines`, { params: { page: pg, limit: 50 } });
+      setCreditosLines(r.data || { rows: [], has_next: false });
+      setCreditosLinesPage(pg);
+    } catch {
+      toast.error("Error cargando lineas de creditos");
+    } finally {
+      setCreditosLinesLoading(false);
+    }
+  }, [id]);
+
   // ── Vincular contacto logic ──
   const fetchUnlinked = useCallback(async (searchVal, pg, dni, tel) => {
     if (!searchVal || searchVal.length < 2) {
