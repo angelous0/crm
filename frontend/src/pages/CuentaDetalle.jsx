@@ -182,6 +182,16 @@ export default function CuentaDetalle() {
         setInteracciones(iRes.data || []);
         setTareas(tRes.data || []);
         setVentas({ items: [], kpis: {}, has_next: false, debug: {} });
+        // Fetch tab counts in parallel
+        Promise.all([
+          api.get(`/cuentas/${id}/ventas`, { params: { doc_tipo: "SALE", limit: 1 } }),
+          api.get(`/cuentas/${id}/ventas`, { params: { doc_tipo: "RESERVA", limit: 1 } }),
+        ]).then(([saleRes, resRes]) => {
+          setTabCounts({
+            sale: saleRes.data?.total_rows ?? 0,
+            reserva: resRes.data?.total_rows ?? 0,
+          });
+        }).catch(() => {});
       } catch (err) {
         toast.error("Error al cargar cuenta");
       } finally {
