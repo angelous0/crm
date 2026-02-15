@@ -83,9 +83,10 @@ class TestComercialOrders:
         assert data["metrics"]["orders_count"] > 0, "Expected orders to be returned"
         
         # Verify all orders have lines_count > 0
+        # Note: qty_total can be 0 if there are returns (positive + negative qty)
         for row in data["rows"]:
             assert row.get("lines_count", 0) > 0, f"Order {row.get('order_id')} has lines_count=0 (should be excluded)"
-            assert row.get("qty_total", 0) > 0, f"Order {row.get('order_id')} has qty_total=0"
+            # qty_total may be 0 due to returns, but lines_count must be positive
 
 
 class TestComercialLines:
