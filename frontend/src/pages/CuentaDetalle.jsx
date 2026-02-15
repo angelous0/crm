@@ -181,15 +181,15 @@ export default function CuentaDetalle() {
         setContactos(ctRes.data || []);
         setInteracciones(iRes.data || []);
         setTareas(tRes.data || []);
-        setVentas({ items: [], kpis: {}, has_next: false, debug: {} });
-        // Fetch tab counts in parallel
+        setVentas({ items: [], has_next: false, debug: {} });
+        // Fetch metrics for tab counters
         Promise.all([
-          api.get(`/cuentas/${id}/ventas`, { params: { doc_tipo: "SALE", limit: 1 } }),
-          api.get(`/cuentas/${id}/ventas`, { params: { doc_tipo: "RESERVA", limit: 1 } }),
+          api.get(`/cuentas/${id}/ventas/metrics`, { params: { doc_tipo: "SALE" } }),
+          api.get(`/cuentas/${id}/ventas/metrics`, { params: { doc_tipo: "RESERVA" } }),
         ]).then(([saleRes, resRes]) => {
-          setTabCounts({
-            sale: saleRes.data?.total_rows ?? 0,
-            reserva: resRes.data?.total_rows ?? 0,
+          setMetrics({
+            sale: saleRes.data,
+            reserva: resRes.data,
           });
         }).catch(() => {});
       } catch (err) {
