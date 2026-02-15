@@ -986,43 +986,47 @@ async def get_cuenta_ventas_clasificacion_orders(
         extra = ""
         if fecha_desde:
             params.append(fecha_desde)
-            extra += f" AND m.fecha >= ${len(params)}::text::timestamptz"
+            extra += f" AND po.date_order >= ${len(params)}::text::timestamptz"
         if fecha_hasta:
             params.append(fecha_hasta + "T23:59:59")
-            extra += f" AND m.fecha <= ${len(params)}::text::timestamptz"
+            extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
         if marca:
             params.append(marca)
-            extra += f" AND COALESCE(m.marca, '') = ${len(params)}"
+            extra += f" AND COALESCE(pt.marca, '') = ${len(params)}"
         else:
-            extra += " AND COALESCE(m.marca, '') = ''"
+            extra += " AND COALESCE(pt.marca, '') = ''"
         if tipo:
             params.append(tipo)
-            extra += f" AND COALESCE(m.tipo, '') = ${len(params)}"
+            extra += f" AND COALESCE(pt.tipo, '') = ${len(params)}"
         else:
-            extra += " AND COALESCE(m.tipo, '') = ''"
+            extra += " AND COALESCE(pt.tipo, '') = ''"
         if entalle:
             params.append(entalle)
-            extra += f" AND COALESCE(m.entalle, '') = ${len(params)}"
+            extra += f" AND COALESCE(pt.entalle, '') = ${len(params)}"
         else:
-            extra += " AND COALESCE(m.entalle, '') = ''"
+            extra += " AND COALESCE(pt.entalle, '') = ''"
 
         offset = (page - 1) * limit
         params.append(limit + 1)
         params.append(offset)
         rows = records_to_list(await conn.fetch(f"""
-            SELECT m.order_id,
+            SELECT po.odoo_id AS order_id,
                    po.name AS order_name,
-                   MAX(m.fecha) AS date_order,
-                   SUM(m.qty) AS qty_item,
-                   SUM(m.subtotal) AS ventas_item,
+                   MAX(po.date_order) AS date_order,
+                   SUM(pol.qty) AS qty_item,
+                   SUM(pol.price_subtotal) AS ventas_item,
                    COUNT(*) AS lines_count
-            FROM crm.v_comercial_mov_flat m
-            JOIN odoo.pos_order po ON po.odoo_id = m.order_id
-            WHERE m.doc_tipo = 'SALE'
-              AND m.partner_id = ANY($1)
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_CATALOG_JOIN}
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              AND COALESCE(po.reserva, false) = false
+              {_CATALOG_FILTER}
               {extra}
-            GROUP BY m.order_id, po.name
-            ORDER BY MAX(m.fecha) DESC
+            GROUP BY po.odoo_id, po.name
+            ORDER BY MAX(po.date_order) DESC
             LIMIT ${len(params)-1} OFFSET ${len(params)}
         """, *params))
         has_next = len(rows) > limit
