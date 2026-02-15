@@ -118,6 +118,85 @@ async def credito_invoice_lines(
     return {"items": rows[:limit], "has_next": has_next, "page": page}
 
 
+# ── Global invoice lines (detail mode) ──
+@router.get("/lines")
+async def creditos_lines(
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    state: Optional[str] = None,
+    cliente: Optional[str] = None,
+    solo_con_saldo: bool = False,
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(_get_auth()),
+):
+    pool = await get_pool()
+
+    # Line-level filters
+    params = []
+    parts = []
+    if state:
+        params.append(state)
+        parts.append(f"state = ${len(params)}")
+    if fecha_desde:
+        params.append(fecha_desde)
+        parts.append(f"date_invoice >= ${len(params)}::text::date")
+    if fecha_hasta:
+        params.append(fecha_hasta)
+        parts.append(f"date_invoice <= ${len(params)}::text::date")
+    if cliente:
+        params.append(f"%{cliente}%")
+        parts.append(f"partner_name ILIKE ${len(params)}")
+    if solo_con_saldo:
+        parts.append("amount_residual > 0")
+    where = ("WHERE " + " AND ".join(parts)) if parts else ""
+
+    # Header-level metrics (consistent KPIs)
+    h_params = []
+    h_where = _build_where(h_params, fecha_desde, fecha_hasta, state, cliente, solo_con_saldo)
+
+    async with pool.acquire() as conn:
+        met = await conn.fetchrow(f"""
+            SELECT COUNT(*) AS invoices_count,
+                   COALESCE(SUM(qty_total), 0) AS qty_total,
+                   COALESCE(SUM(amount_residual), 0) AS saldo_total,
+                   COALESCE(SUM(amount_total), 0) AS total_facturado,
+                   COUNT(DISTINCT owner_partner_id) AS clientes_count
+            FROM {HEADER_VIEW} {h_where}
+        """, *h_params)
+
+        p2 = list(params)
+        offset = (page - 1) * limit
+        p2.append(limit + 1)
+        p2.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT invoice_id, invoice_number, date_invoice, state,
+                   partner_id, partner_name,
+                   amount_total, amount_residual,
+                   line_id, product_id, line_description, qty, price_unit, price_subtotal,
+                   modelo_display, product_tmpl_id, barcode, talla, color,
+                   marca, tipo, entalle, tela, hilo
+            FROM {LINES_VIEW} {where}
+            ORDER BY date_invoice DESC, line_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
+
+    has_next = len(rows) > limit
+    return {
+        "metrics": {
+            "invoices_count": met['invoices_count'],
+            "qty_total": float(met['qty_total']),
+            "saldo_total": float(met['saldo_total']),
+            "total_facturado": float(met['total_facturado']),
+            "clientes_count": met['clientes_count'],
+        },
+        "rows": rows[:limit],
+        "page": page,
+        "limit": limit,
+        "has_next": has_next,
+    }
+
+
 # ── Legacy metrics (backward compat for /metrics) ──
 @router.get("/metrics")
 async def creditos_global_metrics(

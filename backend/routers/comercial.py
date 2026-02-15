@@ -116,6 +116,81 @@ async def comercial_order_lines(
     return {"items": rows[:limit], "has_next": has_next, "page": page}
 
 
+# ── Global order lines (detail mode) ──
+@router.get("/lines")
+async def comercial_lines(
+    doc_tipo: Optional[str] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    cliente: Optional[str] = None,
+    exclude_varios: bool = False,
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(_get_auth()),
+):
+    pool = await get_pool()
+
+    # Line-level filters
+    params = []
+    parts = []
+    if doc_tipo:
+        params.append(doc_tipo)
+        parts.append(f"doc_tipo = ${len(params)}")
+    if fecha_desde:
+        params.append(fecha_desde)
+        parts.append(f"fecha >= ${len(params)}::text::timestamptz")
+    if fecha_hasta:
+        params.append(fecha_hasta + "T23:59:59")
+        parts.append(f"fecha <= ${len(params)}::text::timestamptz")
+    if cliente:
+        params.append(f"%{cliente}%")
+        parts.append(f"owner_partner_name ILIKE ${len(params)}")
+    if exclude_varios:
+        parts.append("owner_partner_name NOT ILIKE '%varios%'")
+    where = ("WHERE " + " AND ".join(parts)) if parts else ""
+
+    # Header-level metrics (consistent KPIs)
+    h_params = []
+    h_where = _build_header_where(h_params, doc_tipo, fecha_desde, fecha_hasta,
+                                  cliente, exclude_varios)
+
+    async with pool.acquire() as conn:
+        met = await conn.fetchrow(f"""
+            SELECT COUNT(*) AS orders_count,
+                   COALESCE(SUM(qty_total), 0) AS qty_total,
+                   COUNT(DISTINCT owner_partner_id) AS clientes_count
+            FROM {HEADER_VIEW} {h_where}
+        """, *h_params)
+
+        p2 = list(params)
+        offset = (page - 1) * limit
+        p2.append(limit + 1)
+        p2.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT doc_tipo, order_id, line_id, fecha, partner_id,
+                   owner_partner_id, owner_partner_name,
+                   product_product_id, product_tmpl_id,
+                   modelo_display, marca, tipo, entalle, tela, hilo,
+                   talla, color, barcode, qty, price_unit, subtotal
+            FROM {LINES_VIEW} {where}
+            ORDER BY fecha DESC, line_id DESC
+            LIMIT ${len(p2)-1} OFFSET ${len(p2)}
+        """, *p2))
+
+    has_next = len(rows) > limit
+    return {
+        "metrics": {
+            "orders_count": met['orders_count'],
+            "qty_total": float(met['qty_total']),
+            "clientes_count": met['clientes_count'],
+        },
+        "rows": rows[:limit],
+        "page": page,
+        "limit": limit,
+        "has_next": has_next,
+    }
+
+
 # ── Legacy summary endpoint (keep backward compat) ──
 @router.get("/summary")
 async def comercial_summary(
