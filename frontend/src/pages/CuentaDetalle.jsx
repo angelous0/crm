@@ -114,11 +114,11 @@ export default function CuentaDetalle() {
   const [contactos, setContactos] = useState([]);
   const [interacciones, setInteracciones] = useState([]);
   const [tareas, setTareas] = useState([]);
-  const [ventas, setVentas] = useState({ items: [], has_next: false, debug: {} });
+  const [ventas, setVentas] = useState({ metrics: {}, rows: [], has_next: false });
   const [ventasPage, setVentasPage] = useState(1);
   const [ventasDocTipo, setVentasDocTipo] = useState("SALE");
   const [ventasLoading, setVentasLoading] = useState(false);
-  const [metrics, setMetrics] = useState({ sale: null, reserva: null });
+  const [metrics, setMetrics] = useState({ sale: null, reserva: null, creditos: null });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState({});
@@ -145,9 +145,13 @@ export default function CuentaDetalle() {
   const unlinkPageSize = 20;
 
   // Creditos states
-  const [creditos, setCreditos] = useState({ items: [], has_next: false, debug: {} });
+  const [creditos, setCreditos] = useState({ metrics: {}, rows: [], has_next: false });
   const [creditosPage, setCreditosPage] = useState(1);
   const [creditosLoading, setCreditosLoading] = useState(false);
+
+  // Drawer state
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   useEffect(() => {
     const load = async () => {
