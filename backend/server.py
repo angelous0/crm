@@ -809,6 +809,133 @@ async def get_cuenta_ventas_orders(
         }
 
 
+@cuentas_router.get("/{cuenta_id}/ventas/clasificacion")
+async def get_cuenta_ventas_clasificacion(
+    cuenta_id: str,
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
+    marca: str = "",
+    tipo: str = "",
+    entalle: str = "",
+    top: int = 200,
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": []}
+        params = [partner_ids]
+        extra = ""
+        if fecha_desde:
+            params.append(fecha_desde)
+            extra += f" AND po.date_order >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
+        if marca:
+            params.append(marca)
+            extra += f" AND pt.marca = ${len(params)}"
+        if tipo:
+            params.append(tipo)
+            extra += f" AND pt.tipo = ${len(params)}"
+        if entalle:
+            params.append(entalle)
+            extra += f" AND pt.entalle = ${len(params)}"
+        params.append(top)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT COALESCE(pt.marca, '') AS marca,
+                   COALESCE(pt.tipo, '') AS tipo,
+                   COALESCE(pt.entalle, '') AS entalle,
+                   MAX(po.date_order) AS ultima_fecha_compra,
+                   COALESCE(SUM(pol.qty), 0) AS cantidad,
+                   COALESCE(SUM(pol.price_subtotal), 0) AS ventas,
+                   COUNT(DISTINCT po.odoo_id) AS compras
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              AND COALESCE(po.reserva, false) = false
+              {extra}
+            GROUP BY pt.marca, pt.tipo, pt.entalle
+            ORDER BY ventas DESC
+            LIMIT ${len(params)}
+        """, *params))
+        return {"rows": rows}
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/clasificacion/detail")
+async def get_cuenta_ventas_clasificacion_detail(
+    cuenta_id: str,
+    marca: str = "",
+    tipo: str = "",
+    entalle: str = "",
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
+    page: int = 1,
+    limit: int = 50,
+    user=Depends(get_current_user)
+):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": [], "page": page, "limit": limit, "has_next": False}
+        params = [partner_ids]
+        extra = ""
+        if fecha_desde:
+            params.append(fecha_desde)
+            extra += f" AND po.date_order >= ${len(params)}::text::timestamptz"
+        if fecha_hasta:
+            params.append(fecha_hasta + "T23:59:59")
+            extra += f" AND po.date_order <= ${len(params)}::text::timestamptz"
+        # Match classification (use IS NOT DISTINCT FROM to handle NULLs)
+        if marca:
+            params.append(marca)
+            extra += f" AND COALESCE(pt.marca, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.marca, '') = ''"
+        if tipo:
+            params.append(tipo)
+            extra += f" AND COALESCE(pt.tipo, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.tipo, '') = ''"
+        if entalle:
+            params.append(entalle)
+            extra += f" AND COALESCE(pt.entalle, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.entalle, '') = ''"
+
+        offset = (page - 1) * limit
+        params.append(limit + 1)
+        params.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT pol.odoo_id AS line_id,
+                   po.odoo_id AS order_id, po.name AS order_name,
+                   po.date_order AS fecha,
+                   COALESCE(pt.name, '') AS modelo_display,
+                   vv.talla, vv.color, vv.barcode,
+                   pol.qty, pol.price_unit, pol.price_subtotal AS subtotal
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            LEFT JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+            LEFT JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              AND COALESCE(po.reserva, false) = false
+              {extra}
+            ORDER BY po.date_order DESC, pol.odoo_id DESC
+            LIMIT ${len(params)-1} OFFSET ${len(params)}
+        """, *params))
+        has_next = len(rows) > limit
+        return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
+
+
+
 @cuentas_router.get("/{cuenta_id}/ventas/lines")
 async def get_cuenta_ventas_lines(
     cuenta_id: str,
