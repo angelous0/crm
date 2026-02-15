@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { OrderLinesDrawer } from "@/components/DetailDrawers";
 import {
   Loader2, Calendar, Hash, Users, ShoppingBag,
-  ChevronLeft, ChevronRight, Download
+  ChevronLeft, ChevronRight, Download, List
 } from "lucide-react";
 
 function fmtNum(n) { return Number(n || 0).toLocaleString("es-PE"); }
@@ -44,6 +44,7 @@ export default function ComercialPage() {
   const [fechaHasta, setFechaHasta] = useState(now.toISOString().slice(0, 10));
   const [excludeVarios, setExcludeVarios] = useState(false);
   const [cliente, setCliente] = useState("");
+  const [detailMode, setDetailMode] = useState(false);
 
   const [data, setData] = useState({ metrics: {}, rows: [], has_next: false });
   const [page, setPage] = useState(1);
@@ -60,18 +61,19 @@ export default function ComercialPage() {
       if (fechaHasta) params.fecha_hasta = fechaHasta;
       if (excludeVarios) params.exclude_varios = true;
       if (cliente) params.cliente = cliente;
-      const r = await api.get("/comercial/orders", { params });
+      const endpoint = detailMode ? "/comercial/lines" : "/comercial/orders";
+      const r = await api.get(endpoint, { params });
       setData(r.data || { metrics: {}, rows: [], has_next: false });
       setPage(pg);
     } catch { toast.error("Error cargando datos"); }
     finally { setLoading(false); }
-  }, [docTipo, fechaDesde, fechaHasta, excludeVarios, cliente]);
+  }, [docTipo, fechaDesde, fechaHasta, excludeVarios, cliente, detailMode]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => fetchData(1), 400);
     return () => clearTimeout(debounceRef.current);
-  }, [docTipo, fechaDesde, fechaHasta, excludeVarios, cliente]); // eslint-disable-line
+  }, [docTipo, fechaDesde, fechaHasta, excludeVarios, cliente, detailMode]); // eslint-disable-line
 
   const metrics = data.metrics || {};
   const rows = data.rows || [];
@@ -103,7 +105,16 @@ export default function ComercialPage() {
 
         <label className="flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer" data-testid="toggle-excl-varios">
           <Switch checked={excludeVarios} onCheckedChange={setExcludeVarios} className="h-4 w-7 data-[state=checked]:bg-amber-500" />
-          <span>Excluir Clientes Varios</span>
+          <span>Excluir Varios</span>
+        </label>
+
+        <div className="w-px h-5 bg-slate-700" />
+
+        <label className="flex items-center gap-1.5 text-[10px] cursor-pointer" data-testid="toggle-detail-mode">
+          <Switch checked={detailMode} onCheckedChange={setDetailMode} className="h-4 w-7 data-[state=checked]:bg-cyan-500" />
+          <span className={detailMode ? "text-cyan-400 font-semibold" : "text-slate-400"}>
+            <List size={10} className="inline mr-0.5 -mt-px" />Modo detalle
+          </span>
         </label>
 
         <div className="ml-auto flex items-center gap-3 text-[10px]">
@@ -119,6 +130,7 @@ export default function ComercialPage() {
             {label}
           </button>
         ))}
+        {detailMode && <span className="ml-2 self-end text-[9px] text-cyan-600 font-semibold bg-cyan-50 px-2 py-1 rounded-t border border-b-0 border-cyan-200">LINEAS</span>}
       </div>
 
       {loading ? (
@@ -136,48 +148,20 @@ export default function ComercialPage() {
           <div className="flex-1 flex flex-col min-h-0 px-3 pb-3">
             <div className="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold flex items-center justify-between shrink-0">
-                <span>Ordenes ({docTipo === "SALE" ? "Ventas" : "Reservas"})</span>
+                <span>{detailMode ? "Lineas de producto" : "Ordenes"} ({docTipo === "SALE" ? "Ventas" : "Reservas"})</span>
                 {rows.length > 0 && (
                   <button className="flex items-center gap-0.5 text-slate-300 hover:text-white px-1"
-                    onClick={() => downloadCSV(rows, `ordenes_${docTipo.toLowerCase()}.csv`)} data-testid="export-csv-btn">
+                    onClick={() => downloadCSV(rows, `${detailMode ? "lineas" : "ordenes"}_${docTipo.toLowerCase()}.csv`)} data-testid="export-csv-btn">
                     <Download size={10} /> CSV
                   </button>
                 )}
               </div>
               <div className="flex-1 overflow-auto min-h-0">
-                <table className="w-full text-[10px] border-collapse" data-testid="orders-table">
-                  <thead className="sticky top-0 bg-slate-100 z-10">
-                    <tr>
-                      <th className="text-left px-2 py-1.5 font-semibold">Fecha</th>
-                      <th className="text-left px-2 py-1.5 font-semibold">Orden</th>
-                      <th className="text-left px-2 py-1.5 font-semibold">Estado</th>
-                      <th className="text-left px-2 py-1.5 font-semibold">Cliente</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">Total</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">Uds</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">Lineas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!rows.length ? (
-                      <tr><td colSpan={7} className="text-center py-8 text-slate-400">Sin datos</td></tr>
-                    ) : rows.map((r, i) => (
-                      <tr key={r.order_id} className={`cursor-pointer ${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50 transition-colors`}
-                        onClick={() => setSelectedOrder(r)} data-testid={`order-row-${r.order_id}`}>
-                        <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.date_order)}</td>
-                        <td className="px-2 py-1 font-mono text-slate-600 text-[9px]">{r.order_name || r.order_id}</td>
-                        <td className="px-2 py-1">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "paid" ? "bg-emerald-100 text-emerald-700" : r.state === "done" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
-                            {r.state}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 font-medium truncate max-w-[200px]">{r.owner_partner_name || "-"}</td>
-                        <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.amount_total)}</td>
-                        <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty_total)}</td>
-                        <td className="px-2 py-1 text-right text-slate-500">{r.lines_count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {detailMode ? (
+                  <LinesTable rows={rows} />
+                ) : (
+                  <HeadersTable rows={rows} onSelect={setSelectedOrder} />
+                )}
               </div>
               {(page > 1 || data.has_next) && (
                 <div className="flex items-center justify-between px-3 py-1.5 border-t text-[10px] text-slate-500 shrink-0">
@@ -197,8 +181,85 @@ export default function ComercialPage() {
         </>
       )}
 
-      {/* Order detail drawer */}
-      {selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      {/* Order detail drawer (only in header mode) */}
+      {!detailMode && selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
     </div>
+  );
+}
+
+function HeadersTable({ rows, onSelect }) {
+  return (
+    <table className="w-full text-[10px] border-collapse" data-testid="orders-table">
+      <thead className="sticky top-0 bg-slate-100 z-10">
+        <tr>
+          <th className="text-left px-2 py-1.5 font-semibold">Fecha</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Orden</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Estado</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Cliente</th>
+          <th className="text-right px-2 py-1.5 font-semibold">Total</th>
+          <th className="text-right px-2 py-1.5 font-semibold">Uds</th>
+          <th className="text-right px-2 py-1.5 font-semibold">Lineas</th>
+        </tr>
+      </thead>
+      <tbody>
+        {!rows.length ? (
+          <tr><td colSpan={7} className="text-center py-8 text-slate-400">Sin datos</td></tr>
+        ) : rows.map((r, i) => (
+          <tr key={r.order_id} className={`cursor-pointer ${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50 transition-colors`}
+            onClick={() => onSelect(r)} data-testid={`order-row-${r.order_id}`}>
+            <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.date_order)}</td>
+            <td className="px-2 py-1 font-mono text-slate-600 text-[9px]">{r.order_name || r.order_id}</td>
+            <td className="px-2 py-1">
+              <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "paid" ? "bg-emerald-100 text-emerald-700" : r.state === "done" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
+                {r.state}
+              </span>
+            </td>
+            <td className="px-2 py-1 font-medium truncate max-w-[200px]">{r.owner_partner_name || "-"}</td>
+            <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.amount_total)}</td>
+            <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty_total)}</td>
+            <td className="px-2 py-1 text-right text-slate-500">{r.lines_count}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function LinesTable({ rows }) {
+  return (
+    <table className="w-full text-[10px] border-collapse" data-testid="lines-table">
+      <thead className="sticky top-0 bg-cyan-50 z-10">
+        <tr>
+          <th className="text-left px-2 py-1.5 font-semibold">Fecha</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Orden</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Cliente</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Modelo</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Marca</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Talla</th>
+          <th className="text-left px-2 py-1.5 font-semibold">Color</th>
+          <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
+          <th className="text-right px-2 py-1.5 font-semibold">P.Unit</th>
+          <th className="text-right px-2 py-1.5 font-semibold">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {!rows.length ? (
+          <tr><td colSpan={10} className="text-center py-8 text-slate-400">Sin lineas</td></tr>
+        ) : rows.map((r, i) => (
+          <tr key={`${r.order_id}-${r.line_id}`} className={`${i % 2 ? "bg-slate-50/50" : ""} hover:bg-cyan-50/50`}>
+            <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.fecha)}</td>
+            <td className="px-2 py-1 font-mono text-slate-500 text-[9px]">{r.order_id}</td>
+            <td className="px-2 py-1 font-medium truncate max-w-[140px]">{r.owner_partner_name || "-"}</td>
+            <td className="px-2 py-1 truncate max-w-[140px]">{r.modelo_display || "-"}</td>
+            <td className="px-2 py-1 text-slate-500">{r.marca || "-"}</td>
+            <td className="px-2 py-1">{r.talla || "-"}</td>
+            <td className="px-2 py-1">{r.color || "-"}</td>
+            <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty)}</td>
+            <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.price_unit)}</td>
+            <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.subtotal)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
