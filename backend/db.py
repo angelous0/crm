@@ -931,3 +931,84 @@ async def _create_views(conn):
             logger.warning("Missing tables for v_credito_flat")
     except Exception as e:
         logger.warning(f"Could not create v_credito_flat: {e}")
+
+
+    # 3.7) v_comercial_order_header – 1 row per POS order (SALE / RESERVA)
+    try:
+        await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_order_header CASCADE;")
+        await conn.execute("""
+            CREATE VIEW crm.v_comercial_order_header AS
+            SELECT
+                CASE
+                    WHEN COALESCE(po.reserva, false) = true
+                         AND COALESCE(po.reserva_use_id, 0) = 0
+                    THEN 'RESERVA'
+                    ELSE 'SALE'
+                END AS doc_tipo,
+                po.odoo_id   AS order_id,
+                po.name      AS order_name,
+                po.date_order,
+                po.state,
+                po.amount_total,
+                po.partner_id,
+                COALESCE(paf.cuenta_partner_odoo_id, po.partner_id) AS owner_partner_id,
+                rp_owner.name AS owner_partner_name,
+                agg.qty_total,
+                agg.lines_count
+            FROM odoo.pos_order po
+            JOIN (
+                SELECT order_id,
+                       COALESCE(SUM(qty), 0) AS qty_total,
+                       COUNT(*)              AS lines_count
+                FROM odoo.pos_order_line
+                GROUP BY order_id
+            ) agg ON agg.order_id = po.odoo_id
+            LEFT JOIN crm.v_partner_account_final paf
+                ON po.partner_id = paf.contacto_partner_odoo_id
+            LEFT JOIN odoo.res_partner rp_owner
+                ON COALESCE(paf.cuenta_partner_odoo_id, po.partner_id) = rp_owner.odoo_id
+                AND rp_owner.company_key = 'GLOBAL'
+            WHERE COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false;
+        """)
+        logger.info("View crm.v_comercial_order_header created")
+    except Exception as e:
+        logger.warning(f"Could not create v_comercial_order_header: {e}")
+
+    # 3.8) v_credito_invoice_header – 1 row per credit invoice
+    try:
+        await conn.execute("DROP VIEW IF EXISTS crm.v_credito_invoice_header CASCADE;")
+        await conn.execute("""
+            CREATE VIEW crm.v_credito_invoice_header AS
+            SELECT
+                ic.odoo_id          AS invoice_id,
+                ic.number           AS invoice_number,
+                ic.date_invoice,
+                ic.state,
+                ic.partner_id,
+                rp.name             AS partner_name,
+                COALESCE(paf.cuenta_partner_odoo_id, ic.partner_id) AS owner_partner_id,
+                rp_owner.name       AS owner_partner_name,
+                ic.amount_total,
+                ic.amount_residual,
+                agg.qty_total,
+                agg.lines_count
+            FROM odoo.account_invoice_credit ic
+            JOIN (
+                SELECT invoice_id,
+                       COALESCE(SUM(quantity), 0) AS qty_total,
+                       COUNT(*)                   AS lines_count
+                FROM odoo.account_invoice_credit_line
+                GROUP BY invoice_id
+            ) agg ON agg.invoice_id = ic.odoo_id
+            LEFT JOIN crm.v_partner_account_final paf
+                ON ic.partner_id = paf.contacto_partner_odoo_id
+            LEFT JOIN odoo.res_partner rp
+                ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
+            LEFT JOIN odoo.res_partner rp_owner
+                ON COALESCE(paf.cuenta_partner_odoo_id, ic.partner_id) = rp_owner.odoo_id
+                AND rp_owner.company_key = 'GLOBAL';
+        """)
+        logger.info("View crm.v_credito_invoice_header created")
+    except Exception as e:
+        logger.warning(f"Could not create v_credito_invoice_header: {e}")
