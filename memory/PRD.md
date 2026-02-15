@@ -123,6 +123,26 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 
 **No toggle** - filter always active by default (toggle deferred).
 
+### 10. Info Ventas 2-Level Drill-Down (DONE - Feb 2026)
+**Feature:** 2-level navigation in Info Ventas tab: Item -> Orders -> Lines
+
+**Level 1 - Orders by Classification:**
+- New endpoint: `GET /api/cuentas/{id}/ventas/clasificacion/orders`
+- Params: marca, tipo, entalle (required), fecha_desde, fecha_hasta (optional), page, limit
+- Returns: order_id, order_name, date_order, qty_item, ventas_item, lines_count
+- Groups by order_id from raw tables with catalog filter
+- Ordered by date_order DESC, paginated
+
+**Level 2 - Order Lines:**
+- Reuses: `GET /api/comercial/orders/{order_id}/lines`
+- Returns: modelo_display, talla, color, qty, price_unit, subtotal
+
+**Frontend (CuentaDetalle.jsx):**
+- ClasifDetailDrawer rewritten with 2-level navigation
+- Breadcrumb: "Ordenes > OrderName"
+- Back button to return from Level 2 to Level 1
+- Pagination at both levels
+
 ## Backlog
 - P1: Enhance drill-down drawer in "Info Ventas" tab (order-level summary first, then expand to lines) - deferred by user
 - P1: Toggle "Incluir productos excluidos" for auditoría (deferred by user)
