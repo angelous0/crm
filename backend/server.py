@@ -2942,3 +2942,6 @@ app.include_router(reposicion_router)
 from routers.comercial import router as comercial_router
 app.include_router(comercial_router)
 app.include_router(sync_router)
+
+from routers.creditos import router as creditos_router
+app.include_router(creditos_router)
