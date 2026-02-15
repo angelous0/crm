@@ -173,7 +173,7 @@ export default function CuentaDetalle() {
         setContactos(ctRes.data || []);
         setInteracciones(iRes.data || []);
         setTareas(tRes.data || []);
-        setVentas({ items: [], has_next: false, debug: {} });
+        setVentas({ metrics: {}, rows: [], has_next: false });
         // Fetch metrics for tab counters
         Promise.all([
           api.get(`/cuentas/${id}/ventas/metrics`, { params: { doc_tipo: "SALE" } }),
