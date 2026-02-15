@@ -1092,9 +1092,9 @@ export default function CuentaDetalle() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail drawers */}
-      {selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
-      {selectedInvoice && <InvoiceLinesDrawer invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />}
+      {/* Detail drawers (only in header mode) */}
+      {!detailMode && selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      {!detailMode && selectedInvoice && <InvoiceLinesDrawer invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />}
 
     </div>
   );
