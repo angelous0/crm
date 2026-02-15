@@ -444,8 +444,8 @@ export default function CuentaDetalle() {
             }}>
               <TabsList className="mb-4" data-testid="cuenta-tabs">
                 <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
-                <TabsTrigger value="ventas">Ventas ({ventas.kpis?.orders || 0})</TabsTrigger>
-                <TabsTrigger value="reservas">Reservas</TabsTrigger>
+                <TabsTrigger value="ventas" data-testid="tab-ventas">Ventas{tabCounts.sale !== null ? ` (${tabCounts.sale})` : ""}</TabsTrigger>
+                <TabsTrigger value="reservas" data-testid="tab-reservas">Reservas{tabCounts.reserva !== null ? ` (${tabCounts.reserva})` : ""}</TabsTrigger>
                 <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
                 <TabsTrigger value="tareas">Tareas ({tareas.length})</TabsTrigger>
               </TabsList>
