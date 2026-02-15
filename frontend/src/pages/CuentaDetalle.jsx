@@ -857,20 +857,35 @@ export default function CuentaDetalle() {
 
               {/* Ventas Tab */}
               <TabsContent value="ventas">
-                <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage}
-                  onPageChange={(pg) => fetchVentas(pg, "SALE")} onSelectOrder={setSelectedOrder} />
+                {detailMode ? (
+                  <OrderLinesTab data={ventasLines} loading={ventasLinesLoading} page={ventasLinesPage}
+                    onPageChange={(pg) => fetchVentasLines(pg, "SALE")} />
+                ) : (
+                  <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage}
+                    onPageChange={(pg) => fetchVentas(pg, "SALE")} onSelectOrder={setSelectedOrder} />
+                )}
               </TabsContent>
 
               {/* Reservas Tab */}
               <TabsContent value="reservas">
-                <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage}
-                  onPageChange={(pg) => fetchVentas(pg, "RESERVA")} onSelectOrder={setSelectedOrder} />
+                {detailMode ? (
+                  <OrderLinesTab data={ventasLines} loading={ventasLinesLoading} page={ventasLinesPage}
+                    onPageChange={(pg) => fetchVentasLines(pg, "RESERVA")} />
+                ) : (
+                  <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage}
+                    onPageChange={(pg) => fetchVentas(pg, "RESERVA")} onSelectOrder={setSelectedOrder} />
+                )}
               </TabsContent>
 
               {/* Creditos Tab */}
               <TabsContent value="creditos">
-                <InvoiceHeadersTab data={creditos} loading={creditosLoading} page={creditosPage}
-                  onPageChange={fetchCreditos} onSelectInvoice={setSelectedInvoice} />
+                {detailMode ? (
+                  <InvoiceLinesTab data={creditosLines} loading={creditosLinesLoading} page={creditosLinesPage}
+                    onPageChange={fetchCreditosLines} />
+                ) : (
+                  <InvoiceHeadersTab data={creditos} loading={creditosLoading} page={creditosPage}
+                    onPageChange={fetchCreditos} onSelectInvoice={setSelectedInvoice} />
+                )}
               </TabsContent>
 
               {/* Interacciones Tab */}
