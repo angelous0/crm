@@ -268,8 +268,8 @@ export default function ComercialPage() {
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3 p-3 shrink-0" data-testid="comercial-kpis">
-            <KpiCard icon={Hash} label="Cantidad Total" value={fmtNum(kpis.total_qty)} color="border-slate-200" />
             <KpiCard icon={ShoppingBag} label="Ordenes" value={fmtNum(kpis.count_orders)} color="border-slate-200" />
+            <KpiCard icon={Hash} label="Unidades" value={fmtNum(kpis.total_qty)} color="border-slate-200" />
             <KpiCard icon={Users} label="Clientes" value={fmtNum(kpis.count_clients)} color="border-slate-200" />
           </div>
 
