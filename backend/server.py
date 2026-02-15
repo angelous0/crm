@@ -875,37 +875,48 @@ async def get_cuenta_creditos_invoices(
             return {"metrics": {"invoices_count": 0, "qty_total": 0, "saldo_total": 0},
                     "rows": [], "page": page, "limit": limit, "has_next": False}
         params = [partner_ids]
-        where = "WHERE partner_id = ANY($1)"
+        extra = ""
         if state:
             params.append(state)
-            where += f" AND state = ${len(params)}"
+            extra += f" AND ic.state = ${len(params)}"
         if fecha_desde:
             params.append(fecha_desde)
-            where += f" AND date_invoice >= ${len(params)}::text::date"
+            extra += f" AND ic.date_invoice >= ${len(params)}::text::date"
         if fecha_hasta:
             params.append(fecha_hasta)
-            where += f" AND date_invoice <= ${len(params)}::text::date"
+            extra += f" AND ic.date_invoice <= ${len(params)}::text::date"
+
         met = await conn.fetchrow(f"""
             SELECT COUNT(*) AS invoices_count,
-                   COALESCE(SUM(qty_total), 0) AS qty_total,
-                   COALESCE(SUM(amount_residual), 0) AS saldo_total
-            FROM crm.v_credito_invoice_header {where}
+                   COALESCE(SUM(ic.amount_residual), 0) AS saldo_total
+            FROM odoo.account_invoice_credit ic
+            WHERE ic.partner_id = ANY($1) {extra}
         """, *params)
+
         p2 = list(params)
         offset = (page - 1) * limit
         p2.append(limit + 1)
         p2.append(offset)
         rows = records_to_list(await conn.fetch(f"""
-            SELECT invoice_id, invoice_number, date_invoice, state,
-                   partner_id, partner_name, owner_partner_id, owner_partner_name,
-                   amount_total, amount_residual, qty_total, lines_count
-            FROM crm.v_credito_invoice_header {where}
-            ORDER BY date_invoice DESC, invoice_id DESC
+            SELECT ic.odoo_id AS invoice_id, ic.number AS invoice_number,
+                   ic.date_invoice, ic.state, ic.partner_id,
+                   rp.name AS partner_name, rp.name AS owner_partner_name,
+                   ic.amount_total, ic.amount_residual,
+                   COALESCE(agg.qty_total, 0) AS qty_total,
+                   COALESCE(agg.lines_count, 0) AS lines_count
+            FROM odoo.account_invoice_credit ic
+            LEFT JOIN (
+                SELECT invoice_id, SUM(quantity) AS qty_total, COUNT(*) AS lines_count
+                FROM odoo.account_invoice_credit_line GROUP BY invoice_id
+            ) agg ON agg.invoice_id = ic.odoo_id
+            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
+            WHERE ic.partner_id = ANY($1) {extra}
+            ORDER BY ic.date_invoice DESC, ic.odoo_id DESC
             LIMIT ${len(p2)-1} OFFSET ${len(p2)}
         """, *p2))
         has_next = len(rows) > limit
         return {
-            "metrics": {"invoices_count": met['invoices_count'], "qty_total": float(met['qty_total']), "saldo_total": float(met['saldo_total'])},
+            "metrics": {"invoices_count": met['invoices_count'], "qty_total": 0, "saldo_total": float(met['saldo_total'])},
             "rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next,
         }
 
