@@ -859,6 +859,14 @@ async def _create_views(conn):
                 WHERE vpl.is_cancelled = false
                   AND vpl.product_id IS NOT NULL
                   AND vpl.product_tmpl_id IS NOT NULL
+                  AND pt.sale_ok = true
+                  AND pt.purchase_ok = false
+                  AND pt.name NOT ILIKE '%correa%'
+                  AND pt.name NOT ILIKE '%saco%'
+                  AND pt.name NOT ILIKE '%bolsa%'
+                  AND pt.name NOT ILIKE '%probador%'
+                  AND pt.name NOT ILIKE '%paneton%'
+                  AND pt.name NOT ILIKE '%publicitario%'
                   AND (
                       COALESCE(vpl.reserva, false) = false
                       OR
@@ -957,11 +965,24 @@ async def _create_views(conn):
                 agg.lines_count
             FROM odoo.pos_order po
             JOIN (
-                SELECT order_id,
-                       COALESCE(SUM(qty), 0) AS qty_total,
-                       COUNT(*)              AS lines_count
-                FROM odoo.pos_order_line
-                GROUP BY order_id
+                SELECT pol.order_id,
+                       COALESCE(SUM(pol.qty), 0) AS qty_total,
+                       COUNT(*)                  AS lines_count
+                FROM odoo.pos_order_line pol
+                JOIN odoo.v_product_variant_flat vv
+                    ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+                JOIN odoo.product_template pt
+                    ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+                WHERE pol.product_id IS NOT NULL
+                  AND pt.sale_ok = true
+                  AND pt.purchase_ok = false
+                  AND pt.name NOT ILIKE '%correa%'
+                  AND pt.name NOT ILIKE '%saco%'
+                  AND pt.name NOT ILIKE '%bolsa%'
+                  AND pt.name NOT ILIKE '%probador%'
+                  AND pt.name NOT ILIKE '%paneton%'
+                  AND pt.name NOT ILIKE '%publicitario%'
+                GROUP BY pol.order_id
             ) agg ON agg.order_id = po.odoo_id
             LEFT JOIN crm.v_partner_account_final paf
                 ON po.partner_id = paf.contacto_partner_odoo_id
