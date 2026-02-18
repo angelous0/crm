@@ -1311,6 +1311,11 @@ export default function CuentaDetalle() {
                   </Table>
                 </div>
               </TabsContent>
+
+              {/* YoY Tab */}
+              <TabsContent value="yoy">
+                <YoYTab cuentaId={id} />
+              </TabsContent>
             </Tabs>
           </div>
         </div>
