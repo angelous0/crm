@@ -174,7 +174,8 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - 2-level drill-down drawer: Items -> Orders -> Lines
 
 ## Backlog
-- P1: Toggle "Incluir productos excluidos" para auditoría (deferred by user)
+- P1: Analytics mini-sections: Frecuencia de compra (30/60/90d), Top modelos/tallas/colores
+- P1: Toggle "Incluir productos excluidos" para auditoria
 - P2: Refactor stock dashboard endpoints from server.py to own router
 - P2: Persist dashboard filter state in URL
 - P2: Frontend UI for "Detalle de Stock" paginated table
