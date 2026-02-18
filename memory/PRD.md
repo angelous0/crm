@@ -143,6 +143,19 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - Back button to return from Level 2 to Level 1
 - Pagination at both levels
 
+### 11. Días sin Comprar + Column Sorting (DONE - Feb 2026)
+**Feature:** New "Días sin comprar" column and server-side sorting in the clasificacion table.
+
+**Backend:**
+- Added `(CURRENT_DATE - MAX(date_order)::date)::int AS dias_sin_comprar` to clasificacion query
+- Added `sort_by` and `sort_dir` query params (allowed: ultima_fecha_compra, dias_sin_comprar, ventas, cantidad, compras)
+- Default sort: `ultima_fecha_compra DESC NULLS LAST`
+
+**Frontend:**
+- New "Dias s/c" column displaying days since last purchase
+- Sortable column headers (click to toggle asc/desc) with sort indicator ▲/▼
+- Sortable columns: Ultima compra, Dias s/c, Cantidad, Ventas, Compras
+
 ## Backlog
 - P1: Toggle "Incluir productos excluidos" para auditoría (deferred by user)
 - P2: Refactor stock dashboard endpoints from server.py to own router
