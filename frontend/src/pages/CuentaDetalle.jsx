@@ -546,6 +546,8 @@ export default function CuentaDetalle() {
   const [clasifLoading, setClasifLoading] = useState(false);
   const [clasifFechaDesde, setClasifFechaDesde] = useState("");
   const [clasifFechaHasta, setClasifFechaHasta] = useState("");
+  const [clasifSortBy, setClasifSortBy] = useState("ultima_fecha_compra");
+  const [clasifSortDir, setClasifSortDir] = useState("desc");
   const [clasifSelected, setClasifSelected] = useState(null);
   const [clasifOrders, setClasifOrders] = useState({ rows: [], has_next: false });
   const [clasifOrdersPage, setClasifOrdersPage] = useState(1);
@@ -712,10 +714,10 @@ export default function CuentaDetalle() {
   }, [id]);
 
   // ── Fetch clasificacion (Info Ventas) ──
-  const fetchClasificacion = useCallback(async () => {
+  const fetchClasificacion = useCallback(async (sortByOverride, sortDirOverride) => {
     setClasifLoading(true);
     try {
-      const params = { top: 200 };
+      const params = { top: 200, sort_by: sortByOverride || clasifSortBy, sort_dir: sortDirOverride || clasifSortDir };
       if (clasifFechaDesde) params.fecha_desde = clasifFechaDesde;
       if (clasifFechaHasta) params.fecha_hasta = clasifFechaHasta;
       const r = await api.get(`/cuentas/${id}/ventas/clasificacion`, { params });
@@ -725,7 +727,7 @@ export default function CuentaDetalle() {
     } finally {
       setClasifLoading(false);
     }
-  }, [id, clasifFechaDesde, clasifFechaHasta]);
+  }, [id, clasifFechaDesde, clasifFechaHasta, clasifSortBy, clasifSortDir]);
 
   // ── Fetch clasificacion orders (Level 1) ──
   const fetchClasifOrders = useCallback(async (item, pg = 1) => {
