@@ -995,6 +995,7 @@ export default function CuentaDetalle() {
                 </TabsTrigger>
                 <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
                 <TabsTrigger value="tareas">Tareas ({tareas.length})</TabsTrigger>
+                <TabsTrigger value="yoy" data-testid="tab-yoy">Comparativo YoY</TabsTrigger>
               </TabsList>
 
               {/* Contactos Tab */}
