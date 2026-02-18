@@ -156,6 +156,23 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 - Sortable column headers (click to toggle asc/desc) with sort indicator ▲/▼
 - Sortable columns: Ultima compra, Dias s/c, Cantidad, Ventas, Compras
 
+### 12. Comparativo Ventas YoY Tab (DONE - Feb 2026)
+**Feature:** Full Year-over-Year sales comparison tab in CuentaDetalle.
+
+**Backend (4 endpoints):**
+- `GET /api/cuentas/{id}/ventas/yoy/metrics` - KPIs: ventas, unidades, compras per year + delta %
+- `GET /api/cuentas/{id}/ventas/yoy/by-month` - Monthly series (12 rows per year pair)
+- `GET /api/cuentas/{id}/ventas/yoy/by-item` - Classification mix (marca/tipo/entalle/tela) with var_abs, var_pct, sortable
+- `GET /api/cuentas/{id}/ventas/yoy/item-orders` - Drill-down: orders for specific item + year
+- All use `_CATALOG_JOIN`/`_CATALOG_FILTER` + `_get_cuenta_partner_ids` for consistency
+
+**Frontend (YoYTab.jsx):**
+- Year A/B selectors, month range filters
+- 3 KPI cards with variation badges
+- Monthly table (12 rows) with Var %
+- Mix classification table (sortable, color-coded variations)
+- 2-level drill-down drawer: Items -> Orders -> Lines
+
 ## Backlog
 - P1: Toggle "Incluir productos excluidos" para auditoría (deferred by user)
 - P2: Refactor stock dashboard endpoints from server.py to own router
