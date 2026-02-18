@@ -1194,6 +1194,13 @@ export default function CuentaDetalle() {
                   onFechaDesdeChange={(v) => { setClasifFechaDesde(v); }}
                   onFechaHastaChange={(v) => { setClasifFechaHasta(v); }}
                   onApplyFilters={fetchClasificacion}
+                  sortBy={clasifSortBy} sortDir={clasifSortDir}
+                  onSort={(col) => {
+                    const newDir = col === clasifSortBy ? (clasifSortDir === "desc" ? "asc" : "desc") : "desc";
+                    setClasifSortBy(col);
+                    setClasifSortDir(newDir);
+                    fetchClasificacion(col, newDir);
+                  }}
                   onSelectItem={(item) => {
                     setClasifSelected(item);
                     setClasifSelectedOrder(null);
