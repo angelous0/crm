@@ -1098,6 +1098,231 @@ async def get_cuenta_ventas_lines(
         return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
 
 
+# ── YoY (Year-over-Year) endpoints ──
+
+_YOY_BASE = """
+    FROM odoo.pos_order_line pol
+    JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+    {catalog_join}
+    WHERE po.partner_id = ANY($1)
+      AND COALESCE(po.is_cancel, false) = false
+      AND COALESCE(po.order_cancel, false) = false
+      AND COALESCE(po.reserva, false) = false
+      {catalog_filter}
+      AND EXTRACT(YEAR FROM po.date_order) IN ($2, $3)
+"""
+
+
+def _yoy_month_extra(params, from_month, to_month):
+    extra = ""
+    if from_month:
+        params.append(int(from_month))
+        extra += f" AND EXTRACT(MONTH FROM po.date_order) >= ${len(params)}"
+    if to_month:
+        params.append(int(to_month))
+        extra += f" AND EXTRACT(MONTH FROM po.date_order) <= ${len(params)}"
+    return extra
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/yoy/metrics")
+async def get_yoy_metrics(
+    cuenta_id: str,
+    year_a: int = 0, year_b: int = 0,
+    from_month: str = "", to_month: str = "",
+    user=Depends(get_current_user)
+):
+    from datetime import date
+    if not year_a:
+        year_a = date.today().year
+    if not year_b:
+        year_b = year_a - 1
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, _ = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            empty = {"ventas": 0, "unidades": 0, "compras": 0}
+            return {"year_a": empty, "year_b": empty, "delta": {"ventas_pct": 0, "unidades_pct": 0, "compras_pct": 0}}
+        params = [partner_ids, year_a, year_b]
+        extra = _yoy_month_extra(params, from_month, to_month)
+        row = await conn.fetchrow(f"""
+            SELECT
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.price_subtotal ELSE 0 END), 0) AS ventas_a,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.price_subtotal ELSE 0 END), 0) AS ventas_b,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.qty ELSE 0 END), 0) AS unidades_a,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.qty ELSE 0 END), 0) AS unidades_b,
+              COUNT(DISTINCT CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN po.odoo_id END) AS compras_a,
+              COUNT(DISTINCT CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN po.odoo_id END) AS compras_b
+            {_YOY_BASE.format(catalog_join=_CATALOG_JOIN, catalog_filter=_CATALOG_FILTER)}
+            {extra}
+        """, *params)
+        va, vb = float(row['ventas_a']), float(row['ventas_b'])
+        ua, ub = float(row['unidades_a']), float(row['unidades_b'])
+        ca, cb = int(row['compras_a']), int(row['compras_b'])
+        def pct(a, b):
+            return round((a - b) / b * 100, 1) if b else (100.0 if a else 0)
+        return {
+            "year_a": {"ventas": va, "unidades": ua, "compras": ca},
+            "year_b": {"ventas": vb, "unidades": ub, "compras": cb},
+            "delta": {"ventas_pct": pct(va, vb), "unidades_pct": pct(ua, ub), "compras_pct": pct(ca, cb)}
+        }
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/yoy/by-month")
+async def get_yoy_by_month(
+    cuenta_id: str,
+    year_a: int = 0, year_b: int = 0,
+    from_month: str = "", to_month: str = "",
+    user=Depends(get_current_user)
+):
+    from datetime import date
+    if not year_a:
+        year_a = date.today().year
+    if not year_b:
+        year_b = year_a - 1
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, _ = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"months": []}
+        params = [partner_ids, year_a, year_b]
+        extra = _yoy_month_extra(params, from_month, to_month)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT
+              EXTRACT(MONTH FROM po.date_order)::int AS month,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.price_subtotal ELSE 0 END), 0) AS ventas_a,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.price_subtotal ELSE 0 END), 0) AS ventas_b,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.qty ELSE 0 END), 0) AS unidades_a,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.qty ELSE 0 END), 0) AS unidades_b,
+              COUNT(DISTINCT CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN po.odoo_id END) AS compras_a,
+              COUNT(DISTINCT CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN po.odoo_id END) AS compras_b
+            {_YOY_BASE.format(catalog_join=_CATALOG_JOIN, catalog_filter=_CATALOG_FILTER)}
+            {extra}
+            GROUP BY EXTRACT(MONTH FROM po.date_order)
+            ORDER BY month
+        """, *params))
+        return {"months": rows}
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/yoy/by-item")
+async def get_yoy_by_item(
+    cuenta_id: str,
+    year_a: int = 0, year_b: int = 0,
+    from_month: str = "", to_month: str = "",
+    sort_by: str = "ventas_a", sort_dir: str = "desc",
+    top: int = 300,
+    user=Depends(get_current_user)
+):
+    from datetime import date
+    if not year_a:
+        year_a = date.today().year
+    if not year_b:
+        year_b = year_a - 1
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, _ = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": []}
+        params = [partner_ids, year_a, year_b]
+        extra = _yoy_month_extra(params, from_month, to_month)
+        allowed = {"ventas_a", "ventas_b", "var_abs", "unidades_a", "unidades_b", "compras_a", "compras_b"}
+        col = sort_by if sort_by in allowed else "ventas_a"
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+        params.append(top)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT
+              COALESCE(pt.marca, '') AS marca,
+              COALESCE(pt.tipo, '') AS tipo,
+              COALESCE(pt.entalle, '') AS entalle,
+              COALESCE(pt.tela, '') AS tela,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.price_subtotal ELSE 0 END), 0) AS ventas_a,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.price_subtotal ELSE 0 END), 0) AS ventas_b,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.price_subtotal ELSE 0 END), 0)
+                - COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.price_subtotal ELSE 0 END), 0) AS var_abs,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN pol.qty ELSE 0 END), 0) AS unidades_a,
+              COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN pol.qty ELSE 0 END), 0) AS unidades_b,
+              COUNT(DISTINCT CASE WHEN EXTRACT(YEAR FROM po.date_order) = $2 THEN po.odoo_id END) AS compras_a,
+              COUNT(DISTINCT CASE WHEN EXTRACT(YEAR FROM po.date_order) = $3 THEN po.odoo_id END) AS compras_b
+            {_YOY_BASE.format(catalog_join=_CATALOG_JOIN, catalog_filter=_CATALOG_FILTER)}
+            {extra}
+            GROUP BY pt.marca, pt.tipo, pt.entalle, pt.tela
+            ORDER BY {col} {direction} NULLS LAST
+            LIMIT ${len(params)}
+        """, *params))
+        # compute var_pct in Python
+        for r in rows:
+            vb = r.get("ventas_b", 0)
+            va = r.get("ventas_a", 0)
+            r["var_pct"] = round((va - vb) / vb * 100, 1) if vb else (100.0 if va else 0)
+        return {"rows": rows}
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/yoy/item-orders")
+async def get_yoy_item_orders(
+    cuenta_id: str,
+    year: int = 0,
+    marca: str = "", tipo: str = "", entalle: str = "", tela: str = "",
+    page: int = 1, limit: int = 50,
+    user=Depends(get_current_user)
+):
+    from datetime import date
+    if not year:
+        year = date.today().year
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, _ = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"rows": [], "page": page, "limit": limit, "has_next": False}
+        params = [partner_ids, year]
+        extra = ""
+        if marca:
+            params.append(marca)
+            extra += f" AND COALESCE(pt.marca, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.marca, '') = ''"
+        if tipo:
+            params.append(tipo)
+            extra += f" AND COALESCE(pt.tipo, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.tipo, '') = ''"
+        if entalle:
+            params.append(entalle)
+            extra += f" AND COALESCE(pt.entalle, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.entalle, '') = ''"
+        if tela:
+            params.append(tela)
+            extra += f" AND COALESCE(pt.tela, '') = ${len(params)}"
+        else:
+            extra += " AND COALESCE(pt.tela, '') = ''"
+        offset = (page - 1) * limit
+        params.append(limit + 1)
+        params.append(offset)
+        rows = records_to_list(await conn.fetch(f"""
+            SELECT po.odoo_id AS order_id,
+                   po.name AS order_name,
+                   MAX(po.date_order) AS date_order,
+                   SUM(pol.qty) AS qty_item,
+                   SUM(pol.price_subtotal) AS ventas_item,
+                   COUNT(*) AS lines_count
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_CATALOG_JOIN}
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              AND COALESCE(po.reserva, false) = false
+              {_CATALOG_FILTER}
+              AND EXTRACT(YEAR FROM po.date_order) = $2
+              {extra}
+            GROUP BY po.odoo_id, po.name
+            ORDER BY MAX(po.date_order) DESC
+            LIMIT ${len(params)-1} OFFSET ${len(params)}
+        """, *params))
+        has_next = len(rows) > limit
+        return {"rows": rows[:limit], "page": page, "limit": limit, "has_next": has_next}
+
+
+
 @cuentas_router.get("/{cuenta_id}/creditos/lines")
 async def get_cuenta_creditos_lines(
     cuenta_id: str,
