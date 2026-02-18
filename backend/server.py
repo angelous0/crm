@@ -847,6 +847,8 @@ async def get_cuenta_ventas_clasificacion(
     marca: str = "",
     tipo: str = "",
     entalle: str = "",
+    sort_by: str = "ultima_fecha_compra",
+    sort_dir: str = "desc",
     top: int = 200,
     user=Depends(get_current_user)
 ):
@@ -872,12 +874,17 @@ async def get_cuenta_ventas_clasificacion(
         if entalle:
             params.append(entalle)
             extra += f" AND pt.entalle = ${len(params)}"
+        allowed_sort = {"ultima_fecha_compra", "dias_sin_comprar", "ventas", "cantidad", "compras"}
+        col = sort_by if sort_by in allowed_sort else "ultima_fecha_compra"
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+        nulls = "NULLS LAST" if direction == "DESC" else "NULLS FIRST"
         params.append(top)
         rows = records_to_list(await conn.fetch(f"""
             SELECT COALESCE(pt.marca, '') AS marca,
                    COALESCE(pt.tipo, '') AS tipo,
                    COALESCE(pt.entalle, '') AS entalle,
                    MAX(po.date_order) AS ultima_fecha_compra,
+                   (CURRENT_DATE - MAX(po.date_order)::date)::int AS dias_sin_comprar,
                    COALESCE(SUM(pol.qty), 0) AS cantidad,
                    COALESCE(SUM(pol.price_subtotal), 0) AS ventas,
                    COUNT(DISTINCT po.odoo_id) AS compras
@@ -891,7 +898,7 @@ async def get_cuenta_ventas_clasificacion(
               {_CATALOG_FILTER}
               {extra}
             GROUP BY pt.marca, pt.tipo, pt.entalle
-            ORDER BY ventas DESC
+            ORDER BY {col} {direction} {nulls}
             LIMIT ${len(params)}
         """, *params))
         return {"rows": rows}

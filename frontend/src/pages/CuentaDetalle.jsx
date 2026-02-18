@@ -262,8 +262,21 @@ function InvoiceLinesTab({ data, loading, page, onPageChange }) {
 }
 
 /* ── Clasificacion Tab (Info Ventas) ── */
-function ClasificacionTab({ data, loading, fechaDesde, fechaHasta, onFechaDesdeChange, onFechaHastaChange, onApplyFilters, onSelectItem }) {
+function ClasificacionTab({ data, loading, fechaDesde, fechaHasta, onFechaDesdeChange, onFechaHastaChange, onApplyFilters, onSelectItem,
+                            sortBy, sortDir, onSort }) {
   const rows = data?.rows || [];
+  const SortHead = ({ col, align, children }) => {
+    const active = sortBy === col;
+    return (
+      <TableHead className={`text-xs font-semibold cursor-pointer select-none hover:bg-slate-100 transition-colors ${align === "right" ? "text-right" : ""}`}
+        onClick={() => onSort(col)} data-testid={`clasif-sort-${col}`}>
+        <span className="inline-flex items-center gap-0.5">
+          {children}
+          {active && <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>}
+        </span>
+      </TableHead>
+    );
+  };
 
   return (
     <div className="space-y-3" data-testid="info-ventas-tab">
@@ -292,15 +305,16 @@ function ClasificacionTab({ data, loading, fechaDesde, fechaHasta, onFechaDesdeC
                   <TableHead className="text-xs font-semibold">Marca</TableHead>
                   <TableHead className="text-xs font-semibold">Tipo</TableHead>
                   <TableHead className="text-xs font-semibold">Entalle</TableHead>
-                  <TableHead className="text-xs font-semibold">Ultima compra</TableHead>
-                  <TableHead className="text-xs text-right font-semibold">Cantidad</TableHead>
-                  <TableHead className="text-xs text-right font-semibold">Ventas (S/)</TableHead>
-                  <TableHead className="text-xs text-right font-semibold">Compras (#)</TableHead>
+                  <SortHead col="ultima_fecha_compra">Ultima compra</SortHead>
+                  <SortHead col="dias_sin_comprar" align="right">Dias s/c</SortHead>
+                  <SortHead col="cantidad" align="right">Cantidad</SortHead>
+                  <SortHead col="ventas" align="right">Ventas (S/)</SortHead>
+                  <SortHead col="compras" align="right">Compras (#)</SortHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="h-20 text-center text-slate-500">Sin datos de ventas</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="h-20 text-center text-slate-500">Sin datos de ventas</TableCell></TableRow>
                 ) : rows.map((r, i) => (
                   <TableRow key={`${r.marca}-${r.tipo}-${r.entalle}`}
                     className={`cursor-pointer ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50 transition-colors`}
@@ -309,6 +323,7 @@ function ClasificacionTab({ data, loading, fechaDesde, fechaHasta, onFechaDesdeC
                     <TableCell className="text-xs">{r.tipo || <span className="text-slate-400 italic">sin tipo</span>}</TableCell>
                     <TableCell className="text-xs">{r.entalle || <span className="text-slate-400 italic">sin entalle</span>}</TableCell>
                     <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.ultima_fecha_compra)}</TableCell>
+                    <TableCell className="text-xs text-right font-mono">{r.dias_sin_comprar != null ? r.dias_sin_comprar : "-"}</TableCell>
                     <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.cantidad)}</TableCell>
                     <TableCell className="text-xs text-right font-mono text-emerald-700 font-semibold">{fmtMoney(r.ventas)}</TableCell>
                     <TableCell className="text-xs text-right font-mono">{fmtNum(r.compras)}</TableCell>
