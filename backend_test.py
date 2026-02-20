@@ -5,7 +5,7 @@ from datetime import datetime
 
 class CRMAPITester:
     def __init__(self):
-        self.base_url = "https://clean-ventas.preview.emergentagent.com/api"
+        self.base_url = "https://account-ui-ux.preview.emergentagent.com/api"
         self.token = None
         self.tests_run = 0
         self.tests_passed = 0

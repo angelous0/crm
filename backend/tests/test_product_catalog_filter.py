@@ -23,7 +23,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://clean-ventas.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://account-ui-ux.preview.emergentagent.com')
 
 # Excluded product name patterns (case-insensitive)
 EXCLUDED_PATTERNS = ['correa', 'saco', 'bolsa', 'probador', 'paneton', 'publicitario']
