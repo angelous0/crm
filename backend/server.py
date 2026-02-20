@@ -556,11 +556,11 @@ async def get_cuentas(
 async def get_cuentas_list(
     q: str = "", estado: str = "", clasificacion: str = "",
     ciudad: str = "", asignado: str = "",
-    sort: str = "last_purchase", dir: str = "desc",
+    sort: str = "name", dir: str = "asc",
     page: int = 1, limit: int = 50,
     user=Depends(get_current_user)
 ):
-    """Airtable-style directory listing with commercial KPIs per row."""
+    """Airtable-style directory listing."""
     p = await get_pool()
     async with p.acquire() as conn:
         offset = (page - 1) * limit
@@ -596,13 +596,11 @@ async def get_cuentas_list(
             )
 
             sort_map = {
-                "last_purchase": "lp_date",
                 "name": "rp.name",
-                "sales_12m": "sales_12m_amount",
-                "days_since": "days_since_last_purchase",
-                "orders_12m": "orders_12m_count",
+                "ciudad": "rp.city",
+                "estado": "COALESCE(cu.estado_comercial, 'ACTIVO')",
             }
-            order_col = sort_map.get(sort, "lp_date")
+            order_col = sort_map.get(sort, "rp.name")
             order_dir = "ASC" if dir.lower() == "asc" else "DESC"
             nulls = "NULLS LAST" if order_dir == "DESC" else "NULLS FIRST"
 
@@ -615,54 +613,59 @@ async def get_cuentas_list(
                     COALESCE(rp.city::text, '') AS ciudad,
                     COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
                     cu.clasificacion,
-                    COALESCE(cu.asignado_a, '') AS asignado,
-                    lp.lp_date AS last_purchase_date,
-                    CASE WHEN lp.lp_date IS NOT NULL
-                         THEN (CURRENT_DATE - lp.lp_date::date)::int
-                         ELSE NULL END AS days_since_last_purchase,
-                    COALESCE(kpi.s12m, 0) AS sales_12m_amount,
-                    COALESCE(kpi.o12m, 0) AS orders_12m_count
+                    COALESCE(cu.asignado_a, '') AS asignado
                 {base_from}
-                LEFT JOIN LATERAL (
-                    SELECT MAX(po3.date_order) AS lp_date
-                    FROM odoo.pos_order po3
-                    WHERE po3.partner_id = cl.cuenta_partner_odoo_id
-                      AND COALESCE(po3.is_cancel, false) = false
-                      AND COALESCE(po3.order_cancel, false) = false
-                      AND COALESCE(po3.reserva, false) = false
-                ) lp ON true
-                LEFT JOIN LATERAL (
-                    SELECT COALESCE(SUM(pol2.price_subtotal), 0) AS s12m,
-                           COUNT(DISTINCT po2.odoo_id) AS o12m
-                    FROM odoo.pos_order po2
-                    JOIN odoo.pos_order_line pol2 ON pol2.order_id = po2.odoo_id
-                    JOIN odoo.v_product_variant_flat vv2 ON vv2.product_product_id = pol2.product_id AND vv2.company_key = 'GLOBAL'
-                    JOIN odoo.product_template pt2 ON pt2.odoo_id = vv2.product_tmpl_id AND pt2.company_key = 'GLOBAL'
-                    WHERE po2.partner_id = cl.cuenta_partner_odoo_id
-                      AND COALESCE(po2.is_cancel, false) = false
-                      AND COALESCE(po2.order_cancel, false) = false
-                      AND COALESCE(po2.reserva, false) = false
-                      AND pol2.product_id IS NOT NULL
-                      AND pt2.sale_ok = true AND pt2.purchase_ok = false
-                      AND pt2.name NOT ILIKE '%%correa%%'
-                      AND pt2.name NOT ILIKE '%%saco%%'
-                      AND pt2.name NOT ILIKE '%%bolsa%%'
-                      AND pt2.name NOT ILIKE '%%probador%%'
-                      AND pt2.name NOT ILIKE '%%paneton%%'
-                      AND pt2.name NOT ILIKE '%%publicitario%%'
-                      AND po2.date_order >= CURRENT_DATE - 365
-                ) kpi ON true
                 {where}
                 ORDER BY {order_col} {order_dir} {nulls}
                 LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
                 *data_params
             )
-            result_rows = []
-            for r in rows:
-                row_dict = dict(r)
-                if row_dict.get('last_purchase_date'):
-                    row_dict['last_purchase_date'] = str(row_dict['last_purchase_date'])
-                result_rows.append(row_dict)
+            result_rows = records_to_list(rows)
+
+            # Batch compute KPIs for this page of results only
+            ids = [r['id'] for r in result_rows]
+            if ids:
+                kpi_rows = await conn.fetch("""
+                    SELECT po.partner_id AS id,
+                           MAX(po.date_order) AS last_purchase_date,
+                           CASE WHEN MAX(po.date_order) IS NOT NULL
+                                THEN (CURRENT_DATE - MAX(po.date_order)::date)::int
+                                ELSE NULL END AS days_since_last_purchase,
+                           COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.price_subtotal ELSE 0 END), 0) AS sales_12m_amount,
+                           COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m_count
+                    FROM odoo.pos_order po
+                    JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
+                    JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+                    JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+                    WHERE po.partner_id = ANY($1)
+                      AND COALESCE(po.is_cancel, false) = false
+                      AND COALESCE(po.order_cancel, false) = false
+                      AND COALESCE(po.reserva, false) = false
+                      AND pol.product_id IS NOT NULL
+                      AND pt.sale_ok = true AND pt.purchase_ok = false
+                      AND pt.name NOT ILIKE '%correa%'
+                      AND pt.name NOT ILIKE '%saco%'
+                      AND pt.name NOT ILIKE '%bolsa%'
+                      AND pt.name NOT ILIKE '%probador%'
+                      AND pt.name NOT ILIKE '%paneton%'
+                      AND pt.name NOT ILIKE '%publicitario%'
+                    GROUP BY po.partner_id
+                """, ids)
+                kpi_map = {}
+                for kr in kpi_rows:
+                    kpi_map[kr['id']] = {
+                        "last_purchase_date": str(kr['last_purchase_date']) if kr['last_purchase_date'] else None,
+                        "days_since_last_purchase": int(kr['days_since_last_purchase']) if kr['days_since_last_purchase'] is not None else None,
+                        "sales_12m_amount": float(kr['sales_12m_amount']),
+                        "orders_12m_count": int(kr['orders_12m_count']),
+                    }
+                for r in result_rows:
+                    kpi = kpi_map.get(r['id'], {})
+                    r['last_purchase_date'] = kpi.get('last_purchase_date')
+                    r['days_since_last_purchase'] = kpi.get('days_since_last_purchase')
+                    r['sales_12m_amount'] = kpi.get('sales_12m_amount', 0)
+                    r['orders_12m_count'] = kpi.get('orders_12m_count', 0)
+
             return {"rows": result_rows, "total_rows": count, "page": page, "limit": limit}
         except Exception as e:
             import traceback
