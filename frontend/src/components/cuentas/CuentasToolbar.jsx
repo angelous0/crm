@@ -1,0 +1,104 @@
+import React, { useState, useEffect, useRef } from "react";
+import api from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, X } from "lucide-react";
+
+const ESTADOS = ["ACTIVO", "NUEVO", "SEGUIMIENTO", "DORMIDO", "NO_VOLVER"];
+const CLASIFICACIONES = ["A", "B", "C"];
+
+export function CuentasToolbar({ filters, onFiltersChange, totalRows }) {
+  const [ciudades, setCiudades] = useState([]);
+  const [asignados, setAsignados] = useState([]);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    api.get("/cuentas/list/filter-options").then(r => {
+      setCiudades(r.data.ciudades || []);
+      setAsignados(r.data.asignados || []);
+    }).catch(() => {});
+  }, []);
+
+  const handleSearch = (val) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onFiltersChange({ ...filters, q: val, page: 1 });
+    }, 300);
+  };
+
+  const activeFilters = [filters.estado, filters.clasificacion, filters.ciudad, filters.asignado].filter(Boolean).length;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-white shrink-0" data-testid="cuentas-toolbar">
+      <div className="relative flex-1 max-w-xs">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+        <Input
+          data-testid="cuentas-search"
+          placeholder="Buscar cuentas..."
+          className="pl-8 h-8 text-xs bg-slate-50 border-slate-200"
+          defaultValue={filters.q}
+          onChange={(e) => handleSearch(e.target.value)}
+        />
+      </div>
+
+      <Select value={filters.estado || "ALL"} onValueChange={v => onFiltersChange({ ...filters, estado: v === "ALL" ? "" : v, page: 1 })}>
+        <SelectTrigger className="w-[130px] h-8 text-xs" data-testid="filter-estado">
+          <SelectValue placeholder="Estado" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="ALL">Todos</SelectItem>
+          {ESTADOS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+        </SelectContent>
+      </Select>
+
+      <Select value={filters.clasificacion || "ALL"} onValueChange={v => onFiltersChange({ ...filters, clasificacion: v === "ALL" ? "" : v, page: 1 })}>
+        <SelectTrigger className="w-[100px] h-8 text-xs" data-testid="filter-clasificacion">
+          <SelectValue placeholder="Clasif." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="ALL">Todas</SelectItem>
+          {CLASIFICACIONES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+        </SelectContent>
+      </Select>
+
+      {ciudades.length > 0 && (
+        <Select value={filters.ciudad || "ALL"} onValueChange={v => onFiltersChange({ ...filters, ciudad: v === "ALL" ? "" : v, page: 1 })}>
+          <SelectTrigger className="w-[130px] h-8 text-xs hidden lg:flex" data-testid="filter-ciudad">
+            <SelectValue placeholder="Ciudad" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todas</SelectItem>
+            {ciudades.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+
+      {asignados.length > 0 && (
+        <Select value={filters.asignado || "ALL"} onValueChange={v => onFiltersChange({ ...filters, asignado: v === "ALL" ? "" : v, page: 1 })}>
+          <SelectTrigger className="w-[130px] h-8 text-xs hidden lg:flex" data-testid="filter-asignado">
+            <SelectValue placeholder="Vendedor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todos</SelectItem>
+            {asignados.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+
+      {activeFilters > 0 && (
+        <button
+          onClick={() => onFiltersChange({ q: filters.q, estado: "", clasificacion: "", ciudad: "", asignado: "", sort: filters.sort, dir: filters.dir, page: 1 })}
+          className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors"
+          data-testid="clear-filters"
+        >
+          <X size={10} />Limpiar
+        </button>
+      )}
+
+      <div className="ml-auto">
+        <Badge variant="secondary" className="text-[10px] font-mono">{totalRows.toLocaleString("es-PE")} cuentas</Badge>
+      </div>
+    </div>
+  );
+}
