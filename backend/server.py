@@ -585,17 +585,59 @@ async def get_cuentas_list(
                 params.append(f"%{asignado}%")
                 where += f" AND cu.asignado_a ILIKE ${len(params)}"
 
-            base_from = f"""
+            base_from = """
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
                 LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+            """
+
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) {base_from} {where}", *params
+            )
+
+            sort_map = {
+                "last_purchase": "lp_date",
+                "name": "rp.name",
+                "sales_12m": "sales_12m_amount",
+                "days_since": "days_since_last_purchase",
+                "orders_12m": "orders_12m_count",
+            }
+            order_col = sort_map.get(sort, "lp_date")
+            order_dir = "ASC" if dir.lower() == "asc" else "DESC"
+            nulls = "NULLS LAST" if order_dir == "DESC" else "NULLS FIRST"
+
+            data_params = params.copy()
+            data_params.extend([limit, offset])
+            rows = await conn.fetch(
+                f"""SELECT
+                    cl.cuenta_partner_odoo_id AS id,
+                    rp.name AS nombre,
+                    COALESCE(rp.city::text, '') AS ciudad,
+                    COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
+                    cu.clasificacion,
+                    COALESCE(cu.asignado_a, '') AS asignado,
+                    lp.lp_date AS last_purchase_date,
+                    CASE WHEN lp.lp_date IS NOT NULL
+                         THEN (CURRENT_DATE - lp.lp_date::date)::int
+                         ELSE NULL END AS days_since_last_purchase,
+                    COALESCE(kpi.s12m, 0) AS sales_12m_amount,
+                    COALESCE(kpi.o12m, 0) AS orders_12m_count
+                {base_from}
                 LEFT JOIN LATERAL (
-                    SELECT MAX(po2.date_order) AS last_purchase_date,
-                           COUNT(DISTINCT po2.odoo_id) AS orders_12m,
-                           COALESCE(SUM(pol2.price_subtotal), 0) AS sales_12m
+                    SELECT MAX(po3.date_order) AS lp_date
+                    FROM odoo.pos_order po3
+                    WHERE po3.partner_id = cl.cuenta_partner_odoo_id
+                      AND COALESCE(po3.is_cancel, false) = false
+                      AND COALESCE(po3.order_cancel, false) = false
+                      AND COALESCE(po3.reserva, false) = false
+                ) lp ON true
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(pol2.price_subtotal), 0) AS s12m,
+                           COUNT(DISTINCT po2.odoo_id) AS o12m
                     FROM odoo.pos_order po2
                     JOIN odoo.pos_order_line pol2 ON pol2.order_id = po2.odoo_id
-                    {_CATALOG_JOIN.replace('pol.', 'pol2.').replace('vv.', 'vv2.').replace('pt.', 'pt2.').replace('vv ', 'vv2 ').replace('pt ', 'pt2 ')}
+                    JOIN odoo.v_product_variant_flat vv2 ON vv2.product_product_id = pol2.product_id AND vv2.company_key = 'GLOBAL'
+                    JOIN odoo.product_template pt2 ON pt2.odoo_id = vv2.product_tmpl_id AND pt2.company_key = 'GLOBAL'
                     WHERE po2.partner_id = cl.cuenta_partner_odoo_id
                       AND COALESCE(po2.is_cancel, false) = false
                       AND COALESCE(po2.order_cancel, false) = false
@@ -610,48 +652,6 @@ async def get_cuentas_list(
                       AND pt2.name NOT ILIKE '%%publicitario%%'
                       AND po2.date_order >= CURRENT_DATE - 365
                 ) kpi ON true
-                LEFT JOIN LATERAL (
-                    SELECT MAX(po3.date_order) AS last_purchase_ever
-                    FROM odoo.pos_order po3
-                    WHERE po3.partner_id = cl.cuenta_partner_odoo_id
-                      AND COALESCE(po3.is_cancel, false) = false
-                      AND COALESCE(po3.order_cancel, false) = false
-                      AND COALESCE(po3.reserva, false) = false
-                ) lp ON true
-            """
-
-            count = await conn.fetchval(
-                f"SELECT COUNT(*) {base_from} {where}", *params
-            )
-
-            sort_map = {
-                "last_purchase": "lp.last_purchase_ever",
-                "name": "rp.name",
-                "sales_12m": "kpi.sales_12m",
-                "days_since": "(CURRENT_DATE - lp.last_purchase_ever::date)",
-                "orders_12m": "kpi.orders_12m",
-            }
-            order_col = sort_map.get(sort, "lp.last_purchase_ever")
-            order_dir = "ASC" if dir.lower() == "asc" else "DESC"
-            nulls = "NULLS LAST" if order_dir == "DESC" else "NULLS FIRST"
-
-            data_params = params.copy()
-            data_params.extend([limit, offset])
-            rows = await conn.fetch(
-                f"""SELECT
-                    cl.cuenta_partner_odoo_id AS id,
-                    rp.name AS nombre,
-                    COALESCE(rp.city::text, '') AS ciudad,
-                    COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
-                    cu.clasificacion,
-                    COALESCE(cu.asignado_a, '') AS asignado,
-                    lp.last_purchase_ever AS last_purchase_date,
-                    CASE WHEN lp.last_purchase_ever IS NOT NULL
-                         THEN (CURRENT_DATE - lp.last_purchase_ever::date)::int
-                         ELSE NULL END AS days_since_last_purchase,
-                    COALESCE(kpi.sales_12m, 0) AS sales_12m_amount,
-                    COALESCE(kpi.orders_12m, 0) AS orders_12m_count
-                {base_from}
                 {where}
                 ORDER BY {order_col} {order_dir} {nulls}
                 LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
