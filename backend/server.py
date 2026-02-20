@@ -1323,6 +1323,95 @@ async def get_yoy_item_orders(
 
 
 
+# ── Analitica endpoints ──
+
+_ANALITICA_BASE = """
+    FROM odoo.pos_order_line pol
+    JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+    {cj}
+    WHERE po.partner_id = ANY($1)
+      AND COALESCE(po.is_cancel, false) = false
+      AND COALESCE(po.order_cancel, false) = false
+      AND COALESCE(po.reserva, false) = false
+      {cf}
+"""
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/analitica/frecuencia")
+async def get_analitica_frecuencia(cuenta_id: str, user=Depends(get_current_user)):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, _ = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"compras_30d": 0, "compras_60d": 0, "compras_90d": 0, "unidades_30d": 0, "unidades_60d": 0, "unidades_90d": 0, "dias_sin_comprar": None, "frecuencia_promedio": None}
+        base = _ANALITICA_BASE.format(cj=_CATALOG_JOIN, cf=_CATALOG_FILTER)
+        row = await conn.fetchrow(f"""
+            SELECT
+              COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 30 THEN po.odoo_id END) AS compras_30d,
+              COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 60 THEN po.odoo_id END) AS compras_60d,
+              COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 90 THEN po.odoo_id END) AS compras_90d,
+              COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 30 THEN pol.qty ELSE 0 END), 0) AS unidades_30d,
+              COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 60 THEN pol.qty ELSE 0 END), 0) AS unidades_60d,
+              COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 90 THEN pol.qty ELSE 0 END), 0) AS unidades_90d,
+              (CURRENT_DATE - MAX(po.date_order)::date)::int AS dias_sin_comprar,
+              MAX(po.date_order) AS ultima_compra
+            {base}
+        """, partner_ids)
+        # Calculate average frequency from last 12 months of distinct order dates
+        dates_rows = await conn.fetch(f"""
+            SELECT DISTINCT po.date_order::date AS d
+            {base} AND po.date_order >= CURRENT_DATE - 365
+            ORDER BY d
+        """, partner_ids)
+        dates = [r['d'] for r in dates_rows]
+        freq = None
+        if len(dates) >= 2:
+            gaps = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
+            freq = round(sum(gaps) / len(gaps), 1) if gaps else None
+        return {
+            "compras_30d": int(row['compras_30d']),
+            "compras_60d": int(row['compras_60d']),
+            "compras_90d": int(row['compras_90d']),
+            "unidades_30d": float(row['unidades_30d']),
+            "unidades_60d": float(row['unidades_60d']),
+            "unidades_90d": float(row['unidades_90d']),
+            "dias_sin_comprar": int(row['dias_sin_comprar']) if row['dias_sin_comprar'] is not None else None,
+            "ultima_compra": str(row['ultima_compra']) if row['ultima_compra'] else None,
+            "frecuencia_promedio": freq,
+        }
+
+
+@cuentas_router.get("/{cuenta_id}/ventas/analitica/tops")
+async def get_analitica_tops(cuenta_id: str, dias: int = 90, top: int = 10, user=Depends(get_current_user)):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, _ = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"modelos": [], "tallas": [], "colores": []}
+        base = _ANALITICA_BASE.format(cj=_CATALOG_JOIN, cf=_CATALOG_FILTER)
+        date_filter = f" AND po.date_order >= CURRENT_DATE - {int(dias)}"
+        modelos = records_to_list(await conn.fetch(f"""
+            SELECT COALESCE(pt.name, '') AS nombre, COALESCE(SUM(pol.qty), 0) AS qty,
+                   COALESCE(SUM(pol.price_subtotal), 0) AS ventas, COUNT(DISTINCT po.odoo_id) AS ordenes
+            {base} {date_filter}
+            GROUP BY pt.name ORDER BY qty DESC LIMIT $2
+        """, partner_ids, top))
+        tallas = records_to_list(await conn.fetch(f"""
+            SELECT COALESCE(vv.talla, '') AS talla, COALESCE(SUM(pol.qty), 0) AS qty,
+                   COALESCE(SUM(pol.price_subtotal), 0) AS ventas
+            {base} {date_filter} AND vv.talla IS NOT NULL AND vv.talla != ''
+            GROUP BY vv.talla ORDER BY qty DESC LIMIT $2
+        """, partner_ids, top))
+        colores = records_to_list(await conn.fetch(f"""
+            SELECT COALESCE(vv.color, '') AS color, COALESCE(SUM(pol.qty), 0) AS qty,
+                   COALESCE(SUM(pol.price_subtotal), 0) AS ventas
+            {base} {date_filter} AND vv.color IS NOT NULL AND vv.color != ''
+            GROUP BY vv.color ORDER BY qty DESC LIMIT $2
+        """, partner_ids, top))
+        return {"modelos": modelos, "tallas": tallas, "colores": colores}
+
+
+
 @cuentas_router.get("/{cuenta_id}/creditos/lines")
 async def get_cuenta_creditos_lines(
     cuenta_id: str,
