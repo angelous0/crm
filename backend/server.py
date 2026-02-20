@@ -665,7 +665,8 @@ async def get_cuentas_list(
                 result_rows.append(row_dict)
             return {"rows": result_rows, "total_rows": count, "page": page, "limit": limit}
         except Exception as e:
-            logger.error(f"Error fetching cuentas list: {e}")
+            import traceback
+            logger.error(f"Error fetching cuentas list: {e}\n{traceback.format_exc()}")
             return {"rows": [], "total_rows": 0, "page": page, "limit": limit, "error": str(e)}
 
 
