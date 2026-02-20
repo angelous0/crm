@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import YoYTab from "./YoYTab";
+import AnaliticaTab from "./AnaliticaTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -996,6 +997,7 @@ export default function CuentaDetalle() {
                 <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
                 <TabsTrigger value="tareas">Tareas ({tareas.length})</TabsTrigger>
                 <TabsTrigger value="yoy" data-testid="tab-yoy">Comparativo YoY</TabsTrigger>
+                <TabsTrigger value="analitica" data-testid="tab-analitica">Analitica</TabsTrigger>
               </TabsList>
 
               {/* Contactos Tab */}
@@ -1315,6 +1317,11 @@ export default function CuentaDetalle() {
               {/* YoY Tab */}
               <TabsContent value="yoy">
                 <YoYTab cuentaId={id} />
+              </TabsContent>
+
+              {/* Analitica Tab */}
+              <TabsContent value="analitica">
+                <AnaliticaTab cuentaId={id} />
               </TabsContent>
             </Tabs>
           </div>
