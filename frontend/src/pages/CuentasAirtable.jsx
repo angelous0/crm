@@ -97,7 +97,7 @@ export default function CuentasAirtable() {
   const totalPages = Math.ceil(totalRows / limit);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)]" data-testid="cuentas-airtable">
+    <div className="flex flex-col h-full overflow-hidden" data-testid="cuentas-airtable">
       {/* Top Toolbar */}
       <CuentasToolbar filters={filters} onFiltersChange={handleFiltersChange} totalRows={totalRows} />
 
