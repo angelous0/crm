@@ -168,13 +168,27 @@ Build a "Stock Dashboard" with "Power BI Feel" for a B2B CRM managing stock, sal
 
 **Frontend (YoYTab.jsx):**
 - Year A/B selectors, month range filters
+
+### 13. Analitica Tab (DONE - Feb 2026)
+**Feature:** Analytics tab with purchase frequency and top products.
+
+**Backend (2 endpoints):**
+- `GET /api/cuentas/{id}/ventas/analitica/frecuencia` - Purchase frequency (30/60/90d), dormancy, avg gap
+- `GET /api/cuentas/{id}/ventas/analitica/tops` - Top modelos/tallas/colores by qty (configurable period)
+
+**Frontend (AnaliticaTab.jsx):**
+- Dormancy badge (0-14d green, 15-45d amber, 46+ red)
+- Purchase frequency: avg days between orders (last 12 months)
+- Period cards: orders + units for 30/60/90 days
+- Top 10 tables: Modelos (with ventas), Tallas, Colores with proportional bars
+- Configurable period selector (30/60/90/180/365 days)
+
 - 3 KPI cards with variation badges
 - Monthly table (12 rows) with Var %
 - Mix classification table (sortable, color-coded variations)
 - 2-level drill-down drawer: Items -> Orders -> Lines
 
 ## Backlog
-- P1: Analytics mini-sections: Frecuencia de compra (30/60/90d), Top modelos/tallas/colores
 - P1: Toggle "Incluir productos excluidos" para auditoria
 - P2: Refactor stock dashboard endpoints from server.py to own router
 - P2: Persist dashboard filter state in URL
