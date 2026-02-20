@@ -552,6 +552,181 @@ async def get_cuentas(
             return {"items": [], "total": 0, "page": page, "error": str(e)}
 
 
+@cuentas_router.get("/list")
+async def get_cuentas_list(
+    q: str = "", estado: str = "", clasificacion: str = "",
+    ciudad: str = "", asignado: str = "",
+    sort: str = "last_purchase", dir: str = "desc",
+    page: int = 1, limit: int = 50,
+    user=Depends(get_current_user)
+):
+    """Airtable-style directory listing with commercial KPIs per row."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        offset = (page - 1) * limit
+        try:
+            where = "WHERE 1=1"
+            params = []
+
+            if q:
+                params.append(f"%{q}%")
+                idx = len(params)
+                where += f" AND (rp.name ILIKE ${idx} OR COALESCE(rp.vat,'') ILIKE ${idx} OR COALESCE(rp.phone::text,'') ILIKE ${idx} OR COALESCE(rp.mobile::text,'') ILIKE ${idx} OR COALESCE(rp.city::text,'') ILIKE ${idx})"
+            if estado:
+                params.append(estado)
+                where += f" AND COALESCE(cu.estado_comercial, 'ACTIVO') = ${len(params)}"
+            if clasificacion:
+                params.append(clasificacion)
+                where += f" AND cu.clasificacion = ${len(params)}"
+            if ciudad:
+                params.append(f"%{ciudad}%")
+                where += f" AND rp.city::text ILIKE ${len(params)}"
+            if asignado:
+                params.append(f"%{asignado}%")
+                where += f" AND cu.asignado_a ILIKE ${len(params)}"
+
+            base_from = f"""
+                FROM crm.v_cuentas_libres cl
+                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                LEFT JOIN LATERAL (
+                    SELECT MAX(po2.date_order) AS last_purchase_date,
+                           COUNT(DISTINCT po2.odoo_id) AS orders_12m,
+                           COALESCE(SUM(pol2.price_subtotal), 0) AS sales_12m
+                    FROM odoo.pos_order po2
+                    JOIN odoo.pos_order_line pol2 ON pol2.order_id = po2.odoo_id
+                    {_CATALOG_JOIN.replace('pol.', 'pol2.').replace('vv.', 'vv2.').replace('pt.', 'pt2.').replace('vv ', 'vv2 ').replace('pt ', 'pt2 ')}
+                    WHERE po2.partner_id = cl.cuenta_partner_odoo_id
+                      AND COALESCE(po2.is_cancel, false) = false
+                      AND COALESCE(po2.order_cancel, false) = false
+                      AND COALESCE(po2.reserva, false) = false
+                      AND pol2.product_id IS NOT NULL
+                      AND pt2.sale_ok = true AND pt2.purchase_ok = false
+                      AND pt2.name NOT ILIKE '%%correa%%'
+                      AND pt2.name NOT ILIKE '%%saco%%'
+                      AND pt2.name NOT ILIKE '%%bolsa%%'
+                      AND pt2.name NOT ILIKE '%%probador%%'
+                      AND pt2.name NOT ILIKE '%%paneton%%'
+                      AND pt2.name NOT ILIKE '%%publicitario%%'
+                      AND po2.date_order >= CURRENT_DATE - 365
+                ) kpi ON true
+                LEFT JOIN LATERAL (
+                    SELECT MAX(po3.date_order) AS last_purchase_ever
+                    FROM odoo.pos_order po3
+                    WHERE po3.partner_id = cl.cuenta_partner_odoo_id
+                      AND COALESCE(po3.is_cancel, false) = false
+                      AND COALESCE(po3.order_cancel, false) = false
+                      AND COALESCE(po3.reserva, false) = false
+                ) lp ON true
+            """
+
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) {base_from} {where}", *params
+            )
+
+            sort_map = {
+                "last_purchase": "lp.last_purchase_ever",
+                "name": "rp.name",
+                "sales_12m": "kpi.sales_12m",
+                "days_since": "(CURRENT_DATE - lp.last_purchase_ever::date)",
+                "orders_12m": "kpi.orders_12m",
+            }
+            order_col = sort_map.get(sort, "lp.last_purchase_ever")
+            order_dir = "ASC" if dir.lower() == "asc" else "DESC"
+            nulls = "NULLS LAST" if order_dir == "DESC" else "NULLS FIRST"
+
+            data_params = params.copy()
+            data_params.extend([limit, offset])
+            rows = await conn.fetch(
+                f"""SELECT
+                    cl.cuenta_partner_odoo_id AS id,
+                    rp.name AS nombre,
+                    COALESCE(rp.city::text, '') AS ciudad,
+                    COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
+                    cu.clasificacion,
+                    COALESCE(cu.asignado_a, '') AS asignado,
+                    lp.last_purchase_ever AS last_purchase_date,
+                    CASE WHEN lp.last_purchase_ever IS NOT NULL
+                         THEN (CURRENT_DATE - lp.last_purchase_ever::date)::int
+                         ELSE NULL END AS days_since_last_purchase,
+                    COALESCE(kpi.sales_12m, 0) AS sales_12m_amount,
+                    COALESCE(kpi.orders_12m, 0) AS orders_12m_count
+                {base_from}
+                {where}
+                ORDER BY {order_col} {order_dir} {nulls}
+                LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
+                *data_params
+            )
+            result_rows = []
+            for r in rows:
+                row_dict = dict(r)
+                if row_dict.get('last_purchase_date'):
+                    row_dict['last_purchase_date'] = str(row_dict['last_purchase_date'])
+                result_rows.append(row_dict)
+            return {"rows": result_rows, "total_rows": count, "page": page, "limit": limit}
+        except Exception as e:
+            logger.error(f"Error fetching cuentas list: {e}")
+            return {"rows": [], "total_rows": 0, "page": page, "limit": limit, "error": str(e)}
+
+
+@cuentas_router.get("/list/filter-options")
+async def get_cuentas_filter_options(user=Depends(get_current_user)):
+    """Get distinct filter values for the toolbar dropdowns."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        try:
+            ciudades = [r['city'] for r in await conn.fetch("""
+                SELECT DISTINCT rp.city::text AS city
+                FROM crm.v_cuentas_libres cl
+                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+                WHERE rp.city IS NOT NULL AND btrim(rp.city::text) <> ''
+                ORDER BY city
+            """)]
+            asignados = [r['asignado_a'] for r in await conn.fetch("""
+                SELECT DISTINCT cu.asignado_a
+                FROM crm.cuenta cu
+                WHERE cu.asignado_a IS NOT NULL AND btrim(cu.asignado_a) <> ''
+                ORDER BY cu.asignado_a
+            """)]
+            return {"ciudades": ciudades, "asignados": asignados}
+        except Exception as e:
+            logger.error(f"Error fetching filter options: {e}")
+            return {"ciudades": [], "asignados": []}
+
+
+@cuentas_router.get("/{cuenta_id}/header-metrics")
+async def get_cuenta_header_metrics(cuenta_id: str, user=Depends(get_current_user)):
+    """Compact header metrics for the detail panel."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        partner_ids, odoo_id = await _get_cuenta_partner_ids(conn, cuenta_id)
+        if not partner_ids:
+            return {"last_purchase_date": None, "days_since_last_purchase": None,
+                    "sales_12m_amount": 0, "orders_12m_count": 0}
+        row = await conn.fetchrow(f"""
+            SELECT MAX(po.date_order) AS last_purchase_date,
+                   CASE WHEN MAX(po.date_order) IS NOT NULL
+                        THEN (CURRENT_DATE - MAX(po.date_order)::date)::int
+                        ELSE NULL END AS days_since_last_purchase,
+                   COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.price_subtotal ELSE 0 END), 0) AS sales_12m_amount,
+                   COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m_count
+            FROM odoo.pos_order_line pol
+            JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_CATALOG_JOIN}
+            WHERE po.partner_id = ANY($1)
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+              AND COALESCE(po.reserva, false) = false
+              {_CATALOG_FILTER}
+        """, partner_ids)
+        return {
+            "last_purchase_date": str(row['last_purchase_date']) if row['last_purchase_date'] else None,
+            "days_since_last_purchase": int(row['days_since_last_purchase']) if row['days_since_last_purchase'] is not None else None,
+            "sales_12m_amount": float(row['sales_12m_amount']),
+            "orders_12m_count": int(row['orders_12m_count']),
+        }
+
+
 @cuentas_router.get("/{cuenta_id}")
 async def get_cuenta(cuenta_id: str, user=Depends(get_current_user)):
     """Get cuenta by cuenta_partner_odoo_id (int). On-demand upsert crm.cuenta if not exists."""
