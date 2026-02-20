@@ -67,7 +67,7 @@ function App() {
           <Route path="/comercial" element={<ProtectedRoute><ComercialPage /></ProtectedRoute>} />
           <Route path="/creditos" element={<ProtectedRoute><CreditosPage /></ProtectedRoute>} />
           <Route path="/catalogo" element={<ProtectedRoute><Catalogo /></ProtectedRoute>} />
-          <Route path="/cuentas" element={<ProtectedRoute><Cuentas /></ProtectedRoute>} />
+          <Route path="/cuentas" element={<ProtectedRoute><CuentasAirtable /></ProtectedRoute>} />
           <Route path="/cuentas/:id" element={<ProtectedRoute><CuentaDetalle /></ProtectedRoute>} />
           <Route path="/contactos" element={<ProtectedRoute><Contactos /></ProtectedRoute>} />
           <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
