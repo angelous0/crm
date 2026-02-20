@@ -491,6 +491,9 @@ function ClasifDetailDrawer({ item, ordersData, ordersLoading, ordersPage, onOrd
 export default function CuentaDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeSection = searchParams.get("tab") || "resumen";
+  const setSection = (s) => setSearchParams({ tab: s }, { replace: true });
   const [cuenta, setCuenta] = useState(null);
   const [contactos, setContactos] = useState([]);
   const [interacciones, setInteracciones] = useState([]);
