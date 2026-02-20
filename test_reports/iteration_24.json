@@ -1,0 +1,100 @@
+{
+  "summary": "CuentasAirtable layout (split-view Airtable-style module) - FULLY WORKING. Backend: 23/23 pytest tests passed. Frontend: All features verified - toolbar, search, filters, directory grid, detail panel, tabs, URL state management, and pagination.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CuentasDirectoryGrid", "issues": ["Minor React hydration warning: <tr>/<span> inside <tbody>. Console warning only, does not affect functionality. This is caused by development tooling wrapper elements."]}
+    ]
+  },
+
+  "passed_tests": [
+    "Backend: GET /api/cuentas/list requires authentication (401)",
+    "Backend: GET /api/cuentas/list returns rows with total_rows, page, limit",
+    "Backend: GET /api/cuentas/list row structure has id, nombre, ciudad, estado, last_purchase_date, days_since_last_purchase, sales_12m_amount, orders_12m_count",
+    "Backend: GET /api/cuentas/list?q=angel search filter works (returned ~140 results)",
+    "Backend: GET /api/cuentas/list?estado=ACTIVO filter works",
+    "Backend: GET /api/cuentas/list pagination works (page 1 vs page 2 have different rows)",
+    "Backend: GET /api/cuentas/list?sort=name&dir=asc/desc sorting works",
+    "Backend: GET /api/cuentas/list/filter-options requires authentication (401)",
+    "Backend: GET /api/cuentas/list/filter-options returns ciudades and asignados arrays",
+    "Backend: GET /api/cuentas/{id} requires authentication (401)",
+    "Backend: GET /api/cuentas/{id} returns cuenta with partner info",
+    "Backend: GET /api/cuentas/{id} creates cuenta on-demand if not exists",
+    "Backend: GET /api/cuentas/{id}/header-metrics requires authentication (401)",
+    "Backend: GET /api/cuentas/{id}/header-metrics returns last_purchase_date, days_since_last_purchase, sales_12m_amount, orders_12m_count",
+    "Backend: GET /api/cuentas/{id}/ventas/metrics requires authentication (401)",
+    "Backend: GET /api/cuentas/{id}/ventas/metrics returns orders_count, qty_total, last_order_date, first_order_date",
+    "Backend: GET /api/cuentas/{id}/ventas/orders requires authentication (401)",
+    "Backend: GET /api/cuentas/{id}/ventas/orders returns paginated orders with metrics",
+    "Backend: PUT /api/cuentas/{id} requires authentication (401)",
+    "Backend: PUT /api/cuentas/{id} updates estado_comercial",
+    "Backend: PUT /api/cuentas/{id} updates clasificacion",
+    "Backend: GET /api/cuentas/{id}/creditos/metrics requires authentication (401)",
+    "Backend: GET /api/cuentas/{id}/creditos/metrics returns data",
+    "Frontend: Login form works with data-testid attributes (login-email-input, login-password-input, login-submit-btn)",
+    "Frontend: /cuentas loads CuentasAirtable page with data-testid='cuentas-airtable'",
+    "Frontend: Toolbar shows search input (cuentas-search), filters (filter-estado, filter-clasificacion, filter-ciudad)",
+    "Frontend: Total count badge shows '11,022 cuentas'",
+    "Frontend: Directory grid shows columns: Cuenta, Ciudad, Estado, Ult. Compra, Dias, Vtas 12m, #",
+    "Frontend: Search for 'angel' filters to 140 cuentas",
+    "Frontend: Clicking account row shows detail panel with header (name, ACTIVO badge, KPIs)",
+    "Frontend: URL updates with ?selected={id} when clicking account row",
+    "Frontend: URL updates with &tab={tabname} when clicking tabs",
+    "Frontend: Resumen tab shows KPI cards (kpi-ventas, kpi-reservas, kpi-creditos, kpi-ultima-compra)",
+    "Frontend: Resumen tab shows quick links (quick-info_ventas, quick-yoy, quick-analitica, quick-interacciones, quick-tareas)",
+    "Frontend: Ventas tab shows orders table with Fecha, Orden, Estado, Qty, Total, Lineas columns",
+    "Frontend: Perfil tab shows form with Estado, Clasificacion, Asignado, Notas fields and Guardar button",
+    "Frontend: Pagination works - Pag 1/3 navigation with dir-prev-page, dir-next-page buttons",
+    "Frontend: URL updates to page=2 when clicking next page"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_cuentas_airtable.py",
+    "/app/test_reports/pytest/pytest_cuentas_airtable.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "CuentasAirtable.jsx: Well-structured split-view layout with proper URL state management using useSearchParams",
+    "CuentasAirtable.jsx: Good use of debounced search (300ms) via debounceRef in CuentasToolbar",
+    "CuentasAirtable.jsx: Proper handling of selectedId and activeTab from URL params",
+    "CuentasDirectoryGrid.jsx: Color-coded days badge (green <=7d, amber <=30d, red >30d) for quick visual status",
+    "CuentaDetailPanel.jsx: On-demand loading of cuenta and header-metrics with Promise.all for efficiency",
+    "server.py /api/cuentas/list: Batch computes KPIs only for current page (efficient - avoids full table scan)",
+    "server.py: Uses _get_cuenta_partner_ids helper to handle on-demand cuenta creation consistently",
+    "ResumenTab.jsx: Proper KPI cards that navigate to respective tabs when clicked",
+    "PerfilTab.jsx: Complete CRUD form for commercial data (estado, clasificacion, asignado, notas)"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_cuentas_airtable.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (23/23 tests passed)",
+    "frontend": "100% (all features working)"
+  },
+
+  "test_credentials": {
+    "email": "admin@crm.com",
+    "password": "admin123",
+    "test_cuenta_id_angel": 13419,
+    "test_cuenta_id_with_data": 8
+  },
+
+  "seed_data_creation": "None - used existing PostgreSQL data from external Odoo database",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "CuentasAirtable split-view layout fully verified. Key endpoints: GET /api/cuentas/list (directory with pagination, search, filters, sorting), GET /api/cuentas/list/filter-options (dropdown values), GET /api/cuentas/{id} (detail with partner), GET /api/cuentas/{id}/header-metrics (compact KPIs), GET /api/cuentas/{id}/ventas/metrics and /orders (sales data). All tabs working: Resumen (KPIs + quick links), Ventas (orders table), Perfil (edit form). URL state: ?q=search&estado=ACTIVO&selected=ID&tab=tabname&page=N. Minor React hydration warning in console is from dev tooling, not a bug. Test file: /app/backend/tests/test_cuentas_airtable.py"
+}
