@@ -44,16 +44,16 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
   return (
     <div className="flex flex-col h-full" data-testid="directory-grid">
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full border-collapse text-xs">
+        <table className="w-full border-collapse text-xs table-fixed" style={{ minWidth: "540px" }}>
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr>
               <SortHeader label="Cuenta" sortKey="name" currentSort={sort} currentDir={dir} onSort={onSort} />
-              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap">Ciudad</th>
-              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap">Estado</th>
-              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap">Ult. compra</th>
-              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-right whitespace-nowrap">Dias</th>
-              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-right whitespace-nowrap">Ventas 12m</th>
-              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-right whitespace-nowrap">Compras</th>
+              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap w-[70px]">Ciudad</th>
+              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap w-[60px]">Estado</th>
+              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap w-[70px]">Ult. compra</th>
+              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-right whitespace-nowrap w-[42px]">Dias</th>
+              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-right whitespace-nowrap w-[65px]">Vtas 12m</th>
+              <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-right whitespace-nowrap w-[34px]">#</th>
             </tr>
           </thead>
           <tbody>
