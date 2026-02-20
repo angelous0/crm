@@ -79,8 +79,8 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                     ${isSelected ? "bg-blue-50 border-l-2 border-l-blue-500" : "hover:bg-slate-50 border-l-2 border-l-transparent"}`}
                   data-testid={`dir-row-${r.id}`}
                 >
-                  <td className="px-2 py-1.5 font-medium text-slate-900 truncate max-w-[160px]">{r.nombre || `ID: ${r.id}`}</td>
-                  <td className="px-2 py-1.5 text-slate-500 truncate max-w-[80px]">{r.ciudad || "-"}</td>
+                  <td className="px-2 py-1.5 font-medium text-slate-900 truncate">{r.nombre || `ID: ${r.id}`}</td>
+                  <td className="px-2 py-1.5 text-slate-500 truncate w-[70px]">{r.ciudad || "-"}</td>
                   <td className="px-2 py-1.5">
                     <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold ${estadoColors[r.estado] || "bg-slate-100 text-slate-600"}`}>
                       {r.estado}
