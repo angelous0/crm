@@ -8,6 +8,7 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Catalogo from "@/pages/Catalogo";
 import Cuentas from "@/pages/Cuentas";
+import CuentasAirtable from "@/pages/CuentasAirtable";
 import CuentaDetalle from "@/pages/CuentaDetalle";
 import Contactos from "@/pages/Contactos";
 import Agenda from "@/pages/Agenda";
