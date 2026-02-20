@@ -596,7 +596,7 @@ async def get_cuentas_list(
             )
 
             sort_map = {
-                "name": "rp.name",
+                "name": "CASE WHEN rp.name IS NULL OR btrim(rp.name) = '' THEN 1 ELSE 0 END, rp.name",
                 "ciudad": "rp.city",
                 "estado": "COALESCE(cu.estado_comercial, 'ACTIVO')",
             }
