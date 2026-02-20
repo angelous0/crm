@@ -848,6 +848,15 @@ export default function CuentaDetalle() {
 
   const unlinkTotalPages = Math.ceil(unlinkTotal / unlinkPageSize);
 
+  // Section change handler
+  useEffect(() => {
+    if (!cuenta || loading) return;
+    if (activeSection === "ventas") { setVentasDocTipo("SALE"); }
+    if (activeSection === "reservas") { setVentasDocTipo("RESERVA"); }
+    if (activeSection === "creditos" && !creditosLoading) { fetchCreditos(1); }
+    if (activeSection === "info_ventas") { fetchClasificacion(); }
+  }, [activeSection, cuenta]); // eslint-disable-line
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -861,45 +870,394 @@ export default function CuentaDetalle() {
   const partner = cuenta.partner || {};
   const partnerName = partner.name || `Cuenta #${cuenta.cuenta_partner_odoo_id}`;
 
+  const NAV = [
+    { key: "resumen", label: "Resumen", icon: LayoutDashboard },
+    { key: "contactos", label: "Contactos", icon: Users, count: contactos.length },
+    { key: "info_ventas", label: "Info Ventas", icon: BarChart3 },
+    { key: "ventas", label: "Ventas", icon: ShoppingBag, count: metrics.sale?.orders_count },
+    { key: "reservas", label: "Reservas", icon: ShoppingBag, count: metrics.reserva?.orders_count },
+    { key: "creditos", label: "Creditos", icon: CreditCard, count: metrics.creditos?.invoices_count, badge: metrics.creditos?.saldo_total > 0 ? `S/${fmtMoney(metrics.creditos.saldo_total)}` : null },
+    { key: "yoy", label: "Comparativo YoY", icon: TrendingUp },
+    { key: "analitica", label: "Analitica", icon: Activity },
+    { key: "interacciones", label: "Interacciones", icon: MessageSquare, count: interacciones.length },
+    { key: "tareas", label: "Tareas", icon: CheckSquare, count: tareas.length },
+    { key: "perfil", label: "Perfil", icon: Settings },
+  ];
+
   return (
-    <div data-testid="cuenta-detalle-page">
+    <div data-testid="cuenta-detalle-page" className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-8 py-6 border-b border-border bg-white/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/cuentas")} data-testid="back-to-cuentas">
+      <div className="px-5 py-3 border-b border-border bg-white shrink-0 sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/cuentas")} data-testid="back-to-cuentas" className="shrink-0">
             <ArrowLeft size={16} />
           </Button>
-          <div className="flex-1">
-            <h1 className="font-heading text-2xl font-semibold tracking-tight text-slate-900">{partnerName}</h1>
-            <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-              {partner.phone && <span className="flex items-center gap-1"><Phone size={14} />{partner.phone}</span>}
-              {partner.email && <span className="flex items-center gap-1"><Mail size={14} />{partner.email}</span>}
-              {partner.city && <span className="flex items-center gap-1"><MapPin size={14} />{partner.city}</span>}
+          <div className="flex-1 min-w-0">
+            <h1 className="font-heading text-xl font-semibold tracking-tight text-slate-900 truncate">{partnerName}</h1>
+            <div className="flex items-center gap-3 mt-0.5">
+              {partner.city && <span className="text-xs text-slate-500 flex items-center gap-1"><MapPin size={11} />{partner.city}</span>}
+              <Badge variant="outline" className="text-[10px] font-semibold">{editForm.estado_comercial || "NUEVO"}</Badge>
+              {editForm.clasificacion && <Badge variant="secondary" className="text-[10px]">{editForm.clasificacion}</Badge>}
             </div>
           </div>
+          {partner.phone && <span className="hidden lg:flex items-center gap-1 text-xs text-slate-500 shrink-0"><Phone size={12} />{partner.phone}</span>}
+          {partner.email && <span className="hidden lg:flex items-center gap-1 text-xs text-slate-500 shrink-0"><Mail size={12} />{partner.email}</span>}
         </div>
       </div>
 
-      <div className="p-8">
-        <div className="grid grid-cols-12 gap-8">
-          {/* Left: Edit form */}
-          <div className="col-span-12 lg:col-span-4">
-            <div className="bg-white rounded-lg border border-border shadow-sm p-6 space-y-4 sticky top-[100px]">
-              <h3 className="font-heading font-medium text-lg text-slate-900">Datos comerciales</h3>
-              <div className="space-y-3">
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar Directory - desktop */}
+        <nav className="hidden lg:flex flex-col w-[220px] shrink-0 border-r border-border bg-slate-50/70 overflow-y-auto" data-testid="cuenta-sidebar">
+          <div className="py-2">
+            {NAV.map(item => {
+              const Icon = item.icon;
+              const active = activeSection === item.key;
+              return (
+                <button key={item.key} onClick={() => setSection(item.key)}
+                  className={`w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors text-xs
+                    ${active ? "bg-white border-r-2 border-slate-800 text-slate-900 font-semibold shadow-sm" : "text-slate-600 hover:bg-white/60 hover:text-slate-900"}`}
+                  data-testid={`nav-${item.key}`}>
+                  <Icon size={15} className={active ? "text-slate-800" : "text-slate-400"} />
+                  <span className="flex-1 truncate">{item.label}</span>
+                  {item.badge && <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-semibold">{item.badge}</span>}
+                  {item.count != null && !item.badge && <span className="text-[10px] text-slate-400 font-mono tabular-nums">{fmtNum(item.count)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* Mobile dropdown */}
+        <div className="lg:hidden border-b border-border bg-slate-50 px-4 py-2 shrink-0" data-testid="cuenta-mobile-nav">
+          <Select value={activeSection} onValueChange={(v) => setSection(v)}>
+            <SelectTrigger className="h-8 text-xs"><Menu size={14} className="mr-1" /><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {NAV.map(item => <SelectItem key={item.key} value={item.key}>{item.label}{item.count != null ? ` (${item.count})` : ""}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 min-w-0" data-testid="cuenta-content">
+
+          {/* ── RESUMEN ── */}
+          {activeSection === "resumen" && (
+            <div className="space-y-4" data-testid="section-resumen">
+              {/* Detail mode toggle */}
+              <div className="flex items-center gap-3 bg-white border border-border rounded-lg px-4 py-2 shadow-sm" data-testid="detail-mode-toggle-bar">
+                <Switch checked={detailMode} onCheckedChange={(v) => {
+                  setDetailMode(v);
+                  if (v) { fetchVentasLines(1, ventasDocTipo); fetchCreditosLines(1); }
+                }} className="data-[state=checked]:bg-cyan-500" />
+                <span className={`text-xs font-medium ${detailMode ? "text-cyan-700" : "text-slate-600"}`}>
+                  <List size={13} className="inline mr-1 -mt-0.5" />Modo detalle
+                </span>
+              </div>
+              {/* KPI cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-white border border-border rounded-lg p-3 shadow-sm cursor-pointer hover:border-slate-300 transition-colors" onClick={() => setSection("ventas")}>
+                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Ventas</div>
+                  <div className="text-xl font-bold text-slate-800 mt-1">S/ {fmtMoney(metrics.sale?.qty_total ? 0 : 0)}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{fmtNum(metrics.sale?.orders_count || 0)} ordenes | {fmtNum(metrics.sale?.qty_total || 0)} uds</div>
+                </div>
+                <div className="bg-white border border-border rounded-lg p-3 shadow-sm cursor-pointer hover:border-slate-300 transition-colors" onClick={() => setSection("reservas")}>
+                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Reservas</div>
+                  <div className="text-xl font-bold text-slate-800 mt-1">{fmtNum(metrics.reserva?.orders_count || 0)}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{fmtNum(metrics.reserva?.qty_total || 0)} uds</div>
+                </div>
+                <div className="bg-white border border-border rounded-lg p-3 shadow-sm cursor-pointer hover:border-slate-300 transition-colors" onClick={() => setSection("creditos")}>
+                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Creditos</div>
+                  <div className="text-xl font-bold text-slate-800 mt-1">{fmtNum(metrics.creditos?.invoices_count || 0)}</div>
+                  {metrics.creditos?.saldo_total > 0 && <div className="text-[10px] text-red-600 font-semibold mt-0.5">Saldo: S/ {fmtMoney(metrics.creditos.saldo_total)}</div>}
+                </div>
+                <div className="bg-white border border-border rounded-lg p-3 shadow-sm cursor-pointer hover:border-slate-300 transition-colors" onClick={() => setSection("info_ventas")}>
+                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Ultima compra</div>
+                  <div className="text-xl font-bold text-slate-800 mt-1">{fmtDate(metrics.sale?.last_order_date)}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{metrics.sale?.first_order_date ? `Desde ${fmtDate(metrics.sale.first_order_date)}` : ""}</div>
+                </div>
+              </div>
+              {/* Quick links */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                {[
+                  { key: "info_ventas", label: "Info Ventas", icon: BarChart3 },
+                  { key: "yoy", label: "Comparativo YoY", icon: TrendingUp },
+                  { key: "analitica", label: "Analitica", icon: Activity },
+                  { key: "interacciones", label: "Interacciones", icon: MessageSquare },
+                  { key: "tareas", label: "Tareas", icon: CheckSquare },
+                ].map(q => (
+                  <button key={q.key} onClick={() => setSection(q.key)}
+                    className="flex items-center gap-2 bg-white border border-border rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm"
+                    data-testid={`quick-${q.key}`}>
+                    <q.icon size={14} className="text-slate-400" />{q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── CONTACTOS ── */}
+          {activeSection === "contactos" && (
+            <div data-testid="section-contactos">
+              <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50">
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Telefono</TableHead>
+                      <TableHead>WhatsApp</TableHead>
+                      <TableHead>Rol</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contactos.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="h-20 text-center text-slate-500">Sin contactos</TableCell></TableRow>
+                    ) : contactos.map(c => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{c.partner_nombre || `ID: ${c.contacto_partner_odoo_id}`}</TableCell>
+                        <TableCell>{c.partner_phone || c.partner_mobile || "-"}</TableCell>
+                        <TableCell>{c.whatsapp || "-"}</TableCell>
+                        <TableCell>{c.rol || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {/* Vincular contacto existente */}
+              <div className="mt-4 bg-white rounded-lg border border-border shadow-sm" data-testid="vincular-contacto-section">
+                <div className="p-3 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <UserPlus size={16} className="text-slate-600" />
+                    <h4 className="font-medium text-sm text-slate-900">Vincular contacto existente</h4>
+                  </div>
+                </div>
+                <div className="p-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                      <Input data-testid="vincular-search" placeholder="Buscar por nombre, DNI, telefono..." className="pl-8 text-xs h-8" value={unlinkSearch} onChange={(e) => handleUnlinkSearchChange(e.target.value)} />
+                    </div>
+                    <div className="flex items-center gap-1.5 border border-border rounded-md px-2 py-1">
+                      <Switch id="solo-dni" data-testid="vincular-solo-dni" checked={soloDni} onCheckedChange={(v) => handleUnlinkFilterChange(v, soloTelefono)} className="scale-[0.8]" />
+                      <Label htmlFor="solo-dni" className="text-[10px] text-slate-600 cursor-pointer">DNI/RUC</Label>
+                    </div>
+                    <div className="flex items-center gap-1.5 border border-border rounded-md px-2 py-1">
+                      <Switch id="solo-tel" data-testid="vincular-solo-telefono" checked={soloTelefono} onCheckedChange={(v) => handleUnlinkFilterChange(soloDni, v)} className="scale-[0.8]" />
+                      <Label htmlFor="solo-tel" className="text-[10px] text-slate-600 cursor-pointer">Telefono</Label>
+                    </div>
+                  </div>
+                  {unlinkSearch.length >= 2 && (
+                    <>
+                      <div className="rounded-md border border-border overflow-hidden">
+                        <Table>
+                          <TableHeader><TableRow className="bg-slate-50/50">
+                            <TableHead className="text-xs">Nombre</TableHead><TableHead className="text-xs">DNI/RUC</TableHead>
+                            <TableHead className="text-xs">Telefono</TableHead><TableHead className="text-xs">Ciudad</TableHead>
+                            <TableHead className="text-xs w-[80px]">Accion</TableHead>
+                          </TableRow></TableHeader>
+                          <TableBody>
+                            {unlinkLoading ? (
+                              <TableRow><TableCell colSpan={5} className="h-20 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-400" /></TableCell></TableRow>
+                            ) : unlinkResults.length === 0 ? (
+                              <TableRow><TableCell colSpan={5} className="h-16 text-center text-slate-500 text-xs">Sin resultados</TableCell></TableRow>
+                            ) : unlinkResults.map((p) => (
+                              <TableRow key={p.odoo_id} data-testid={`unlinked-partner-${p.odoo_id}`}>
+                                <TableCell className="text-xs font-medium">{p.name}</TableCell>
+                                <TableCell className="text-xs font-mono">{p.vat || "-"}</TableCell>
+                                <TableCell className="text-xs">{p.phone || p.mobile || "-"}</TableCell>
+                                <TableCell className="text-xs">{p.city || "-"}</TableCell>
+                                <TableCell>
+                                  <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" onClick={() => openVincularConfirm(p)} data-testid={`vincular-btn-${p.odoo_id}`}>
+                                    <Link2 size={12} className="mr-1" />Vincular
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {unlinkTotalPages > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">{unlinkTotal} resultados | Pag {unlinkPage}/{unlinkTotalPages || 1}</span>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm" className="h-6" disabled={unlinkPage <= 1} onClick={() => handleUnlinkPageChange(unlinkPage - 1)} data-testid="vincular-prev-page"><ChevronLeft size={12} /></Button>
+                            <Button variant="outline" size="sm" className="h-6" disabled={unlinkPage >= unlinkTotalPages} onClick={() => handleUnlinkPageChange(unlinkPage + 1)} data-testid="vincular-next-page"><ChevronRight size={12} /></Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── VENTAS ── */}
+          {activeSection === "ventas" && (
+            <div data-testid="section-ventas">
+              <div className="flex items-center gap-3 mb-3 bg-white border border-border rounded-lg px-4 py-2 shadow-sm">
+                <Switch checked={detailMode} onCheckedChange={(v) => { setDetailMode(v); if (v) fetchVentasLines(1, "SALE"); }} className="data-[state=checked]:bg-cyan-500" />
+                <span className="text-xs text-slate-600"><List size={13} className="inline mr-1" />Modo detalle</span>
+              </div>
+              {detailMode ? (
+                <OrderLinesTab data={ventasLines} loading={ventasLinesLoading} page={ventasLinesPage} onPageChange={(pg) => fetchVentasLines(pg, "SALE")} />
+              ) : (
+                <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage} onPageChange={(pg) => fetchVentas(pg, "SALE")} onSelectOrder={setSelectedOrder} />
+              )}
+            </div>
+          )}
+
+          {/* ── RESERVAS ── */}
+          {activeSection === "reservas" && (
+            <div data-testid="section-reservas">
+              <div className="flex items-center gap-3 mb-3 bg-white border border-border rounded-lg px-4 py-2 shadow-sm">
+                <Switch checked={detailMode} onCheckedChange={(v) => { setDetailMode(v); if (v) fetchVentasLines(1, "RESERVA"); }} className="data-[state=checked]:bg-cyan-500" />
+                <span className="text-xs text-slate-600"><List size={13} className="inline mr-1" />Modo detalle</span>
+              </div>
+              {detailMode ? (
+                <OrderLinesTab data={ventasLines} loading={ventasLinesLoading} page={ventasLinesPage} onPageChange={(pg) => fetchVentasLines(pg, "RESERVA")} />
+              ) : (
+                <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage} onPageChange={(pg) => fetchVentas(pg, "RESERVA")} onSelectOrder={setSelectedOrder} />
+              )}
+            </div>
+          )}
+
+          {/* ── CREDITOS ── */}
+          {activeSection === "creditos" && (
+            <div data-testid="section-creditos">
+              <div className="flex items-center gap-3 mb-3 bg-white border border-border rounded-lg px-4 py-2 shadow-sm">
+                <Switch checked={detailMode} onCheckedChange={(v) => { setDetailMode(v); if (v) fetchCreditosLines(1); }} className="data-[state=checked]:bg-cyan-500" />
+                <span className="text-xs text-slate-600"><List size={13} className="inline mr-1" />Modo detalle</span>
+              </div>
+              {detailMode ? (
+                <InvoiceLinesTab data={creditosLines} loading={creditosLinesLoading} page={creditosLinesPage} onPageChange={fetchCreditosLines} />
+              ) : (
+                <InvoiceHeadersTab data={creditos} loading={creditosLoading} page={creditosPage} onPageChange={fetchCreditos} onSelectInvoice={setSelectedInvoice} />
+              )}
+            </div>
+          )}
+
+          {/* ── INFO VENTAS ── */}
+          {activeSection === "info_ventas" && (
+            <div data-testid="section-info-ventas">
+              <ClasificacionTab
+                data={clasifData} loading={clasifLoading}
+                fechaDesde={clasifFechaDesde} fechaHasta={clasifFechaHasta}
+                onFechaDesdeChange={(v) => { setClasifFechaDesde(v); }}
+                onFechaHastaChange={(v) => { setClasifFechaHasta(v); }}
+                onApplyFilters={fetchClasificacion}
+                sortBy={clasifSortBy} sortDir={clasifSortDir}
+                onSort={(col) => {
+                  const newDir = col === clasifSortBy ? (clasifSortDir === "desc" ? "asc" : "desc") : "desc";
+                  setClasifSortBy(col);
+                  setClasifSortDir(newDir);
+                  fetchClasificacion(col, newDir);
+                }}
+                onSelectItem={(item) => {
+                  setClasifSelected(item);
+                  setClasifSelectedOrder(null);
+                  setClasifOrderLines({ items: [], has_next: false });
+                  fetchClasifOrders(item, 1);
+                }}
+              />
+              {clasifSelected && (
+                <ClasifDetailDrawer
+                  item={clasifSelected}
+                  ordersData={clasifOrders} ordersLoading={clasifOrdersLoading} ordersPage={clasifOrdersPage}
+                  onOrdersPageChange={(pg) => fetchClasifOrders(clasifSelected, pg)}
+                  selectedOrder={clasifSelectedOrder} orderLines={clasifOrderLines}
+                  orderLinesLoading={clasifOrderLinesLoading} orderLinesPage={clasifOrderLinesPage}
+                  onOrderLinesPageChange={(pg) => fetchClasifOrderLines(clasifSelectedOrder.order_id, pg)}
+                  onSelectOrder={(order) => { setClasifSelectedOrder(order); fetchClasifOrderLines(order.order_id, 1); }}
+                  onBackToOrders={() => { setClasifSelectedOrder(null); setClasifOrderLines({ items: [], has_next: false }); }}
+                  onClose={() => { setClasifSelected(null); setClasifSelectedOrder(null); }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* ── YOY ── */}
+          {activeSection === "yoy" && <YoYTab cuentaId={id} />}
+
+          {/* ── ANALITICA ── */}
+          {activeSection === "analitica" && <AnaliticaTab cuentaId={id} />}
+
+          {/* ── INTERACCIONES ── */}
+          {activeSection === "interacciones" && (
+            <div data-testid="section-interacciones">
+              <div className="mb-3">
+                <Button size="sm" onClick={() => setShowInteraccion(true)} data-testid="add-interaccion-btn">
+                  <Plus size={14} className="mr-1" />Nueva interaccion
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {interacciones.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 border rounded-md bg-white text-xs">Sin interacciones</div>
+                ) : interacciones.map(i => (
+                  <div key={i.id} className="bg-white border rounded-md p-3 shadow-sm" data-testid={`interaccion-${i.id}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      {i.tipo === "WHATSAPP" && <MessageSquare size={14} className="text-green-600" />}
+                      {i.tipo === "LLAMADA" && <PhoneCall size={14} className="text-blue-600" />}
+                      {i.tipo === "VISITA" && <Footprints size={14} className="text-amber-600" />}
+                      {i.tipo === "NOTA" && <StickyNote size={14} className="text-slate-600" />}
+                      <Badge variant="outline" className="text-[10px]">{i.tipo}</Badge>
+                      <span className="text-[10px] text-slate-400 ml-auto">{new Date(i.fecha).toLocaleString('es')}</span>
+                    </div>
+                    <p className="text-xs text-slate-900">{i.resumen}</p>
+                    {i.resultado && <p className="text-[10px] text-slate-500 mt-0.5">Resultado: {i.resultado}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── TAREAS ── */}
+          {activeSection === "tareas" && (
+            <div data-testid="section-tareas">
+              <div className="mb-3">
+                <Button size="sm" onClick={() => setShowTarea(true)} data-testid="add-tarea-btn">
+                  <Plus size={14} className="mr-1" />Nueva tarea
+                </Button>
+              </div>
+              <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader><TableRow className="bg-slate-50/50">
+                    <TableHead className="text-xs">Tipo</TableHead><TableHead className="text-xs">Descripcion</TableHead>
+                    <TableHead className="text-xs">Vence</TableHead><TableHead className="text-xs">Status</TableHead><TableHead className="text-xs">Accion</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {tareas.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="h-16 text-center text-slate-500 text-xs">Sin tareas</TableCell></TableRow>
+                    ) : tareas.map(t => (
+                      <TableRow key={t.id} data-testid={`tarea-${t.id}`}>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{t.tipo}</Badge></TableCell>
+                        <TableCell className="max-w-[200px] truncate text-xs">{t.descripcion}</TableCell>
+                        <TableCell className="text-xs">{new Date(t.due_at).toLocaleDateString('es')}</TableCell>
+                        <TableCell><Badge variant={t.status === "HECHO" ? "default" : t.status === "PENDIENTE" ? "secondary" : "destructive"} className="text-[10px]">{t.status}</Badge></TableCell>
+                        <TableCell>{t.status === "PENDIENTE" && <Button size="sm" variant="outline" className="text-[10px] h-6" onClick={() => handleCompletarTarea(t.id)} data-testid={`completar-tarea-${t.id}`}>Completar</Button>}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {/* ── PERFIL ── */}
+          {activeSection === "perfil" && (
+            <div className="max-w-lg space-y-3" data-testid="section-perfil">
+              <h3 className="text-sm font-semibold text-slate-800">Datos comerciales</h3>
+              <div className="bg-white rounded-lg border border-border shadow-sm p-4 space-y-3">
                 <div>
-                  <Label className="text-xs uppercase tracking-wider font-semibold text-slate-500">Estado</Label>
+                  <Label className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Estado</Label>
                   <Select value={editForm.estado_comercial} onValueChange={v => setEditForm(f => ({ ...f, estado_comercial: v }))}>
-                    <SelectTrigger data-testid="edit-estado"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ESTADOS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger data-testid="edit-estado" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>{ESTADOS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider font-semibold text-slate-500">Clasificacion</Label>
+                  <Label className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Clasificacion</Label>
                   <Select value={editForm.clasificacion || "NONE"} onValueChange={v => setEditForm(f => ({ ...f, clasificacion: v === "NONE" ? "" : v }))}>
-                    <SelectTrigger data-testid="edit-clasificacion"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid="edit-clasificacion" className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="NONE">Sin clasificar</SelectItem>
                       {CLASIFICACIONES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -907,560 +1265,77 @@ export default function CuentaDetalle() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider font-semibold text-slate-500">Asignado a</Label>
-                  <Input
-                    data-testid="edit-asignado"
-                    value={editForm.asignado_a}
-                    onChange={e => setEditForm(f => ({ ...f, asignado_a: e.target.value }))}
-                    placeholder="Nombre del vendedor"
-                  />
+                  <Label className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Asignado a</Label>
+                  <Input data-testid="edit-asignado" value={editForm.asignado_a} onChange={e => setEditForm(f => ({ ...f, asignado_a: e.target.value }))} placeholder="Nombre del vendedor" className="h-8 text-xs" />
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider font-semibold text-slate-500">Notas</Label>
-                  <Textarea
-                    data-testid="edit-notas"
-                    value={editForm.notas}
-                    onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))}
-                    rows={3}
-                    placeholder="Notas sobre esta cuenta..."
-                  />
+                  <Label className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Notas</Label>
+                  <Textarea data-testid="edit-notas" value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} rows={3} placeholder="Notas sobre esta cuenta..." className="text-xs" />
                 </div>
-                <Button onClick={handleSave} disabled={saving} className="w-full" data-testid="save-cuenta-btn">
-                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2" size={16} />}
+                <Button onClick={handleSave} disabled={saving} className="w-full h-8 text-xs" data-testid="save-cuenta-btn">
+                  {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1" size={13} />}
                   Guardar
                 </Button>
               </div>
             </div>
-          </div>
-
-          {/* Right: Tabs */}
-          <div className="col-span-12 lg:col-span-8">
-            {/* Detail mode toggle */}
-            <div className="flex items-center gap-3 mb-4 bg-white border border-border rounded-lg px-4 py-2.5 shadow-sm" data-testid="detail-mode-toggle-bar">
-              <Switch checked={detailMode} onCheckedChange={(v) => {
-                setDetailMode(v);
-                if (v) {
-                  fetchVentasLines(1, ventasDocTipo);
-                  fetchCreditosLines(1);
-                }
-              }} className="data-[state=checked]:bg-cyan-500" />
-              <div>
-                <span className={`text-sm font-medium ${detailMode ? "text-cyan-700" : "text-slate-600"}`}>
-                  <List size={14} className="inline mr-1 -mt-0.5" />
-                  Modo detalle (lineas)
-                </span>
-                <p className="text-[10px] text-slate-400">{detailMode ? "Mostrando lineas de producto individuales" : "Mostrando cabeceras de ordenes/facturas"}</p>
-              </div>
-              {detailMode && <span className="ml-auto text-[9px] text-cyan-600 font-semibold bg-cyan-50 px-2 py-1 rounded border border-cyan-200">ACTIVO</span>}
-            </div>
-
-            <Tabs defaultValue="contactos" onValueChange={(v) => {
-              if (v === "ventas") {
-                setVentasDocTipo("SALE");
-                if (detailMode) fetchVentasLines(1, "SALE");
-              }
-              if (v === "reservas") {
-                setVentasDocTipo("RESERVA");
-                if (detailMode) fetchVentasLines(1, "RESERVA");
-              }
-              if (v === "creditos") {
-                if (detailMode) fetchCreditosLines(1);
-                else fetchCreditos(1);
-              }
-              if (v === "info_ventas") {
-                fetchClasificacion();
-              }
-            }}>
-              <TabsList className="mb-4 flex-wrap" data-testid="cuenta-tabs">
-                <TabsTrigger value="contactos">Contactos ({contactos.length})</TabsTrigger>
-                <TabsTrigger value="info_ventas" data-testid="tab-info-ventas">
-                  <BarChart3 size={14} className="mr-1" />Info Ventas
-                </TabsTrigger>
-                <TabsTrigger value="ventas" data-testid="tab-ventas">
-                  Ventas{metrics.sale ? ` (Ordenes: ${fmtNum(metrics.sale.orders_count)})` : ""}
-                  {metrics.sale && metrics.sale.qty_total > 0 && (
-                    <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.sale.qty_total)}</span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="reservas" data-testid="tab-reservas">
-                  Reservas{metrics.reserva ? ` (Ordenes: ${fmtNum(metrics.reserva.orders_count)})` : ""}
-                  {metrics.reserva && metrics.reserva.qty_total > 0 && (
-                    <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.reserva.qty_total)}</span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="creditos" data-testid="tab-creditos">
-                  Creditos{metrics.creditos ? ` (Facturas: ${fmtNum(metrics.creditos.invoices_count)})` : ""}
-                  {metrics.creditos && metrics.creditos.qty_total > 0 && (
-                    <span className="ml-1.5 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full font-normal">Uds: {fmtNum(metrics.creditos.qty_total)}</span>
-                  )}
-                  {metrics.creditos && metrics.creditos.saldo_total > 0 && (
-                    <span className="ml-1.5 text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-normal">Saldo: {fmtMoney(metrics.creditos.saldo_total)}</span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="interacciones">Interacciones ({interacciones.length})</TabsTrigger>
-                <TabsTrigger value="tareas">Tareas ({tareas.length})</TabsTrigger>
-                <TabsTrigger value="yoy" data-testid="tab-yoy">Comparativo YoY</TabsTrigger>
-                <TabsTrigger value="analitica" data-testid="tab-analitica">Analitica</TabsTrigger>
-              </TabsList>
-
-              {/* Contactos Tab */}
-              <TabsContent value="contactos">
-                <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/50">
-                        <TableHead>Nombre</TableHead>
-                        <TableHead>Telefono</TableHead>
-                        <TableHead>WhatsApp</TableHead>
-                        <TableHead>Rol</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {contactos.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="h-20 text-center text-slate-500">Sin contactos</TableCell></TableRow>
-                      ) : contactos.map(c => (
-                        <TableRow key={c.id}>
-                          <TableCell className="font-medium">{c.partner_nombre || `ID: ${c.contacto_partner_odoo_id}`}</TableCell>
-                          <TableCell>{c.partner_phone || c.partner_mobile || "-"}</TableCell>
-                          <TableCell>{c.whatsapp || "-"}</TableCell>
-                          <TableCell>{c.rol || "-"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Vincular contacto existente */}
-                <div className="mt-6 bg-white rounded-lg border border-border shadow-sm" data-testid="vincular-contacto-section">
-                  <div className="p-4 border-b border-border">
-                    <div className="flex items-center gap-2 mb-1">
-                      <UserPlus size={18} className="text-slate-600" strokeWidth={1.5} />
-                      <h4 className="font-heading font-medium text-base text-slate-900">Vincular contacto existente</h4>
-                    </div>
-                    <p className="text-xs text-slate-500">Busca personas del ODS (Odoo) que aun no estan vinculadas al CRM</p>
-                  </div>
-                  <div className="p-4 space-y-4">
-                    {/* Search + Filters */}
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="relative flex-1 min-w-[220px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                        <Input
-                          data-testid="vincular-search"
-                          placeholder="Buscar por nombre, DNI/RUC, telefono... (min 2 caracteres)"
-                          className="pl-9 text-sm"
-                          value={unlinkSearch}
-                          onChange={(e) => handleUnlinkSearchChange(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
-                        <Switch
-                          id="solo-dni"
-                          data-testid="vincular-solo-dni"
-                          checked={soloDni}
-                          onCheckedChange={(v) => handleUnlinkFilterChange(v, soloTelefono)}
-                          className="scale-[0.85]"
-                        />
-                        <Label htmlFor="solo-dni" className="text-xs text-slate-600 cursor-pointer whitespace-nowrap">Solo con DNI/RUC</Label>
-                      </div>
-                      <div className="flex items-center gap-2 border border-border rounded-md px-3 py-1.5">
-                        <Switch
-                          id="solo-tel"
-                          data-testid="vincular-solo-telefono"
-                          checked={soloTelefono}
-                          onCheckedChange={(v) => handleUnlinkFilterChange(soloDni, v)}
-                          className="scale-[0.85]"
-                        />
-                        <Label htmlFor="solo-tel" className="text-xs text-slate-600 cursor-pointer whitespace-nowrap">Solo con telefono</Label>
-                      </div>
-                    </div>
-
-                    {/* Results table */}
-                    {unlinkSearch.length >= 2 && (
-                      <>
-                        <div className="rounded-md border border-border overflow-hidden">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-slate-50/50">
-                                <TableHead>Nombre</TableHead>
-                                <TableHead>DNI/RUC</TableHead>
-                                <TableHead>Telefono</TableHead>
-                                <TableHead>WhatsApp</TableHead>
-                                <TableHead>Ciudad</TableHead>
-                                <TableHead className="w-[100px]">Accion</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {unlinkLoading ? (
-                                <TableRow>
-                                  <TableCell colSpan={6} className="h-24 text-center">
-                                    <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />
-                                  </TableCell>
-                                </TableRow>
-                              ) : unlinkResults.length === 0 ? (
-                                <TableRow>
-                                  <TableCell colSpan={6} className="h-20 text-center text-slate-500 text-sm">
-                                    No se encontraron partners sin vincular
-                                  </TableCell>
-                                </TableRow>
-                              ) : (
-                                unlinkResults.map((p) => (
-                                  <TableRow key={p.odoo_id} data-testid={`unlinked-partner-${p.odoo_id}`}>
-                                    <TableCell className="font-medium text-sm text-slate-900">{p.name}</TableCell>
-                                    <TableCell className="text-sm text-slate-600 font-mono">{p.vat || "-"}</TableCell>
-                                    <TableCell className="text-sm text-slate-600">{p.phone || "-"}</TableCell>
-                                    <TableCell className="text-sm text-slate-600">{p.mobile || "-"}</TableCell>
-                                    <TableCell className="text-sm text-slate-600">{p.city || "-"}</TableCell>
-                                    <TableCell>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-xs"
-                                        onClick={() => openVincularConfirm(p)}
-                                        data-testid={`vincular-btn-${p.odoo_id}`}
-                                      >
-                                        <Link2 size={14} className="mr-1" /> Vincular
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                ))
-                              )}
-                            </TableBody>
-                          </Table>
-                        </div>
-
-                        {/* Pagination */}
-                        {unlinkTotalPages > 0 && (
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs text-slate-500">
-                              {unlinkTotal} resultado{unlinkTotal !== 1 ? "s" : ""} | Pagina {unlinkPage} de {unlinkTotalPages || 1}
-                            </p>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="outline" size="sm"
-                                disabled={unlinkPage <= 1}
-                                onClick={() => handleUnlinkPageChange(unlinkPage - 1)}
-                                data-testid="vincular-prev-page"
-                              >
-                                <ChevronLeft size={14} />
-                              </Button>
-                              <Button
-                                variant="outline" size="sm"
-                                disabled={unlinkPage >= unlinkTotalPages}
-                                onClick={() => handleUnlinkPageChange(unlinkPage + 1)}
-                                data-testid="vincular-next-page"
-                              >
-                                <ChevronRight size={14} />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Ventas Tab */}
-              <TabsContent value="ventas">
-                {detailMode ? (
-                  <OrderLinesTab data={ventasLines} loading={ventasLinesLoading} page={ventasLinesPage}
-                    onPageChange={(pg) => fetchVentasLines(pg, "SALE")} />
-                ) : (
-                  <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage}
-                    onPageChange={(pg) => fetchVentas(pg, "SALE")} onSelectOrder={setSelectedOrder} />
-                )}
-              </TabsContent>
-
-              {/* Reservas Tab */}
-              <TabsContent value="reservas">
-                {detailMode ? (
-                  <OrderLinesTab data={ventasLines} loading={ventasLinesLoading} page={ventasLinesPage}
-                    onPageChange={(pg) => fetchVentasLines(pg, "RESERVA")} />
-                ) : (
-                  <OrderHeadersTab data={ventas} loading={ventasLoading} page={ventasPage}
-                    onPageChange={(pg) => fetchVentas(pg, "RESERVA")} onSelectOrder={setSelectedOrder} />
-                )}
-              </TabsContent>
-
-              {/* Creditos Tab */}
-              <TabsContent value="creditos">
-                {detailMode ? (
-                  <InvoiceLinesTab data={creditosLines} loading={creditosLinesLoading} page={creditosLinesPage}
-                    onPageChange={fetchCreditosLines} />
-                ) : (
-                  <InvoiceHeadersTab data={creditos} loading={creditosLoading} page={creditosPage}
-                    onPageChange={fetchCreditos} onSelectInvoice={setSelectedInvoice} />
-                )}
-              </TabsContent>
-
-              {/* Info Ventas Tab (Clasificacion) */}
-              <TabsContent value="info_ventas">
-                <ClasificacionTab
-                  data={clasifData} loading={clasifLoading}
-                  fechaDesde={clasifFechaDesde} fechaHasta={clasifFechaHasta}
-                  onFechaDesdeChange={(v) => { setClasifFechaDesde(v); }}
-                  onFechaHastaChange={(v) => { setClasifFechaHasta(v); }}
-                  onApplyFilters={fetchClasificacion}
-                  sortBy={clasifSortBy} sortDir={clasifSortDir}
-                  onSort={(col) => {
-                    const newDir = col === clasifSortBy ? (clasifSortDir === "desc" ? "asc" : "desc") : "desc";
-                    setClasifSortBy(col);
-                    setClasifSortDir(newDir);
-                    fetchClasificacion(col, newDir);
-                  }}
-                  onSelectItem={(item) => {
-                    setClasifSelected(item);
-                    setClasifSelectedOrder(null);
-                    setClasifOrderLines({ items: [], has_next: false });
-                    fetchClasifOrders(item, 1);
-                  }}
-                />
-                {clasifSelected && (
-                  <ClasifDetailDrawer
-                    item={clasifSelected}
-                    ordersData={clasifOrders}
-                    ordersLoading={clasifOrdersLoading}
-                    ordersPage={clasifOrdersPage}
-                    onOrdersPageChange={(pg) => fetchClasifOrders(clasifSelected, pg)}
-                    selectedOrder={clasifSelectedOrder}
-                    orderLines={clasifOrderLines}
-                    orderLinesLoading={clasifOrderLinesLoading}
-                    orderLinesPage={clasifOrderLinesPage}
-                    onOrderLinesPageChange={(pg) => fetchClasifOrderLines(clasifSelectedOrder.order_id, pg)}
-                    onSelectOrder={(order) => {
-                      setClasifSelectedOrder(order);
-                      fetchClasifOrderLines(order.order_id, 1);
-                    }}
-                    onBackToOrders={() => {
-                      setClasifSelectedOrder(null);
-                      setClasifOrderLines({ items: [], has_next: false });
-                    }}
-                    onClose={() => {
-                      setClasifSelected(null);
-                      setClasifSelectedOrder(null);
-                    }}
-                  />
-                )}
-              </TabsContent>
-
-              {/* Interacciones Tab */}
-              <TabsContent value="interacciones">
-                <div className="mb-4">
-                  <Button size="sm" onClick={() => setShowInteraccion(true)} data-testid="add-interaccion-btn">
-                    <Plus size={16} className="mr-1" /> Nueva interaccion
-                  </Button>
-                </div>
-                <div className="space-y-3">
-                  {interacciones.length === 0 ? (
-                    <div className="text-center py-8 text-slate-500 border rounded-md bg-white">Sin interacciones</div>
-                  ) : interacciones.map(i => (
-                    <div key={i.id} className="bg-white border rounded-md p-4 shadow-sm" data-testid={`interaccion-${i.id}`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {i.tipo === "WHATSAPP" && <MessageSquare size={16} className="text-green-600" />}
-                        {i.tipo === "LLAMADA" && <PhoneCall size={16} className="text-blue-600" />}
-                        {i.tipo === "VISITA" && <Footprints size={16} className="text-amber-600" />}
-                        {i.tipo === "NOTA" && <StickyNote size={16} className="text-slate-600" />}
-                        <Badge variant="outline" className="text-xs">{i.tipo}</Badge>
-                        <span className="text-xs text-slate-400 ml-auto">
-                          {new Date(i.fecha).toLocaleString('es')}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-900">{i.resumen}</p>
-                      {i.resultado && <p className="text-xs text-slate-500 mt-1">Resultado: {i.resultado}</p>}
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
-
-              {/* Tareas Tab */}
-              <TabsContent value="tareas">
-                <div className="mb-4">
-                  <Button size="sm" onClick={() => setShowTarea(true)} data-testid="add-tarea-btn">
-                    <Plus size={16} className="mr-1" /> Nueva tarea
-                  </Button>
-                </div>
-                <div className="rounded-md border border-border bg-white overflow-hidden shadow-sm">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/50">
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descripcion</TableHead>
-                        <TableHead>Vence</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Accion</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tareas.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="h-20 text-center text-slate-500">Sin tareas</TableCell></TableRow>
-                      ) : tareas.map(t => (
-                        <TableRow key={t.id} data-testid={`tarea-${t.id}`}>
-                          <TableCell><Badge variant="outline" className="text-xs">{t.tipo}</Badge></TableCell>
-                          <TableCell className="max-w-[200px] truncate">{t.descripcion}</TableCell>
-                          <TableCell className="text-sm">{new Date(t.due_at).toLocaleDateString('es')}</TableCell>
-                          <TableCell>
-                            <Badge variant={t.status === "HECHO" ? "default" : t.status === "PENDIENTE" ? "secondary" : "destructive"} className="text-xs">
-                              {t.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {t.status === "PENDIENTE" && (
-                              <Button size="sm" variant="outline" onClick={() => handleCompletarTarea(t.id)} data-testid={`completar-tarea-${t.id}`}>
-                                Completar
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TabsContent>
-
-              {/* YoY Tab */}
-              <TabsContent value="yoy">
-                <YoYTab cuentaId={id} />
-              </TabsContent>
-
-              {/* Analitica Tab */}
-              <TabsContent value="analitica">
-                <AnaliticaTab cuentaId={id} />
-              </TabsContent>
-            </Tabs>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Interaccion Dialog */}
+      {/* Dialogs */}
       <Dialog open={showInteraccion} onOpenChange={setShowInteraccion}>
         <DialogContent>
           <DialogHeader><DialogTitle>Nueva interaccion</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Tipo</Label>
-              <Select value={interaccionForm.tipo} onValueChange={v => setInteraccionForm(f => ({ ...f, tipo: v }))}>
-                <SelectTrigger data-testid="interaccion-tipo"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIPO_INTERACCION.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Resumen</Label>
-              <Textarea
-                data-testid="interaccion-resumen"
-                value={interaccionForm.resumen}
-                onChange={e => setInteraccionForm(f => ({ ...f, resumen: e.target.value }))}
-                placeholder="Describe la interaccion..."
-              />
-            </div>
-            <div>
-              <Label>Resultado</Label>
-              <Input
-                data-testid="interaccion-resultado"
-                value={interaccionForm.resultado}
-                onChange={e => setInteraccionForm(f => ({ ...f, resultado: e.target.value }))}
-                placeholder="Resultado (opcional)"
-              />
-            </div>
+            <div><Label>Tipo</Label><Select value={interaccionForm.tipo} onValueChange={v => setInteraccionForm(f => ({ ...f, tipo: v }))}><SelectTrigger data-testid="interaccion-tipo"><SelectValue /></SelectTrigger><SelectContent>{TIPO_INTERACCION.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Resumen</Label><Textarea data-testid="interaccion-resumen" value={interaccionForm.resumen} onChange={e => setInteraccionForm(f => ({ ...f, resumen: e.target.value }))} placeholder="Describe la interaccion..." /></div>
+            <div><Label>Resultado</Label><Input data-testid="interaccion-resultado" value={interaccionForm.resultado} onChange={e => setInteraccionForm(f => ({ ...f, resultado: e.target.value }))} placeholder="Resultado (opcional)" /></div>
           </div>
-          <DialogFooter>
-            <Button onClick={handleCreateInteraccion} data-testid="save-interaccion-btn">Guardar</Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handleCreateInteraccion} data-testid="save-interaccion-btn">Guardar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Tarea Dialog */}
       <Dialog open={showTarea} onOpenChange={setShowTarea}>
         <DialogContent>
           <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Tipo</Label>
-              <Select value={tareaForm.tipo} onValueChange={v => setTareaForm(f => ({ ...f, tipo: v }))}>
-                <SelectTrigger data-testid="tarea-tipo"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIPO_TAREA.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Vencimiento</Label>
-              <Input
-                type="datetime-local"
-                data-testid="tarea-due"
-                value={tareaForm.due_at}
-                onChange={e => setTareaForm(f => ({ ...f, due_at: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Prioridad (1-5)</Label>
-              <Input
-                type="number" min={1} max={5}
-                data-testid="tarea-prioridad"
-                value={tareaForm.prioridad}
-                onChange={e => setTareaForm(f => ({ ...f, prioridad: parseInt(e.target.value) || 3 }))}
-              />
-            </div>
-            <div>
-              <Label>Descripcion</Label>
-              <Textarea
-                data-testid="tarea-descripcion"
-                value={tareaForm.descripcion}
-                onChange={e => setTareaForm(f => ({ ...f, descripcion: e.target.value }))}
-                placeholder="Descripcion de la tarea..."
-              />
-            </div>
+            <div><Label>Tipo</Label><Select value={tareaForm.tipo} onValueChange={v => setTareaForm(f => ({ ...f, tipo: v }))}><SelectTrigger data-testid="tarea-tipo"><SelectValue /></SelectTrigger><SelectContent>{TIPO_TAREA.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Vencimiento</Label><Input type="datetime-local" data-testid="tarea-due" value={tareaForm.due_at} onChange={e => setTareaForm(f => ({ ...f, due_at: e.target.value }))} /></div>
+            <div><Label>Prioridad (1-5)</Label><Input type="number" min={1} max={5} data-testid="tarea-prioridad" value={tareaForm.prioridad} onChange={e => setTareaForm(f => ({ ...f, prioridad: parseInt(e.target.value) || 3 }))} /></div>
+            <div><Label>Descripcion</Label><Textarea data-testid="tarea-descripcion" value={tareaForm.descripcion} onChange={e => setTareaForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Descripcion de la tarea..." /></div>
           </div>
-          <DialogFooter>
-            <Button onClick={handleCreateTarea} data-testid="save-tarea-btn">Crear tarea</Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handleCreateTarea} data-testid="save-tarea-btn">Crear tarea</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Vincular Contacto Confirmation Dialog */}
       <Dialog open={showVincularConfirm} onOpenChange={setShowVincularConfirm}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Vincular contacto</DialogTitle>
-            <DialogDescription>
-              Vincular <strong>{vincularTarget?.name}</strong> a la cuenta <strong>{partnerName}</strong>
-            </DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Vincular contacto</DialogTitle><DialogDescription>Vincular <strong>{vincularTarget?.name}</strong> a <strong>{partnerName}</strong></DialogDescription></DialogHeader>
           <div className="space-y-4">
             {vincularTarget && (
-              <div className="bg-slate-50 rounded-md p-3 space-y-1 text-sm">
-                <p><span className="text-slate-500">Nombre:</span> <span className="font-medium text-slate-900">{vincularTarget.name}</span></p>
+              <div className="bg-slate-50 rounded-md p-3 space-y-1 text-xs">
+                <p><span className="text-slate-500">Nombre:</span> <span className="font-medium">{vincularTarget.name}</span></p>
                 {vincularTarget.vat && <p><span className="text-slate-500">DNI/RUC:</span> <span className="font-mono">{vincularTarget.vat}</span></p>}
                 {vincularTarget.phone && <p><span className="text-slate-500">Telefono:</span> {vincularTarget.phone}</p>}
-                {vincularTarget.mobile && <p><span className="text-slate-500">Mobile:</span> {vincularTarget.mobile}</p>}
                 {vincularTarget.city && <p><span className="text-slate-500">Ciudad:</span> {vincularTarget.city}</p>}
               </div>
             )}
             <div>
-              <Label className="text-xs uppercase tracking-wider font-semibold text-slate-500">Nota (opcional)</Label>
-              <Input
-                data-testid="vincular-nota"
-                value={vincularNota}
-                onChange={e => setVincularNota(e.target.value)}
-                placeholder="Vinculado manualmente desde la cuenta"
-              />
+              <Label className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Nota (opcional)</Label>
+              <Input data-testid="vincular-nota" value={vincularNota} onChange={e => setVincularNota(e.target.value)} placeholder="Vinculado manualmente" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowVincularConfirm(false)}>Cancelar</Button>
             <Button onClick={handleVincular} disabled={vincularLoading} data-testid="confirm-vincular-btn">
-              {vincularLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Vincular
+              {vincularLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Vincular
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Detail drawers (only in header mode) */}
       {!detailMode && selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
       {!detailMode && selectedInvoice && <InvoiceLinesDrawer invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />}
-
     </div>
   );
 }
