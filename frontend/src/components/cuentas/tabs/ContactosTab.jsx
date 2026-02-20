@@ -1,0 +1,162 @@
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import api from "@/lib/api";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Search, UserPlus, Link2, ChevronLeft, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+
+export function ContactosTab({ cuentaId }) {
+  const [contactos, setContactos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [unlinkSearch, setUnlinkSearch] = useState("");
+  const [unlinkResults, setUnlinkResults] = useState([]);
+  const [unlinkTotal, setUnlinkTotal] = useState(0);
+  const [unlinkPage, setUnlinkPage] = useState(1);
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
+  const [soloDni, setSoloDni] = useState(false);
+  const [soloTelefono, setSoloTelefono] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [target, setTarget] = useState(null);
+  const [nota, setNota] = useState("");
+  const [vincularLoading, setVincularLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const pageSize = 20;
+
+  useEffect(() => {
+    setLoading(true);
+    api.get(`/cuentas/${cuentaId}/contactos`).then(r => setContactos(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+  }, [cuentaId]);
+
+  const fetchUnlinked = useCallback(async (q, pg, dni, tel) => {
+    if (!q || q.length < 2) { setUnlinkResults([]); setUnlinkTotal(0); return; }
+    setUnlinkLoading(true);
+    try {
+      const r = await api.get("/partners/unlinked", { params: { q, page: pg, pageSize, solo_dni: dni, solo_telefono: tel, exclude_cuenta: parseInt(cuentaId) || 0 } });
+      setUnlinkResults(r.data.items || []);
+      setUnlinkTotal(r.data.total || 0);
+    } catch { toast.error("Error buscando"); }
+    finally { setUnlinkLoading(false); }
+  }, [cuentaId]);
+
+  const handleSearch = (val) => {
+    setUnlinkSearch(val);
+    setUnlinkPage(1);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchUnlinked(val, 1, soloDni, soloTelefono), 300);
+  };
+
+  const handleVincular = async () => {
+    if (!target) return;
+    setVincularLoading(true);
+    try {
+      await api.post(`/cuentas/${cuentaId}/vincular-contacto`, { contacto_partner_odoo_id: target.odoo_id, nota: nota || null });
+      toast.success(`${target.name} vinculado`);
+      setShowConfirm(false);
+      const r = await api.get(`/cuentas/${cuentaId}/contactos`);
+      setContactos(r.data || []);
+      setUnlinkResults(prev => prev.filter(p => p.odoo_id !== target.odoo_id));
+    } catch (err) { toast.error(err.response?.data?.detail || "Error"); }
+    finally { setVincularLoading(false); }
+  };
+
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>;
+
+  return (
+    <div data-testid="section-contactos">
+      <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50/50">
+              <TableHead>Nombre</TableHead>
+              <TableHead>Telefono</TableHead>
+              <TableHead>WhatsApp</TableHead>
+              <TableHead>Rol</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {contactos.length === 0 ? (
+              <TableRow><TableCell colSpan={4} className="h-16 text-center text-slate-500 text-xs">Sin contactos</TableCell></TableRow>
+            ) : contactos.map(c => (
+              <TableRow key={c.contacto_partner_odoo_id}>
+                <TableCell className="font-medium text-xs">{c.partner_nombre || `ID: ${c.contacto_partner_odoo_id}`}</TableCell>
+                <TableCell className="text-xs">{c.partner_phone || c.partner_mobile || "-"}</TableCell>
+                <TableCell className="text-xs">{c.whatsapp || "-"}</TableCell>
+                <TableCell className="text-xs">{c.rol || "-"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="mt-4 bg-white rounded-lg border border-slate-200 shadow-sm" data-testid="vincular-contacto-section">
+        <div className="p-3 border-b border-slate-200">
+          <div className="flex items-center gap-2"><UserPlus size={16} className="text-slate-600" /><h4 className="font-medium text-sm">Vincular contacto existente</h4></div>
+        </div>
+        <div className="p-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <Input placeholder="Buscar por nombre, DNI..." className="pl-8 text-xs h-8" value={unlinkSearch} onChange={e => handleSearch(e.target.value)} data-testid="vincular-search" />
+            </div>
+            <div className="flex items-center gap-1.5 border border-slate-200 rounded-md px-2 py-1">
+              <Switch checked={soloDni} onCheckedChange={v => { setSoloDni(v); if (unlinkSearch.length >= 2) fetchUnlinked(unlinkSearch, 1, v, soloTelefono); }} className="scale-[0.8]" />
+              <Label className="text-[10px] text-slate-600 cursor-pointer">DNI/RUC</Label>
+            </div>
+            <div className="flex items-center gap-1.5 border border-slate-200 rounded-md px-2 py-1">
+              <Switch checked={soloTelefono} onCheckedChange={v => { setSoloTelefono(v); if (unlinkSearch.length >= 2) fetchUnlinked(unlinkSearch, 1, soloDni, v); }} className="scale-[0.8]" />
+              <Label className="text-[10px] text-slate-600 cursor-pointer">Telefono</Label>
+            </div>
+          </div>
+          {unlinkSearch.length >= 2 && (
+            <div className="rounded-md border border-slate-200 overflow-hidden">
+              <Table>
+                <TableHeader><TableRow className="bg-slate-50/50">
+                  <TableHead className="text-xs">Nombre</TableHead><TableHead className="text-xs">DNI/RUC</TableHead>
+                  <TableHead className="text-xs">Telefono</TableHead><TableHead className="text-xs">Ciudad</TableHead>
+                  <TableHead className="text-xs w-[80px]">Accion</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {unlinkLoading ? (
+                    <TableRow><TableCell colSpan={5} className="h-16 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-400" /></TableCell></TableRow>
+                  ) : unlinkResults.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="h-12 text-center text-slate-500 text-xs">Sin resultados</TableCell></TableRow>
+                  ) : unlinkResults.map(p => (
+                    <TableRow key={p.odoo_id}>
+                      <TableCell className="text-xs font-medium">{p.name}</TableCell>
+                      <TableCell className="text-xs font-mono">{p.vat || "-"}</TableCell>
+                      <TableCell className="text-xs">{p.phone || p.mobile || "-"}</TableCell>
+                      <TableCell className="text-xs">{p.city || "-"}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" onClick={() => { setTarget(p); setNota(""); setShowConfirm(true); }}>
+                          <Link2 size={12} className="mr-1" />Vincular
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Vincular contacto</DialogTitle><DialogDescription>Vincular <strong>{target?.name}</strong></DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancelar</Button>
+            <Button onClick={handleVincular} disabled={vincularLoading}>{vincularLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Vincular</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
