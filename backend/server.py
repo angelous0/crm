@@ -562,6 +562,7 @@ async def get_cuentas_list(
     ciudad: str = "", asignado: str = "",
     sort: str = "name", dir: str = "asc",
     page: int = 1, limit: int = 50,
+    include_inactive: bool = False,
     user=Depends(get_current_user)
 ):
     """Airtable-style directory listing."""
@@ -571,6 +572,9 @@ async def get_cuentas_list(
         try:
             where = "WHERE 1=1"
             params = []
+
+            if not include_inactive:
+                where += " AND COALESCE(cu.is_active, true) = true"
 
             if q:
                 params.append(f"%{q}%")
