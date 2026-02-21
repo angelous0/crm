@@ -85,6 +85,9 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                     <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold ${estadoColors[r.estado] || "bg-slate-100 text-slate-600"}`}>
                       {r.estado}
                     </span>
+                    {r.is_active === false && (
+                      <span className="inline-block ml-1 px-1 py-0.5 rounded text-[8px] font-bold bg-red-600 text-white">INACTIVA</span>
+                    )}
                   </td>
                   <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(r.last_purchase_date)}</td>
                   <td className={`px-2 py-1.5 text-right font-mono ${daysBadgeColor(r.days_since_last_purchase)}`}>
