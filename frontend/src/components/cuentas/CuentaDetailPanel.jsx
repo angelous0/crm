@@ -171,6 +171,17 @@ export function CuentaDetailPanel({ cuentaId, activeTab, onTabChange, onCuentaCh
               <div className="text-slate-700 font-semibold">{m.orders_12m_count || 0}</div>
             </div>
           </div>
+          <Button
+            variant={isActive ? "outline" : "default"}
+            size="sm"
+            className={`shrink-0 text-[10px] h-7 ${isActive ? "text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+            onClick={handleToggleActive}
+            disabled={toggleLoading}
+            data-testid="toggle-active-btn"
+          >
+            {toggleLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Power size={11} className="mr-1" />}
+            {isActive ? "Inactivar" : "Activar"}
+          </Button>
         </div>
       </div>
 
