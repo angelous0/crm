@@ -167,6 +167,7 @@ export default function CuentasAirtable() {
             cuentaId={selectedId}
             activeTab={activeTab}
             onTabChange={handleTabChange}
+            onCuentaChanged={() => fetchData(filters)}
           />
         </div>
       </div>
