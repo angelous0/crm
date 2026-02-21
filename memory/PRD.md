@@ -13,83 +13,82 @@ B2B CRM application integrated with Odoo ERP via PostgreSQL. Manages accounts, c
 
 ### 1. Cuentas (Accounts) - Airtable Layout [DONE - Feb 2026]
 Full Airtable-style split-view module at `/cuentas`:
-- **Top Toolbar**: Search, filter (Estado/Clasificacion/Ciudad/Vendedor), count badge
-- **Left Pane (Directory Grid)**: Mini-table with columns (Cuenta, Ciudad, Estado, Ult. compra, Dias, Vtas 12m, #). Sorting by name. Pagination (50/page). Color-coded days badges.
-- **Right Pane (Detail Panel)**: Compact header (name, badges, KPIs) + 11 tabs
-- **URL State**: `?q=&estado=&selected=ID&tab=tabname&page=N` fully shareable
-- **Responsive**: Mobile shows directory list; tap row shows detail full-width
+- **Top Toolbar**: Search, filters (Estado/Clasificacion/Ciudad/Vendedor), "Mostrar inactivos" toggle, count badge
+- **Left Pane (Directory Grid)**: Mini-table with columns, sorting, pagination, INACTIVA badge
+- **Right Pane (Detail Panel)**: Compact header with KPIs + 11 tabs
+- **URL State**: `?q=&estado=&selected=ID&tab=tabname&include_inactive=true` fully shareable
 
-### 2. Tabs in Detail Panel
-- **Resumen**: KPI cards (Ventas, Reservas, Creditos, Ultima compra) + quick nav links
-- **Ventas**: Orders table with detail mode toggle (lines view)
-- **Reservas**: Same as Ventas but for reservations
-- **Creditos**: Invoices table with saldo display
-- **Info Ventas**: Classification breakdown with 2-level drill-down (classification → orders → lines)
-- **YoY**: Year-over-year comparison with KPIs, monthly series, item breakdown
-- **Analitica**: Purchase frequency and top items analysis
-- **Contactos**: Linked contacts list + link new contact search
-- **Interacciones**: WhatsApp/call/visit/note log with create dialog
-- **Tareas**: Task management with create/complete
-- **Perfil**: Commercial data form (estado, clasificacion, asignado, notas)
+### 2. Soft-Disable (Inactivar) [DONE - Feb 2026]
+Complete soft-disable system for Cuentas and Contactos:
 
-### 3. Product Catalog Filter [DONE]
-Global filter excluding non-essential products from commercial views.
+**Data Model** (columns added to `crm.cuenta` and `crm.contacto`):
+- `is_active` BOOLEAN (default true)
+- `manual_inactive` BOOLEAN (default false) - prevents sync from reactivating
+- `inactive_reason` TEXT (MANUAL / CASCADE_ACCOUNT / CASCADE_CONTACT)
+- `inactive_at` TIMESTAMPTZ
+- `inactive_by` TEXT
 
-### 4. Other Modules [DONE]
-- Stock Dashboard, Balance de Tallas, Ventas y Reservas, Creditos, Catalogo, Contactos, Agenda
+**Cascade Rules**:
+- Inactivar Cuenta → cascades to ALL contactos (reason: CASCADE_ACCOUNT)
+- Activar Cuenta → only reactivates contactos with CASCADE_* reason (not manually inactivated)
+- Inactivar Contacto Principal (contacto_partner_odoo_id = cuenta_partner_odoo_id) → cascades to Cuenta + other contactos
 
-## Key API Endpoints
-- `GET /api/cuentas/list` - Directory listing with filters, sorting, pagination, KPIs
-- `GET /api/cuentas/list/filter-options` - Dropdown values for toolbar filters
-- `GET /api/cuentas/{id}` - Account detail with partner info
-- `GET /api/cuentas/{id}/header-metrics` - Compact header KPIs
-- `GET /api/cuentas/{id}/ventas/metrics` - Sales/reservation metrics
-- `GET /api/cuentas/{id}/ventas/orders` - Paginated orders
-- `GET /api/cuentas/{id}/ventas/lines` - Paginated order lines
-- `GET /api/cuentas/{id}/ventas/clasificacion` - Classification breakdown
-- `GET /api/cuentas/{id}/ventas/clasificacion/orders` - Orders by classification
-- `GET /api/cuentas/{id}/ventas/yoy/*` - YoY comparison endpoints
-- `GET /api/cuentas/{id}/analytics/*` - Analytics endpoints
-- `GET /api/cuentas/{id}/creditos/*` - Credit endpoints
-- `GET /api/cuentas/{id}/contactos` - Linked contacts
-- `GET/POST /api/cuentas/{id}/interacciones` - Interactions
-- `GET/POST /api/cuentas/{id}/tareas` - Tasks
+**Sync Protection**: `manual_inactive=true` prevents Odoo sync from overwriting `is_active`
+
+**API Endpoints**:
+- `PATCH /api/cuentas/{id}/active` - Toggle cuenta active with cascade
+- `PATCH /api/contactos/{id}/active` - Toggle contacto active (cascade if principal)
+- `GET /api/cuentas/{id}/contactos/count-active` - Count for confirmation modal
+- `GET /api/cuentas/list?include_inactive=true` - Include inactive in directory
+- `GET /api/cuentas/{id}/contactos?include_inactive=true` - Include inactive contactos
+
+**UI**:
+- "Inactivos" toggle in toolbar (default: hidden)
+- "INACTIVA" badge in directory grid rows
+- Red "Inactivar" / Green "Activar" button in detail header
+- Confirmation modal with affected contacto count + reason textarea
+- Contactos tab: "Mostrar inactivos" toggle + per-contacto Inactivar/Activar buttons
+
+### 3. Detail Panel Tabs [DONE]
+Resumen, Ventas, Reservas, Creditos, Info Ventas, YoY, Analitica, Contactos, Interacciones, Tareas, Perfil
+
+### 4. Previous Features [DONE]
+- Product Catalog Filter, Info Ventas 2-level drill-down, Dias sin comprar
+- Comparativo YoY, Analitica (frequency + top items)
+- Stock Dashboard, Balance de Tallas, Ventas y Reservas, Creditos, Catalogo
 
 ## Backlog (Prioritized)
 ### P1
-- Add data counters to directory menu items (e.g., Ventas (282), Creditos (45))
-- Column sorting in directory grid by all columns (last_purchase, sales_12m, days_since, orders_12m)
+- Data counters in directory menu items
+- Column sorting by all KPI columns (last_purchase, sales_12m, days_since)
 
 ### P2
-- Dormancy status semaphore in analytics
-- Reserves vs. Sales comparison section
+- Dormancy status semaphore
+- Reserves vs. Sales comparison
 - Credit summary dashboard
 - Resizable left panel with drag handle
 
 ### P3
-- "Include excluded products" toggle for commercial views
+- "Include excluded products" toggle
 - Refactor stock dashboard endpoints to dedicated router
 - Persist stock dashboard filter state in URL
 - Export directory list to CSV
-- Fix recurring automated login test failure
 
 ## File Structure
 ```
 frontend/src/
-  pages/CuentasAirtable.jsx          # Main Airtable page
+  pages/CuentasAirtable.jsx
   components/cuentas/
-    CuentasToolbar.jsx                # Search + filters toolbar
-    CuentasDirectoryGrid.jsx          # Left pane mini-grid
-    CuentaDetailPanel.jsx             # Right pane with header + tabs
+    CuentasToolbar.jsx          # Search + filters + Inactivos toggle
+    CuentasDirectoryGrid.jsx    # Left pane mini-grid + INACTIVA badge
+    CuentaDetailPanel.jsx       # Right pane: header + toggle active + tabs
     tabs/
-      ResumenTab.jsx, VentasTab.jsx, ReservasTab.jsx, CreditosTab.jsx
-      InfoVentasTab.jsx, ContactosTab.jsx, InteraccionesTab.jsx
-      TareasTab.jsx, PerfilTab.jsx
-  pages/YoYTab.jsx, AnaliticaTab.jsx  # Standalone tab components
+      ResumenTab, VentasTab, ReservasTab, CreditosTab,
+      InfoVentasTab, ContactosTab (with active/inactive toggle per contacto),
+      InteraccionesTab, TareasTab, PerfilTab
 
 backend/
-  server.py                           # Main FastAPI app with all endpoints
-  db.py                               # DB views and product catalog filter
-  routers/yoy.py                      # YoY comparison endpoints
-  routers/analytics.py                # Analytics endpoints
+  server.py    # PATCH active endpoints, list with include_inactive
+  db.py        # ALTER TABLE for soft-disable columns
+  routers/yoy.py, analytics.py
 ```
