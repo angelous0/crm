@@ -174,6 +174,22 @@ async def init_database():
 
         logger.info("CRM tables created successfully")
 
+        # 2.8) Add soft-disable columns to cuenta and contacto (idempotent)
+        for tbl in ['crm.cuenta', 'crm.contacto']:
+            for col_def in [
+                ("is_active", "BOOLEAN NOT NULL DEFAULT true"),
+                ("manual_inactive", "BOOLEAN NOT NULL DEFAULT false"),
+                ("inactive_reason", "TEXT NULL"),
+                ("inactive_at", "TIMESTAMPTZ NULL"),
+                ("inactive_by", "TEXT NULL"),
+            ]:
+                try:
+                    await conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_def[0]} {col_def[1]}")
+                except Exception:
+                    pass
+
+        logger.info("Soft-disable columns ensured")
+
         # 3) Views - these depend on odoo schema
         await _create_views(conn)
 
