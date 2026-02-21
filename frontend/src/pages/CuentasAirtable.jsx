@@ -42,6 +42,7 @@ export default function CuentasAirtable() {
     if (newFilters.sort !== "name") p.sort = newFilters.sort;
     if (newFilters.dir !== "asc") p.dir = newFilters.dir;
     if (newFilters.page > 1) p.page = String(newFilters.page);
+    if (newFilters.include_inactive) p.include_inactive = "true";
     if (newSelected) p.selected = String(newSelected);
     if (newTab && newTab !== "resumen") p.tab = newTab;
     setSearchParams(p, { replace: true });
