@@ -85,6 +85,12 @@ export function ContactosTab({ cuentaId }) {
 
   return (
     <div data-testid="section-contactos">
+      <div className="flex items-center gap-3 mb-3 bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm">
+        <div className="flex items-center gap-1.5">
+          <Switch checked={showInactive} onCheckedChange={setShowInactive} className="scale-[0.7]" data-testid="toggle-show-inactive-contactos" />
+          <span className="text-[10px] text-slate-500 flex items-center gap-0.5"><EyeOff size={10} />Mostrar inactivos</span>
+        </div>
+      </div>
       <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
         <Table>
           <TableHeader>
@@ -93,17 +99,42 @@ export function ContactosTab({ cuentaId }) {
               <TableHead>Telefono</TableHead>
               <TableHead>WhatsApp</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead className="w-[80px]">Accion</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contactos.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="h-16 text-center text-slate-500 text-xs">Sin contactos</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="h-16 text-center text-slate-500 text-xs">Sin contactos</TableCell></TableRow>
             ) : contactos.map(c => (
-              <TableRow key={c.contacto_partner_odoo_id}>
-                <TableCell className="font-medium text-xs">{c.partner_nombre || `ID: ${c.contacto_partner_odoo_id}`}</TableCell>
+              <TableRow key={c.contacto_partner_odoo_id} className={c.is_active === false ? "opacity-60" : ""}>
+                <TableCell className="font-medium text-xs">
+                  {c.partner_nombre || `ID: ${c.contacto_partner_odoo_id}`}
+                  {c.is_principal && <Badge variant="outline" className="ml-1 text-[8px]">PRINCIPAL</Badge>}
+                </TableCell>
                 <TableCell className="text-xs">{c.partner_phone || c.partner_mobile || "-"}</TableCell>
                 <TableCell className="text-xs">{c.whatsapp || "-"}</TableCell>
                 <TableCell className="text-xs">{c.rol || "-"}</TableCell>
+                <TableCell className="text-xs">
+                  {c.is_active === false ? (
+                    <Badge variant="destructive" className="text-[8px]">INACTIVO</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[8px] bg-emerald-100 text-emerald-700">ACTIVO</Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={`text-[9px] h-6 px-1.5 ${c.is_active === false ? "text-emerald-600" : "text-red-500"}`}
+                    onClick={() => handleToggleContacto(c)}
+                    disabled={togglingId === c.contacto_partner_odoo_id}
+                    data-testid={`toggle-contacto-${c.contacto_partner_odoo_id}`}
+                  >
+                    {togglingId === c.contacto_partner_odoo_id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Power size={11} className="mr-0.5" />}
+                    {c.is_active === false ? "Activar" : "Inactivar"}
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
