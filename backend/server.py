@@ -812,6 +812,73 @@ async def update_cuenta(cuenta_id: str, data: CuentaUpdateInput, user=Depends(ge
         return record_to_dict(row)
 
 
+@cuentas_router.patch("/{cuenta_id}/active")
+async def toggle_cuenta_active(cuenta_id: str, data: ToggleActiveInput, user=Depends(get_current_user)):
+    """Activate/deactivate a cuenta with cascade to contactos."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        odoo_id = int(cuenta_id)
+        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+
+        await conn.execute(
+            "INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING", odoo_id
+        )
+        cuenta = await conn.fetchrow("SELECT id FROM crm.cuenta WHERE cuenta_partner_odoo_id = $1", odoo_id)
+        if not cuenta:
+            raise HTTPException(404, "Cuenta no encontrada")
+
+        if not data.is_active:
+            # DEACTIVATE cuenta
+            await conn.execute("""
+                UPDATE crm.cuenta SET is_active = false, manual_inactive = true,
+                    inactive_reason = $2, inactive_at = now(), inactive_by = $3, updated_at = now()
+                WHERE cuenta_partner_odoo_id = $1
+            """, odoo_id, data.reason or 'MANUAL', user_email)
+
+            # CASCADE: deactivate all contactos of this cuenta
+            affected = await conn.execute("""
+                UPDATE crm.contacto SET is_active = false, manual_inactive = true,
+                    inactive_reason = 'CASCADE_ACCOUNT', inactive_at = now(), inactive_by = $2, updated_at = now()
+                WHERE cuenta_partner_odoo_id = $1 AND is_active = true
+            """, odoo_id, user_email)
+            cascade_count = int(affected.split()[-1]) if affected else 0
+
+            return {"ok": True, "is_active": False, "contactos_affected": cascade_count}
+        else:
+            # ACTIVATE cuenta
+            await conn.execute("""
+                UPDATE crm.cuenta SET is_active = true, manual_inactive = false,
+                    inactive_reason = NULL, inactive_at = NULL, inactive_by = NULL, updated_at = now()
+                WHERE cuenta_partner_odoo_id = $1
+            """, odoo_id)
+
+            # CASCADE: reactivate contactos that were deactivated ONLY by cascade (not manually by user)
+            affected = await conn.execute("""
+                UPDATE crm.contacto SET is_active = true, manual_inactive = false,
+                    inactive_reason = NULL, inactive_at = NULL, inactive_by = NULL, updated_at = now()
+                WHERE cuenta_partner_odoo_id = $1 AND is_active = false
+                    AND inactive_reason IN ('CASCADE_ACCOUNT', 'CASCADE_CONTACT')
+            """, odoo_id)
+            cascade_count = int(affected.split()[-1]) if affected else 0
+
+            return {"ok": True, "is_active": True, "contactos_reactivated": cascade_count}
+
+
+@cuentas_router.get("/{cuenta_id}/contactos/count-active")
+async def get_cuenta_contactos_active_count(cuenta_id: str, user=Depends(get_current_user)):
+    """Count active contactos for cascade confirmation UI."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        odoo_id = int(cuenta_id)
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM crm.contacto WHERE cuenta_partner_odoo_id = $1", odoo_id
+        )
+        active = await conn.fetchval(
+            "SELECT COUNT(*) FROM crm.contacto WHERE cuenta_partner_odoo_id = $1 AND is_active = true", odoo_id
+        )
+        return {"total": total or 0, "active": active or 0}
+
+
 @cuentas_router.get("/{cuenta_id}/contactos")
 async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
     """Get all partners whose v_partner_account_final.cuenta = this cuenta"""
