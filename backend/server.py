@@ -885,25 +885,33 @@ async def get_cuenta_contactos_active_count(cuenta_id: str, user=Depends(get_cur
 
 
 @cuentas_router.get("/{cuenta_id}/contactos")
-async def get_cuenta_contactos(cuenta_id: str, user=Depends(get_current_user)):
+async def get_cuenta_contactos(cuenta_id: str, include_inactive: bool = False, user=Depends(get_current_user)):
     """Get all partners whose v_partner_account_final.cuenta = this cuenta"""
     p = await get_pool()
     async with p.acquire() as conn:
         odoo_id = int(cuenta_id)
 
-        rows = await conn.fetch("""
+        inactive_filter = "" if include_inactive else "AND COALESCE(c.is_active, true) = true"
+
+        rows = await conn.fetch(f"""
             SELECT
                 rp.odoo_id as contacto_partner_odoo_id,
                 rp.name as partner_nombre,
                 COALESCE(rp.phone::text, '') as partner_phone,
                 COALESCE(rp.mobile::text, '') as partner_mobile,
                 COALESCE(c.whatsapp, '') as whatsapp,
-                COALESCE(c.rol, '') as rol
+                COALESCE(c.rol, '') as rol,
+                COALESCE(c.is_active, true) as is_active,
+                COALESCE(c.manual_inactive, false) as manual_inactive,
+                c.inactive_reason,
+                c.inactive_at,
+                CASE WHEN rp.odoo_id = $1 THEN true ELSE false END as is_principal
             FROM crm.v_partner_account_final m
             JOIN odoo.res_partner rp ON rp.odoo_id = m.contacto_partner_odoo_id AND rp.company_key='GLOBAL'
             LEFT JOIN crm.contacto c ON c.contacto_partner_odoo_id = m.contacto_partner_odoo_id
             WHERE m.cuenta_partner_odoo_id = $1
               AND m.contacto_partner_odoo_id <> $1
+              {inactive_filter}
             ORDER BY rp.name
         """, odoo_id)
 
