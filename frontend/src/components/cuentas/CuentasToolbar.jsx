@@ -89,7 +89,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows }) {
 
       {activeFilters > 0 && (
         <button
-          onClick={() => onFiltersChange({ q: filters.q, estado: "", clasificacion: "", ciudad: "", asignado: "", sort: filters.sort, dir: filters.dir, page: 1 })}
+          onClick={() => onFiltersChange({ q: filters.q, estado: "", clasificacion: "", ciudad: "", asignado: "", sort: filters.sort, dir: filters.dir, page: 1, include_inactive: filters.include_inactive })}
           className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors"
           data-testid="clear-filters"
         >
@@ -97,7 +97,17 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows }) {
         </button>
       )}
 
-      <div className="ml-auto">
+      <div className="flex items-center gap-1.5 border border-slate-200 rounded-md px-2 py-1 ml-1" data-testid="toggle-inactive-wrap">
+        <Switch
+          checked={!!filters.include_inactive}
+          onCheckedChange={v => onFiltersChange({ ...filters, include_inactive: v, page: 1 })}
+          className="scale-[0.7]"
+          data-testid="toggle-inactive"
+        />
+        <span className="text-[10px] text-slate-500 whitespace-nowrap flex items-center gap-0.5"><EyeOff size={10} />Inactivos</span>
+      </div>
+
+      <div className="ml-auto shrink-0">
         <Badge variant="secondary" className="text-[10px] font-mono">{totalRows.toLocaleString("es-PE")} cuentas</Badge>
       </div>
     </div>
