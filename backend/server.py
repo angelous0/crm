@@ -621,7 +621,8 @@ async def get_cuentas_list(
                     COALESCE(rp.city::text, '') AS ciudad,
                     COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
                     cu.clasificacion,
-                    COALESCE(cu.asignado_a, '') AS asignado
+                    COALESCE(cu.asignado_a, '') AS asignado,
+                    COALESCE(cu.is_active, true) AS is_active
                 {base_from}
                 {where}
                 ORDER BY {order_col} {order_dir} {nulls}
