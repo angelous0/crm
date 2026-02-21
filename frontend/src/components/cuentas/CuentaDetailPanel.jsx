@@ -230,6 +230,35 @@ export function CuentaDetailPanel({ cuentaId, activeTab, onTabChange, onCuentaCh
         {activeTab === "tareas" && <TareasTab cuentaId={cuentaId} />}
         {activeTab === "perfil" && <PerfilTab cuentaId={cuentaId} cuenta={cuenta} onUpdate={setCuenta} />}
       </div>
+
+      {/* Deactivation confirmation modal */}
+      <Dialog open={showToggleModal} onOpenChange={setShowToggleModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><AlertTriangle size={18} className="text-red-500" />Inactivar cuenta</DialogTitle>
+            <DialogDescription>
+              Esto inactivara la cuenta <strong>{name}</strong>
+              {contactosCount.active > 0 && <> y <strong>{contactosCount.active} contacto(s)</strong> asociados</>}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              placeholder="Razon de inactivacion (opcional)"
+              value={toggleReason}
+              onChange={e => setToggleReason(e.target.value)}
+              rows={2}
+              data-testid="deactivate-reason"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowToggleModal(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={confirmDeactivate} disabled={toggleLoading} data-testid="confirm-deactivate-btn">
+              {toggleLoading && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              Confirmar inactivacion
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
