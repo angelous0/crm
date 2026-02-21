@@ -22,6 +22,7 @@ export default function CuentasAirtable() {
     sort: searchParams.get("sort") || "name",
     dir: searchParams.get("dir") || "asc",
     page: parseInt(searchParams.get("page")) || 1,
+    include_inactive: searchParams.get("include_inactive") === "true",
   });
 
   const [rows, setRows] = useState([]);
