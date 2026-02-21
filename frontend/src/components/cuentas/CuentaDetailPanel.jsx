@@ -44,10 +44,14 @@ function daysBadge(days) {
   return <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${color}`}>{days}d</span>;
 }
 
-export function CuentaDetailPanel({ cuentaId, activeTab, onTabChange }) {
+export function CuentaDetailPanel({ cuentaId, activeTab, onTabChange, onCuentaChanged }) {
   const [cuenta, setCuenta] = useState(null);
   const [headerMetrics, setHeaderMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showToggleModal, setShowToggleModal] = useState(false);
+  const [toggleReason, setToggleReason] = useState("");
+  const [toggleLoading, setToggleLoading] = useState(false);
+  const [contactosCount, setContactosCount] = useState({ total: 0, active: 0 });
 
   useEffect(() => {
     if (!cuentaId) return;
@@ -61,6 +65,44 @@ export function CuentaDetailPanel({ cuentaId, activeTab, onTabChange }) {
     }).catch(() => toast.error("Error cargando cuenta"))
       .finally(() => setLoading(false));
   }, [cuentaId]);
+
+  const isActive = cuenta ? (cuenta.is_active !== false) : true;
+
+  const handleToggleActive = async () => {
+    if (!isActive) {
+      // ACTIVATE - no confirmation needed
+      setToggleLoading(true);
+      try {
+        await api.patch(`/cuentas/${cuentaId}/active`, { is_active: true });
+        const r = await api.get(`/cuentas/${cuentaId}`);
+        setCuenta(r.data);
+        toast.success("Cuenta activada");
+        if (onCuentaChanged) onCuentaChanged();
+      } catch { toast.error("Error activando"); }
+      finally { setToggleLoading(false); }
+      return;
+    }
+    // DEACTIVATE - fetch count first, then show modal
+    try {
+      const r = await api.get(`/cuentas/${cuentaId}/contactos/count-active`);
+      setContactosCount(r.data);
+    } catch { setContactosCount({ total: 0, active: 0 }); }
+    setToggleReason("");
+    setShowToggleModal(true);
+  };
+
+  const confirmDeactivate = async () => {
+    setToggleLoading(true);
+    try {
+      await api.patch(`/cuentas/${cuentaId}/active`, { is_active: false, reason: toggleReason || "MANUAL" });
+      const r = await api.get(`/cuentas/${cuentaId}`);
+      setCuenta(r.data);
+      toast.success("Cuenta inactivada");
+      setShowToggleModal(false);
+      if (onCuentaChanged) onCuentaChanged();
+    } catch { toast.error("Error inactivando"); }
+    finally { setToggleLoading(false); }
+  };
 
   if (!cuentaId) {
     return (
