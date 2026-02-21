@@ -7,12 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, UserPlus, Link2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Search, UserPlus, Link2, ChevronLeft, ChevronRight, Power, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export function ContactosTab({ cuentaId }) {
   const [contactos, setContactos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
   const [unlinkSearch, setUnlinkSearch] = useState("");
   const [unlinkResults, setUnlinkResults] = useState([]);
   const [unlinkTotal, setUnlinkTotal] = useState(0);
