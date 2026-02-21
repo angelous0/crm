@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, X } from "lucide-react";
+import { Search, X, EyeOff } from "lucide-react";
 
 const ESTADOS = ["ACTIVO", "NUEVO", "SEGUIMIENTO", "DORMIDO", "NO_VOLVER"];
 const CLASIFICACIONES = ["A", "B", "C"];
