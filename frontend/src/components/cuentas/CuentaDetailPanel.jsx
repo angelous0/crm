@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, MapPin, LayoutDashboard, Users, ShoppingBag, CreditCard, BarChart3, TrendingUp, Activity, MessageSquare, CheckSquare, Settings, Menu } from "lucide-react";
+import { Loader2, MapPin, LayoutDashboard, Users, ShoppingBag, CreditCard, BarChart3, TrendingUp, Activity, MessageSquare, CheckSquare, Settings, Menu, Power, AlertTriangle } from "lucide-react";
 import { ResumenTab } from "./tabs/ResumenTab";
 import { VentasTab } from "./tabs/VentasTab";
 import { ReservasTab } from "./tabs/ReservasTab";
