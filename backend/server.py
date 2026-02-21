@@ -1992,6 +1992,63 @@ async def update_contacto(contacto_id: str, data: ContactoUpdateInput, user=Depe
         return record_to_dict(row)
 
 
+@contactos_router.patch("/{contacto_odoo_id}/active")
+async def toggle_contacto_active(contacto_odoo_id: str, data: ToggleActiveInput, user=Depends(get_current_user)):
+    """Activate/deactivate a contacto. If principal contact, cascades to cuenta."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        odoo_id = int(contacto_odoo_id)
+        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+
+        contacto = await conn.fetchrow(
+            "SELECT * FROM crm.contacto WHERE contacto_partner_odoo_id = $1", odoo_id
+        )
+        if not contacto:
+            raise HTTPException(404, "Contacto no encontrado en CRM")
+
+        cuenta_odoo_id = contacto['cuenta_partner_odoo_id']
+        is_principal = (odoo_id == cuenta_odoo_id)
+
+        if not data.is_active:
+            # DEACTIVATE contacto
+            await conn.execute("""
+                UPDATE crm.contacto SET is_active = false, manual_inactive = true,
+                    inactive_reason = $2, inactive_at = now(), inactive_by = $3, updated_at = now()
+                WHERE contacto_partner_odoo_id = $1
+            """, odoo_id, data.reason or 'MANUAL', user_email)
+
+            cascade_cuenta = False
+            cascade_contacts = 0
+            if is_principal:
+                # CASCADE: deactivate the cuenta
+                await conn.execute("""
+                    UPDATE crm.cuenta SET is_active = false, manual_inactive = true,
+                        inactive_reason = 'CASCADE_CONTACT', inactive_at = now(), inactive_by = $2, updated_at = now()
+                    WHERE cuenta_partner_odoo_id = $1 AND is_active = true
+                """, cuenta_odoo_id, user_email)
+                cascade_cuenta = True
+
+                # CASCADE: deactivate other contactos of the same cuenta
+                affected = await conn.execute("""
+                    UPDATE crm.contacto SET is_active = false, manual_inactive = true,
+                        inactive_reason = 'CASCADE_CONTACT', inactive_at = now(), inactive_by = $3, updated_at = now()
+                    WHERE cuenta_partner_odoo_id = $1 AND contacto_partner_odoo_id <> $2 AND is_active = true
+                """, cuenta_odoo_id, odoo_id, user_email)
+                cascade_contacts = int(affected.split()[-1]) if affected else 0
+
+            return {"ok": True, "is_active": False, "is_principal": is_principal,
+                    "cascade_cuenta": cascade_cuenta, "cascade_contacts": cascade_contacts}
+        else:
+            # ACTIVATE contacto
+            await conn.execute("""
+                UPDATE crm.contacto SET is_active = true, manual_inactive = false,
+                    inactive_reason = NULL, inactive_at = NULL, inactive_by = NULL, updated_at = now()
+                WHERE contacto_partner_odoo_id = $1
+            """, odoo_id)
+
+            return {"ok": True, "is_active": True, "is_principal": is_principal}
+
+
 @contactos_router.post("/{contacto_id}/revincular")
 async def revincular_contacto(contacto_id: str, data: RevincularInput, user=Depends(get_current_user)):
     p = await get_pool()
