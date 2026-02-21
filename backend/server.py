@@ -95,6 +95,10 @@ class VincularContactoInput(BaseModel):
     contacto_partner_odoo_id: int
     nota: Optional[str] = None
 
+class ToggleActiveInput(BaseModel):
+    is_active: bool
+    reason: Optional[str] = None
+
 
 # ─── APP SETUP ─────────────────────────────────────────────────────────────────
 
