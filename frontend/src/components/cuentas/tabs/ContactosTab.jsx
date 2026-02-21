@@ -31,8 +31,23 @@ export function ContactosTab({ cuentaId }) {
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/cuentas/${cuentaId}/contactos`).then(r => setContactos(r.data || [])).catch(() => {}).finally(() => setLoading(false));
-  }, [cuentaId]);
+    api.get(`/cuentas/${cuentaId}/contactos`, { params: { include_inactive: showInactive } }).then(r => setContactos(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+  }, [cuentaId, showInactive]);
+
+  const handleToggleContacto = async (c) => {
+    const newActive = c.is_active === false;
+    setTogglingId(c.contacto_partner_odoo_id);
+    try {
+      await api.patch(`/contactos/${c.contacto_partner_odoo_id}/active`, {
+        is_active: newActive,
+        reason: newActive ? null : "MANUAL",
+      });
+      const r = await api.get(`/cuentas/${cuentaId}/contactos`, { params: { include_inactive: showInactive } });
+      setContactos(r.data || []);
+      toast.success(newActive ? "Contacto activado" : "Contacto inactivado");
+    } catch { toast.error("Error"); }
+    finally { setTogglingId(null); }
+  };
 
   const fetchUnlinked = useCallback(async (q, pg, dni, tel) => {
     if (!q || q.length < 2) { setUnlinkResults([]); setUnlinkTotal(0); return; }
