@@ -58,6 +58,7 @@ export default function CuentasAirtable() {
           ciudad: f.ciudad, asignado: f.asignado,
           sort: f.sort, dir: f.dir,
           page: f.page, limit,
+          include_inactive: f.include_inactive || false,
         }
       });
       if (id !== fetchRef.current) return;
