@@ -132,16 +132,25 @@ export function CuentaDetailPanel({ cuentaId, activeTab, onTabChange, onCuentaCh
   return (
     <div className="flex flex-col h-full min-w-0" data-testid="detail-panel">
       {/* Compact Header */}
-      <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5" data-testid="detail-header">
+      <div className={`shrink-0 border-b bg-white px-4 py-2.5 ${!isActive ? "border-red-200 bg-red-50/50" : "border-slate-200"}`} data-testid="detail-header">
         <div className="flex items-center gap-3 min-w-0">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900 truncate">{name}</h2>
+              <h2 className={`text-sm font-bold truncate ${!isActive ? "text-slate-500 line-through" : "text-slate-900"}`}>{name}</h2>
               {partner.city && <span className="text-[10px] text-slate-400 flex items-center gap-0.5 shrink-0"><MapPin size={9} />{partner.city}</span>}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline" className="text-[9px] font-semibold">{cuenta.estado_comercial || "ACTIVO"}</Badge>
               {cuenta.clasificacion && <Badge variant="secondary" className="text-[9px]">{cuenta.clasificacion}</Badge>}
+              {!isActive && (
+                <Badge variant="destructive" className="text-[9px] font-bold" data-testid="badge-inactiva">INACTIVA</Badge>
+              )}
+              {!isActive && cuenta.inactive_reason && (
+                <span className="text-[9px] text-red-500">{cuenta.inactive_reason}</span>
+              )}
+              {!isActive && cuenta.inactive_at && (
+                <span className="text-[9px] text-slate-400">{new Date(cuenta.inactive_at).toLocaleDateString("es-PE")}</span>
+              )}
             </div>
           </div>
           <div className="hidden md:flex items-center gap-4 shrink-0 text-[10px]">
