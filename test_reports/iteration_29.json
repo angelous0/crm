@@ -1,0 +1,91 @@
+{
+  "summary": "Iteration 29: CuentasDirectoryGrid new columns feature FULLY WORKING. All 7 columns (Cuenta, Depto, Últ. compra, Cant., #Comp., Tel, %YTD) display correctly with proper formatting, colors, and WhatsApp links. Backend API returns all expected fields with correct data types. Sorting works for all new columns. Phone normalization with 51 prefix for Peru 9-digit numbers works correctly.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/cuentas/list", "issue": "Slow response time (10-25s) due to KPI CTE query aggregating all sales data. Consider adding database indexes or materialized view."}
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "performance_issues": [
+      {"page": "CuentasAirtable", "issue": "Initial data load takes 15-30 seconds due to slow backend KPI query. Loading spinner shows during this time."}
+    ]
+  },
+
+  "passed_tests": [
+    "Backend: GET /api/cuentas/list returns all 7 new columns (depto_name, last_purchase_date, qty_12m, orders_12m, pct_vs_avg_ytd, phone_display, phone_whatsapp)",
+    "Backend: qty_12m and orders_12m are integer types (not float)",
+    "Backend: pct_vs_avg_ytd is null when no prior year data, float when data exists",
+    "Backend: pct_vs_avg_ytd rounded to 4 decimal places",
+    "Backend: last_purchase_date is ISO date string",
+    "Backend: phone_whatsapp prepends 51 for 9-digit Peru mobile numbers",
+    "Backend: phone_display shows original formatted phone",
+    "Backend: raw_phone/raw_mobile removed from response (clean output)",
+    "Backend: sort=depto works (city fallback)",
+    "Backend: sort=last_purchase works",
+    "Backend: sort=qty_12m works (high to low)",
+    "Backend: sort=orders_12m works",
+    "Backend: sort=pct_ytd works",
+    "Backend: Pagination still works with new columns",
+    "Backend: Filters (q, estado, ciudad, asignado) still work",
+    "Frontend: All 7 column headers visible (Cuenta, Depto, Últ. compra, Cant., #Comp., Tel, %YTD)",
+    "Frontend: Sortable headers have up/down arrows and are clickable",
+    "Frontend: Tel column non-sortable (as expected)",
+    "Frontend: Dates formatted as 'DD-mmm.' (e.g., '15-feb.')",
+    "Frontend: Numbers formatted with locale (e.g., '16,368')",
+    "Frontend: %YTD shows GREEN for positive values",
+    "Frontend: %YTD shows RED for negative values",
+    "Frontend: %YTD shows GRAY dash for null values",
+    "Frontend: WhatsApp icon (MessageCircle) visible in Tel column for accounts with phones",
+    "Frontend: WhatsApp links point to wa.me/{number} with 51 prefix",
+    "Frontend: Bulk actions (select, deactivate, activate) still work",
+    "Frontend: Detail panel opens on row click",
+    "Frontend: Pagination controls (Pag X/Y, prev, next) work",
+    "Frontend: Left pane width is 740px as specified"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_cuentas_directory_columns.py"
+  ],
+
+  "action_items": [
+    "PERFORMANCE: Consider adding database indexes on pos_order.date_order, partner_id, or create a materialized view for KPI aggregates to speed up /api/cuentas/list"
+  ],
+
+  "critical_code_review_comments": [
+    "server.py lines 564-690: KPI CTE query is comprehensive but slow - aggregates ALL sales to compute qty_12m, orders_12m, pct_vs_avg_ytd for every account",
+    "server.py _apply_phone(): Correctly normalizes phones, deduplicates same number in phone/mobile, adds 51 prefix for 9-digit Peru mobiles",
+    "CuentasDirectoryGrid.jsx: Good use of data-testid attributes for all interactive elements",
+    "CuentasDirectoryGrid.jsx: %YTD color logic using emerald-600 (green) and red-600 correctly",
+    "CuentasDirectoryGrid.jsx: WhatsApp MessageCircle icon and wa.me link properly implemented"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_cuentas_directory_columns.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (8/8 key tests passed)",
+    "frontend": "100% (all 7 columns, sorting, WhatsApp, colors verified)"
+  },
+
+  "test_credentials": {
+    "email": "admin@crm.com",
+    "password": "admin123"
+  },
+
+  "seed_data_creation": "None - used existing PostgreSQL data via PG_URL connection",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Directory columns feature complete. All 7 columns (Cuenta, Depto, Últ. compra, Cant., #Comp., Tel, %YTD) working. Sort keys are: name, depto, last_purchase, qty_12m, orders_12m, pct_ytd. Phone normalization adds 51 prefix to 9-digit Peru mobiles starting with 9. %YTD shows null as dash, positive as green +X.X%, negative as red -X.X%. API is slow (15-30s) due to KPI CTE query. Left pane width 740px.",
+
+  "rca_of_the_issue": "N/A - no bugs found. All new directory column features working as specified."
+}
