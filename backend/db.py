@@ -1024,6 +1024,7 @@ async def _create_views(conn):
                 COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, po.partner_id) AS owner_partner_id,
                 rp_owner.name AS owner_partner_name,
                 (ov_po.order_id IS NOT NULL) AS has_override,
+                CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
                 agg.qty_total,
                 agg.lines_count
             FROM odoo.pos_order po
