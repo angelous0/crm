@@ -649,7 +649,7 @@ async def get_cuentas_list(
                            COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m_count
                     FROM odoo.pos_order po
                     JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
-                    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id
+                    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
                     JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
                     JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
                     WHERE COALESCE(ov_po.new_owner_partner_id, po.partner_id) = ANY($1)
