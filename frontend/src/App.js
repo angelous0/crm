@@ -71,7 +71,6 @@ function App() {
           <Route path="/cuentas/:id" element={<ProtectedRoute><CuentaDetalle /></ProtectedRoute>} />
           <Route path="/contactos" element={<ProtectedRoute><Contactos /></ProtectedRoute>} />
           <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
-          <Route path="/ventas" element={<ProtectedRoute><Ventas /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
