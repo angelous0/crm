@@ -16,48 +16,53 @@ CRM B2B for managing accounts, contacts, sales, credits, stock, and analytics so
 - Cascading logic
 
 ### 3. Sales Order Customer Override (DONE - Feb 2026)
-- Table `crm.pos_order_partner_override` with `active` flag, `updated_at`/`updated_by`, partial unique index `(order_id) WHERE active=true`
-- All views (`v_comercial_mov_flat`, `v_comercial_order_header`) use `LEFT JOIN ... AND ov.active=true` + COALESCE for `owner_partner_id`
-- `original_partner_name` exposed in views and endpoints
-- All commercial endpoints (YoY, analytics, ventas, clasificacion, header-metrics, cuentas/list KPIs) refactored with `_OVERRIDE_JOIN` + `_EFFECTIVE_PARTNER`
-- DELETE does soft-delete (`active=false`), POST re-activates existing records
-- UI: "REASIGNADO" badge, original client shown as secondary text, customer search modal
+- Table `crm.pos_order_partner_override` with `active` flag, soft-delete
+- All views and endpoints use COALESCE with `AND ov.active=true`
+- UI: REASIGNADO badge, original client in secondary text, customer search modal
+
+### 4. Directory Columns Enhancement (DONE - Feb 2026)
+- **New columns**: Departamento (city fallback), Última compra, Cantidad (qty 12m), #Compras (orders 12m), Teléfono unificado, %YTD
+- **Materialized view** `crm.mv_cuenta_sales_kpi` for fast KPI sorting (<1s)
+- **Phone normalization**: strips non-digits, mobile priority, WhatsApp link (wa.me) with +51 prefix for Peru 9-digit numbers
+- **%YTD**: (qty_ytd_current / avg(qty_ytd_prev1, qty_ytd_prev2)) - 1, green/red/grey colors
+- **Sorting**: all columns sortable via click headers
+- **Refresh endpoint**: POST /api/cuentas/refresh-kpis
 
 ## Architecture
 ```
 /app
 ├── backend/
-│   ├── db.py              # DB init, override table (bigserial, active flag, partial unique), views
-│   ├── server.py          # FastAPI, _OVERRIDE_JOIN with AND ov_po.active=true
+│   ├── db.py              # DB init, override table, views, mv_cuenta_sales_kpi materialized view
+│   ├── server.py          # FastAPI, _apply_phone(), /api/cuentas/list with MV join
 │   └── routers/
 │       ├── orders.py      # Override CRUD (soft-delete) + customer search
-│       ├── comercial.py   # has_override + original_partner_name in SELECT
-│       ├── creditos.py
-│       ├── contactos.py
-│       ├── reposicion.py
-│       └── stock_balance.py
+│       ├── comercial.py   # has_override + original_partner_name
+│       └── ...
 └── frontend/src/
     ├── pages/
-    │   ├── CuentasAirtable.jsx
-    │   ├── ComercialPage.jsx      # Override buttons + REASIGNADO badge + orig text
+    │   ├── CuentasAirtable.jsx    # 740px left pane
+    │   ├── ComercialPage.jsx
     │   └── ...
     └── components/cuentas/
-        ├── CustomerOverrideModal.jsx  # Search + reassign modal
+        ├── CuentasDirectoryGrid.jsx  # 7 columns: Cuenta|Depto|Últ.compra|Cant.|#Comp.|Tel|%YTD
+        ├── CuentasToolbar.jsx
+        ├── CustomerOverrideModal.jsx
         └── tabs/
-            ├── VentasTab.jsx          # Override buttons + badge + orig text
-            ├── ReservasTab.jsx        # Override buttons + badge + orig text
+            ├── VentasTab.jsx
+            ├── ReservasTab.jsx
             └── ...
 ```
 
 ## Key DB Schema
-- `crm.pos_order_partner_override`: { id BIGSERIAL PK, order_id INT, original_partner_id INT, new_owner_partner_id INT, reason TEXT, created_at, created_by, updated_at, updated_by, active BOOL DEFAULT true, UNIQUE(order_id) WHERE active=true }
+- `crm.pos_order_partner_override`: soft-delete, partial unique index
+- `crm.mv_cuenta_sales_kpi`: materialized view (cuenta_id, last_purchase_date, qty_12m, orders_12m, qty_ytd_cur/p1/p2)
 
 ## API Endpoints
-### Override
-- `POST /api/orders/{order_id}/override-customer` - Upsert (re-activates soft-deleted)
-- `GET /api/orders/{order_id}/override-customer` - Active override only
-- `DELETE /api/orders/{order_id}/override-customer` - Soft-delete (active=false)
-- `GET /api/orders/search-customers?q=...` - Search accounts
+- `GET /api/cuentas/list` - Directory with KPIs via materialized view
+- `POST /api/cuentas/refresh-kpis` - Refresh materialized view
+- `POST/GET/DELETE /api/orders/{order_id}/override-customer` - Override CRUD
+- `GET /api/orders/search-customers?q=...` - Customer search
 
 ## Backlog
-- Performance optimization for ComercialPage with large date ranges (121K+ orders)
+- Sync `odoo.res_country_state` for proper department names (currently using city as fallback)
+- Time range toggle for KPIs (3m/6m/12m, currently 12m default)
