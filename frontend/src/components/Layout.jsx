@@ -29,10 +29,19 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar_collapsed") === "true"; } catch { return false; }
   });
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     try { localStorage.setItem("sidebar_collapsed", collapsed); } catch {}
   }, [collapsed]);
+
+  useEffect(() => {
+    api.get("/approval/pending/count").then(r => setPendingCount(r.data?.total || 0)).catch(() => {});
+    const interval = setInterval(() => {
+      api.get("/approval/pending/count").then(r => setPendingCount(r.data?.total || 0)).catch(() => {});
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
