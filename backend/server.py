@@ -712,6 +712,58 @@ async def get_cuentas_filter_options(user=Depends(get_current_user)):
             return {"ciudades": [], "asignados": []}
 
 
+@cuentas_router.patch("/batch-active")
+async def batch_toggle_cuentas_active(data: BatchToggleActiveInput, user=Depends(get_current_user)):
+    """Batch activate/deactivate cuentas with cascade to contactos."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+        ids = [int(i) for i in data.ids]
+        if not ids:
+            return {"ok": True, "cuentas_affected": 0, "contactos_affected": 0}
+
+        cuentas_affected = 0
+        contactos_affected = 0
+
+        if not data.is_active:
+            reason = data.reason or 'MANUAL'
+            for oid in ids:
+                await conn.execute(
+                    "INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING", oid
+                )
+            res = await conn.execute("""
+                UPDATE crm.cuenta SET is_active = false, manual_inactive = true,
+                    inactive_reason = $2, inactive_at = now(), inactive_by = $3, updated_at = now()
+                WHERE cuenta_partner_odoo_id = ANY($1) AND is_active = true
+            """, ids, reason, user_email)
+            cuentas_affected = int(res.split()[-1]) if res else 0
+
+            res2 = await conn.execute("""
+                UPDATE crm.contacto SET is_active = false, manual_inactive = true,
+                    inactive_reason = 'CASCADE_ACCOUNT', inactive_at = now(), inactive_by = $2, updated_at = now()
+                WHERE cuenta_partner_odoo_id = ANY($1) AND is_active = true
+            """, ids, user_email)
+            contactos_affected = int(res2.split()[-1]) if res2 else 0
+        else:
+            res = await conn.execute("""
+                UPDATE crm.cuenta SET is_active = true, manual_inactive = false,
+                    inactive_reason = NULL, inactive_at = NULL, inactive_by = NULL, updated_at = now()
+                WHERE cuenta_partner_odoo_id = ANY($1) AND is_active = false
+            """, ids)
+            cuentas_affected = int(res.split()[-1]) if res else 0
+
+            res2 = await conn.execute("""
+                UPDATE crm.contacto SET is_active = true, manual_inactive = false,
+                    inactive_reason = NULL, inactive_at = NULL, inactive_by = NULL, updated_at = now()
+                WHERE cuenta_partner_odoo_id = ANY($1) AND is_active = false
+                    AND inactive_reason IN ('CASCADE_ACCOUNT', 'CASCADE_CONTACT')
+            """, ids)
+            contactos_affected = int(res2.split()[-1]) if res2 else 0
+
+        return {"ok": True, "is_active": data.is_active,
+                "cuentas_affected": cuentas_affected, "contactos_affected": contactos_affected}
+
+
 @cuentas_router.get("/{cuenta_id}/header-metrics")
 async def get_cuenta_header_metrics(cuenta_id: str, user=Depends(get_current_user)):
     """Compact header metrics for the detail panel."""
