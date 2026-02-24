@@ -122,6 +122,7 @@ export default function CuentasAirtable() {
             page={filters.page}
             totalPages={totalPages}
             onPageChange={handlePageChange}
+            onRefresh={() => fetchData(filters)}
           />
         </div>
 
