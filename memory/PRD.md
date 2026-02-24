@@ -1,81 +1,77 @@
 # CRM B2B - Product Requirements Document
 
 ## Overview
-B2B CRM application integrated with Odoo ERP via PostgreSQL. Manages accounts, contacts, sales, reservations, credits, interactions, and tasks.
+CRM B2B for managing accounts, contacts, sales, credits, stock, and analytics sourced from Odoo ERP.
+
+## Core Requirements
+
+### 1. Airtable-Style Cuentas Module (DONE)
+- Full-screen 2-pane layout: directory grid (left) + detail panel (right)
+- Server-side filtering, sorting, pagination
+- URL state management for all filters and selections
+- Compact header with key metrics
+
+### 2. Account/Contact Soft Deactivation (DONE)
+- Activate/deactivate accounts and contacts individually or in bulk
+- `manual_inactive` flag prevents Odoo sync from re-activating records
+- Cascading logic: deactivating account deactivates contacts, and vice versa
+
+### 3. Sales Order Customer Override (DONE - Feb 2026)
+- Allow users to reassign POS orders incorrectly assigned to generic customers (e.g., "CLIENTES VARIOS")
+- `crm.pos_order_partner_override` table stores corrections
+- `crm.v_comercial_order_lines` and `crm.v_comercial_order_header` views use COALESCE as single source of truth
+- All commercial endpoints refactored to use override logic
+- Frontend modal with customer search, override creation/deletion
+- Override indicators (REASIGNADO badge) on order rows
 
 ## Architecture
-- **Frontend**: React + Shadcn UI, hosted on port 3000
-- **Backend**: FastAPI + asyncpg (PostgreSQL), hosted on port 8001
-- **Database**: External Odoo PostgreSQL (read) + CRM schema (read/write) + MongoDB (auth)
-- **Auth**: JWT-based with MongoDB user store
-
-## Core Modules
-
-### 1. Cuentas (Accounts) - Airtable Layout [DONE - Feb 2026]
-Full Airtable-style split-view module at `/cuentas`:
-- **Top Toolbar**: Search, filters (Estado/Clasificacion/Ciudad/Vendedor), "Mostrar inactivos" toggle, count badge
-- **Left Pane (Directory Grid)**: Mini-table with columns, sorting, pagination, checkboxes for bulk selection, INACTIVA badge
-- **Right Pane (Detail Panel)**: Compact header with KPIs + 11 tabs
-- **URL State**: `?q=&estado=&selected=ID&tab=tabname&include_inactive=true` fully shareable
-
-### 2. Soft-Disable (Inactivar) [DONE - Feb 2026]
-Complete soft-disable system for Cuentas and Contactos:
-
-**Data Model** (columns on `crm.cuenta` and `crm.contacto`):
-- `is_active`, `manual_inactive`, `inactive_reason`, `inactive_at`, `inactive_by`
-
-**Cascade Rules**:
-- Inactivar Cuenta → cascades to ALL contactos (CASCADE_ACCOUNT)
-- Activar Cuenta → only reactivates CASCADE_* contactos
-- Inactivar Contacto Principal → cascades to Cuenta + other contactos (CASCADE_CONTACT)
-- Sync Protection: `manual_inactive=true` prevents Odoo from reactivating
-
-**Single Endpoints**: `PATCH /api/cuentas/{id}/active`, `PATCH /api/contactos/{id}/active`
-
-### 3. Bulk Inactivar/Activar [DONE - Feb 2026]
-Mass selection with checkboxes in both Cuentas directory and Contactos tab:
-- Checkbox on each row + select-all in header
-- Dark floating action bar: "N seleccionada(s)" + "Inactivar (N)" (red) + "Activar (N)" (green) + "Deseleccionar"
-- Cascade rules apply equally to batch operations
-- **Batch Endpoints**: `PATCH /api/cuentas/batch-active`, `PATCH /api/contactos/batch-active`
-- Auto-clears selection and refreshes data after operation
-
-### 4. Detail Panel Tabs [DONE]
-Resumen, Ventas, Reservas, Creditos, Info Ventas, YoY, Analitica, Contactos, Interacciones, Tareas, Perfil
-
-### 5. Previous Features [DONE]
-- Product Catalog Filter, Info Ventas 2-level drill-down, Dias sin comprar
-- Comparativo YoY, Analitica (frequency + top items)
-
-## Key API Endpoints
-- `PATCH /api/cuentas/batch-active` - Batch toggle with cascade
-- `PATCH /api/contactos/batch-active` - Batch toggle with principal cascade
-- `GET /api/cuentas/list?include_inactive=true` - Directory with inactive filter
-- `GET /api/cuentas/{id}/contactos?include_inactive=true` - Contactos with inactive filter
-- `GET /api/cuentas/{id}/contactos/count-active` - Count for confirmation modal
-
-## Backlog (Prioritized)
-### P1
-- Data counters in directory menu items
-- Column sorting by all KPI columns
-
-### P2
-- Dormancy semaphore, Reserves vs Sales, Credit summary
-- Resizable left panel
-
-### P3
-- Export CSV, "Include excluded products" toggle
-- Refactor stock dashboard to router
-
-## File Structure
 ```
-frontend/src/
-  pages/CuentasAirtable.jsx
-  components/cuentas/
-    CuentasToolbar.jsx          # Filters + Inactivos toggle
-    CuentasDirectoryGrid.jsx    # Grid + checkboxes + bulk bar
-    CuentaDetailPanel.jsx       # Header + toggle active + tabs
-    tabs/ (Resumen, Ventas, Reservas, Creditos, InfoVentas,
-           Contactos [with bulk checkboxes], Interacciones,
-           Tareas, Perfil)
+/app
+├── backend/
+│   ├── db.py              # DB init, override table, views with COALESCE
+│   ├── server.py          # Main FastAPI app, refactored with _OVERRIDE_JOIN, _EFFECTIVE_PARTNER
+│   └── routers/
+│       ├── orders.py      # Override CRUD + customer search
+│       ├── comercial.py   # has_override in SELECT
+│       ├── creditos.py
+│       ├── contactos.py
+│       ├── reposicion.py
+│       └── stock_balance.py
+└── frontend/
+    └── src/
+        ├── App.js
+        ├── pages/
+        │   ├── CuentasAirtable.jsx
+        │   ├── ComercialPage.jsx      # Override buttons + modal
+        │   └── ...
+        └── components/
+            ├── cuentas/
+            │   ├── CustomerOverrideModal.jsx  # Search + reassign modal
+            │   ├── CuentasDirectoryGrid.jsx
+            │   ├── CuentaDetailPanel.jsx
+            │   └── tabs/
+            │       ├── VentasTab.jsx          # Override buttons + badge
+            │       ├── ReservasTab.jsx        # Override buttons + badge
+            │       └── ...
+            └── layout/
+                └── Sidebar.jsx
 ```
+
+## Key DB Schema
+- `crm.pos_order_partner_override`: { id UUID, order_id INT UNIQUE, original_partner_id INT, new_owner_partner_id INT, reason TEXT, created_at, created_by }
+- `crm.cuenta`: { is_active, manual_inactive, inactive_reason, inactive_at, inactive_by }
+- `crm.contacto_vinculado`: { is_active, manual_inactive, inactive_reason, inactive_at, inactive_by }
+
+## API Endpoints
+### Override (NEW)
+- `POST /api/orders/{order_id}/override-customer` - Create/update override
+- `GET /api/orders/{order_id}/override-customer` - Get current override
+- `DELETE /api/orders/{order_id}/override-customer` - Remove override
+- `GET /api/orders/search-customers?q=...` - Search accounts for reassignment
+
+### Existing (Refactored)
+- All commercial endpoints now use `COALESCE(ov_po.new_owner_partner_id, po.partner_id)` for partner matching
+- Views `v_comercial_mov_flat` and `v_comercial_order_header` include `has_override` column
+
+## Backlog
+- No pending tasks defined by user
