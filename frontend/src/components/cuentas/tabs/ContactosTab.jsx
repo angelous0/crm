@@ -52,6 +52,42 @@ export function ContactosTab({ cuentaId }) {
     finally { setTogglingId(null); }
   };
 
+  const handleBatchToggle = async (activate) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    setBatchLoading(true);
+    try {
+      const r = await api.patch("/contactos/batch-active", {
+        ids, is_active: activate, reason: activate ? null : "MANUAL",
+      });
+      const d = r.data;
+      toast.success(activate
+        ? `${d.contactos_affected} contacto(s) activados`
+        : `${d.contactos_affected} contacto(s) inactivados${d.cuentas_affected ? `, ${d.cuentas_affected} cuenta(s) en cascada` : ""}`
+      );
+      setSelected(new Set());
+      const rr = await api.get(`/cuentas/${cuentaId}/contactos`, { params: { include_inactive: showInactive } });
+      setContactos(rr.data || []);
+    } catch { toast.error("Error en operacion masiva"); }
+    finally { setBatchLoading(false); }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === contactos.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(contactos.map(c => c.contacto_partner_odoo_id)));
+    }
+  };
+
   const fetchUnlinked = useCallback(async (q, pg, dni, tel) => {
     if (!q || q.length < 2) { setUnlinkResults([]); setUnlinkTotal(0); return; }
     setUnlinkLoading(true);
