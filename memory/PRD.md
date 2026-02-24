@@ -14,81 +14,68 @@ B2B CRM application integrated with Odoo ERP via PostgreSQL. Manages accounts, c
 ### 1. Cuentas (Accounts) - Airtable Layout [DONE - Feb 2026]
 Full Airtable-style split-view module at `/cuentas`:
 - **Top Toolbar**: Search, filters (Estado/Clasificacion/Ciudad/Vendedor), "Mostrar inactivos" toggle, count badge
-- **Left Pane (Directory Grid)**: Mini-table with columns, sorting, pagination, INACTIVA badge
+- **Left Pane (Directory Grid)**: Mini-table with columns, sorting, pagination, checkboxes for bulk selection, INACTIVA badge
 - **Right Pane (Detail Panel)**: Compact header with KPIs + 11 tabs
 - **URL State**: `?q=&estado=&selected=ID&tab=tabname&include_inactive=true` fully shareable
 
 ### 2. Soft-Disable (Inactivar) [DONE - Feb 2026]
 Complete soft-disable system for Cuentas and Contactos:
 
-**Data Model** (columns added to `crm.cuenta` and `crm.contacto`):
-- `is_active` BOOLEAN (default true)
-- `manual_inactive` BOOLEAN (default false) - prevents sync from reactivating
-- `inactive_reason` TEXT (MANUAL / CASCADE_ACCOUNT / CASCADE_CONTACT)
-- `inactive_at` TIMESTAMPTZ
-- `inactive_by` TEXT
+**Data Model** (columns on `crm.cuenta` and `crm.contacto`):
+- `is_active`, `manual_inactive`, `inactive_reason`, `inactive_at`, `inactive_by`
 
 **Cascade Rules**:
-- Inactivar Cuenta → cascades to ALL contactos (reason: CASCADE_ACCOUNT)
-- Activar Cuenta → only reactivates contactos with CASCADE_* reason (not manually inactivated)
-- Inactivar Contacto Principal (contacto_partner_odoo_id = cuenta_partner_odoo_id) → cascades to Cuenta + other contactos
+- Inactivar Cuenta → cascades to ALL contactos (CASCADE_ACCOUNT)
+- Activar Cuenta → only reactivates CASCADE_* contactos
+- Inactivar Contacto Principal → cascades to Cuenta + other contactos (CASCADE_CONTACT)
+- Sync Protection: `manual_inactive=true` prevents Odoo from reactivating
 
-**Sync Protection**: `manual_inactive=true` prevents Odoo sync from overwriting `is_active`
+**Single Endpoints**: `PATCH /api/cuentas/{id}/active`, `PATCH /api/contactos/{id}/active`
 
-**API Endpoints**:
-- `PATCH /api/cuentas/{id}/active` - Toggle cuenta active with cascade
-- `PATCH /api/contactos/{id}/active` - Toggle contacto active (cascade if principal)
-- `GET /api/cuentas/{id}/contactos/count-active` - Count for confirmation modal
-- `GET /api/cuentas/list?include_inactive=true` - Include inactive in directory
-- `GET /api/cuentas/{id}/contactos?include_inactive=true` - Include inactive contactos
+### 3. Bulk Inactivar/Activar [DONE - Feb 2026]
+Mass selection with checkboxes in both Cuentas directory and Contactos tab:
+- Checkbox on each row + select-all in header
+- Dark floating action bar: "N seleccionada(s)" + "Inactivar (N)" (red) + "Activar (N)" (green) + "Deseleccionar"
+- Cascade rules apply equally to batch operations
+- **Batch Endpoints**: `PATCH /api/cuentas/batch-active`, `PATCH /api/contactos/batch-active`
+- Auto-clears selection and refreshes data after operation
 
-**UI**:
-- "Inactivos" toggle in toolbar (default: hidden)
-- "INACTIVA" badge in directory grid rows
-- Red "Inactivar" / Green "Activar" button in detail header
-- Confirmation modal with affected contacto count + reason textarea
-- Contactos tab: "Mostrar inactivos" toggle + per-contacto Inactivar/Activar buttons
-
-### 3. Detail Panel Tabs [DONE]
+### 4. Detail Panel Tabs [DONE]
 Resumen, Ventas, Reservas, Creditos, Info Ventas, YoY, Analitica, Contactos, Interacciones, Tareas, Perfil
 
-### 4. Previous Features [DONE]
+### 5. Previous Features [DONE]
 - Product Catalog Filter, Info Ventas 2-level drill-down, Dias sin comprar
 - Comparativo YoY, Analitica (frequency + top items)
-- Stock Dashboard, Balance de Tallas, Ventas y Reservas, Creditos, Catalogo
+
+## Key API Endpoints
+- `PATCH /api/cuentas/batch-active` - Batch toggle with cascade
+- `PATCH /api/contactos/batch-active` - Batch toggle with principal cascade
+- `GET /api/cuentas/list?include_inactive=true` - Directory with inactive filter
+- `GET /api/cuentas/{id}/contactos?include_inactive=true` - Contactos with inactive filter
+- `GET /api/cuentas/{id}/contactos/count-active` - Count for confirmation modal
 
 ## Backlog (Prioritized)
 ### P1
 - Data counters in directory menu items
-- Column sorting by all KPI columns (last_purchase, sales_12m, days_since)
+- Column sorting by all KPI columns
 
 ### P2
-- Dormancy status semaphore
-- Reserves vs. Sales comparison
-- Credit summary dashboard
-- Resizable left panel with drag handle
+- Dormancy semaphore, Reserves vs Sales, Credit summary
+- Resizable left panel
 
 ### P3
-- "Include excluded products" toggle
-- Refactor stock dashboard endpoints to dedicated router
-- Persist stock dashboard filter state in URL
-- Export directory list to CSV
+- Export CSV, "Include excluded products" toggle
+- Refactor stock dashboard to router
 
 ## File Structure
 ```
 frontend/src/
   pages/CuentasAirtable.jsx
   components/cuentas/
-    CuentasToolbar.jsx          # Search + filters + Inactivos toggle
-    CuentasDirectoryGrid.jsx    # Left pane mini-grid + INACTIVA badge
-    CuentaDetailPanel.jsx       # Right pane: header + toggle active + tabs
-    tabs/
-      ResumenTab, VentasTab, ReservasTab, CreditosTab,
-      InfoVentasTab, ContactosTab (with active/inactive toggle per contacto),
-      InteraccionesTab, TareasTab, PerfilTab
-
-backend/
-  server.py    # PATCH active endpoints, list with include_inactive
-  db.py        # ALTER TABLE for soft-disable columns
-  routers/yoy.py, analytics.py
+    CuentasToolbar.jsx          # Filters + Inactivos toggle
+    CuentasDirectoryGrid.jsx    # Grid + checkboxes + bulk bar
+    CuentaDetailPanel.jsx       # Header + toggle active + tabs
+    tabs/ (Resumen, Ventas, Reservas, Creditos, InfoVentas,
+           Contactos [with bulk checkboxes], Interacciones,
+           Tareas, Perfil)
 ```
