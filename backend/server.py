@@ -1427,8 +1427,9 @@ async def get_cuenta_ventas_lines(
 _YOY_BASE = """
     FROM odoo.pos_order_line pol
     JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id
     {catalog_join}
-    WHERE po.partner_id = ANY($1)
+    WHERE COALESCE(ov_po.new_owner_partner_id, po.partner_id) = ANY($1)
       AND COALESCE(po.is_cancel, false) = false
       AND COALESCE(po.order_cancel, false) = false
       AND COALESCE(po.reserva, false) = false
