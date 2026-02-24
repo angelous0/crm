@@ -229,7 +229,12 @@ function HeadersTable({ rows, onSelect, onOverride }) {
                 {r.state}
               </span>
             </td>
-            <td className="px-2 py-1 font-medium truncate max-w-[200px]">{r.owner_partner_name || "-"}</td>
+            <td className="px-2 py-1 font-medium truncate max-w-[200px]">
+              {r.owner_partner_name || "-"}
+              {r.has_override && r.original_partner_name && (
+                <span className="block text-[8px] text-slate-400">orig: {r.original_partner_name}</span>
+              )}
+            </td>
             <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.amount_total)}</td>
             <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty_total)}</td>
             <td className="px-2 py-1 text-right text-slate-500">{r.lines_count}</td>
