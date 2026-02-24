@@ -202,7 +202,8 @@ export function ContactosTab({ cuentaId }) {
                   </Button>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
