@@ -610,6 +610,7 @@ async def get_cuentas_list(
     sort: str = "name", dir: str = "asc",
     page: int = 1, limit: int = 50,
     include_inactive: bool = False,
+    approval_status: str = "APPROVED",
     user=Depends(get_current_user)
 ):
     """Airtable-style directory listing with KPIs, phone, %YTD."""
@@ -619,6 +620,11 @@ async def get_cuentas_list(
         try:
             where = "WHERE 1=1"
             params = []
+
+            # Approval filter (default: only APPROVED)
+            if approval_status:
+                params.append(approval_status)
+                where += f" AND COALESCE(cu.approval_status, 'APPROVED') = ${len(params)}"
 
             if not include_inactive:
                 where += " AND COALESCE(cu.is_active, true) = true"
