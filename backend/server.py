@@ -783,8 +783,9 @@ async def get_cuenta_header_metrics(cuenta_id: str, user=Depends(get_current_use
                    COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m_count
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_OVERRIDE_JOIN}
             {_CATALOG_JOIN}
-            WHERE po.partner_id = ANY($1)
+            WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               AND COALESCE(po.reserva, false) = false
