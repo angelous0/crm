@@ -669,7 +669,8 @@ async def get_cuentas_list(
                 LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
                 JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
                 JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-                WHERE COALESCE(po.is_cancel, false) = false
+                WHERE po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
+                  AND COALESCE(po.is_cancel, false) = false
                   AND COALESCE(po.order_cancel, false) = false
                   AND COALESCE(po.reserva, false) = false
                   AND pol.product_id IS NOT NULL
