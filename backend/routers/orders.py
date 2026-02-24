@@ -44,18 +44,19 @@ async def search_customers(q: str = "", limit: int = 20, user=Depends(_get_auth(
 
 @router.get("/{order_id}/override-customer")
 async def get_override(order_id: int, user=Depends(_get_auth())):
-    """Get the current override for an order, if any."""
+    """Get the current active override for an order, if any."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             SELECT ov.id, ov.order_id, ov.original_partner_id, ov.new_owner_partner_id,
-                   ov.reason, ov.created_at, ov.created_by,
+                   ov.reason, ov.created_at, ov.created_by, ov.updated_at, ov.updated_by,
+                   ov.active,
                    rp_orig.name AS original_partner_name,
                    rp_new.name AS new_owner_partner_name
             FROM crm.pos_order_partner_override ov
             LEFT JOIN odoo.res_partner rp_orig ON rp_orig.odoo_id = ov.original_partner_id AND rp_orig.company_key = 'GLOBAL'
             LEFT JOIN odoo.res_partner rp_new ON rp_new.odoo_id = ov.new_owner_partner_id AND rp_new.company_key = 'GLOBAL'
-            WHERE ov.order_id = $1
+            WHERE ov.order_id = $1 AND ov.active = true
         """, order_id)
         if not row:
             return {"override": None}
@@ -64,11 +65,10 @@ async def get_override(order_id: int, user=Depends(_get_auth())):
 
 @router.post("/{order_id}/override-customer")
 async def create_override(order_id: int, data: OverrideCustomerInput, user=Depends(_get_auth())):
-    """Create or update an override for an order."""
+    """Create or update an override for an order (re-activates soft-deleted)."""
     pool = await get_pool()
     user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
     async with pool.acquire() as conn:
-        # Get original partner_id from the order
         order = await conn.fetchrow(
             "SELECT partner_id FROM odoo.pos_order WHERE odoo_id = $1", order_id
         )
@@ -77,20 +77,35 @@ async def create_override(order_id: int, data: OverrideCustomerInput, user=Depen
 
         original_partner_id = order['partner_id']
 
-        # Upsert override
-        row = await conn.fetchrow("""
-            INSERT INTO crm.pos_order_partner_override
-                (order_id, original_partner_id, new_owner_partner_id, reason, created_by)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (order_id) DO UPDATE SET
-                new_owner_partner_id = $3, reason = $4, created_by = $5, created_at = now()
-            RETURNING id, order_id, original_partner_id, new_owner_partner_id, reason, created_at, created_by
-        """, order_id, original_partner_id, data.new_owner_partner_id,
-             data.reason, user_email)
+        # Try to update existing (active or inactive) row first
+        existing = await conn.fetchrow(
+            "SELECT id, active FROM crm.pos_order_partner_override WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
+            order_id
+        )
+
+        if existing:
+            row = await conn.fetchrow("""
+                UPDATE crm.pos_order_partner_override
+                SET new_owner_partner_id = $2, original_partner_id = $3,
+                    reason = $4, updated_by = $5, updated_at = now(),
+                    active = true
+                WHERE id = $1
+                RETURNING id, order_id, original_partner_id, new_owner_partner_id,
+                          reason, created_at, created_by, updated_at, updated_by, active
+            """, existing['id'], data.new_owner_partner_id, original_partner_id,
+                 data.reason, user_email)
+        else:
+            row = await conn.fetchrow("""
+                INSERT INTO crm.pos_order_partner_override
+                    (order_id, original_partner_id, new_owner_partner_id, reason, created_by, updated_by, active)
+                VALUES ($1, $2, $3, $4, $5, $5, true)
+                RETURNING id, order_id, original_partner_id, new_owner_partner_id,
+                          reason, created_at, created_by, updated_at, updated_by, active
+            """, order_id, original_partner_id, data.new_owner_partner_id,
+                 data.reason, user_email)
 
         result = record_to_dict(row)
 
-        # Fetch partner names for response
         names = await conn.fetchrow("""
             SELECT
                 (SELECT name FROM odoo.res_partner WHERE odoo_id = $1 AND company_key = 'GLOBAL') AS original_name,
@@ -104,13 +119,16 @@ async def create_override(order_id: int, data: OverrideCustomerInput, user=Depen
 
 @router.delete("/{order_id}/override-customer")
 async def delete_override(order_id: int, user=Depends(_get_auth())):
-    """Remove the override for an order, restoring original customer."""
+    """Soft-delete: set active=false on the override."""
     pool = await get_pool()
+    user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
     async with pool.acquire() as conn:
-        res = await conn.execute(
-            "DELETE FROM crm.pos_order_partner_override WHERE order_id = $1", order_id
-        )
-        deleted = int(res.split()[-1]) if res else 0
-        if not deleted:
+        res = await conn.execute("""
+            UPDATE crm.pos_order_partner_override
+            SET active = false, updated_at = now(), updated_by = $2
+            WHERE order_id = $1 AND active = true
+        """, order_id, user_email)
+        affected = int(res.split()[-1]) if res else 0
+        if not affected:
             raise HTTPException(404, "Override no encontrado")
-        return {"ok": True, "deleted": True}
+        return {"ok": True, "deactivated": True}
