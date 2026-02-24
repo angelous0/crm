@@ -79,6 +79,14 @@ export default function PendientesPage() {
   const totalPages = Math.ceil(total / limit);
 
   /* ──── Actions ──── */
+  const doApproveDirectly = async (row) => {
+    try {
+      await api.post(`/approval/${entity}/${row.id}/approve`, { note: null, set_active: true });
+      toast.success(`"${row.nombre}" aprobada y activa`);
+      refresh();
+    } catch { toast.error("Error al aprobar"); }
+  };
+
   const doApprove = async (row, setActive) => {
     setActionLoading(true);
     try {
