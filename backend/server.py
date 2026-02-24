@@ -1012,17 +1012,13 @@ def _cuenta_where(params, partner_ids, doc_tipo, fecha_desde="", fecha_hasta="")
 
 
 # Optimized: query pos_order directly for cuenta-level endpoints (faster than scanning the full view)
-_OVERRIDE_JOIN = "LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id"
+_OVERRIDE_JOIN = "LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true"
 _EFFECTIVE_PARTNER = "COALESCE(ov_po.new_owner_partner_id, po.partner_id)"
 
 _POS_CUENTA_BASE = """
     FROM odoo.pos_order po
-    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id
-    WHERE COALESCE(ov_po.new_owner_partner_id, po.partner_id) = ANY($1)
-      AND COALESCE(po.is_cancel, false) = false
-      AND COALESCE(po.order_cancel, false) = false
-"""
-_POS_SALE_FILTER = " AND (COALESCE(po.reserva, false) = false)"
+    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
+    WHERE COALESCE(ov_po.new_owner_partner_id, po.partner_id) = ANY($1) = " AND (COALESCE(po.reserva, false) = false)"
 _POS_RESERVA_FILTER = " AND (COALESCE(po.reserva, false) = true AND COALESCE(po.reserva_use_id, 0) = 0)"
 
 _CATALOG_JOIN = """
