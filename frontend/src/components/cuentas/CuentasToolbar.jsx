@@ -3,13 +3,15 @@ import api from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, X, EyeOff } from "lucide-react";
+import { Search, X, EyeOff, Power } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const ESTADOS = ["ACTIVO", "NUEVO", "SEGUIMIENTO", "DORMIDO", "NO_VOLVER"];
 const CLASIFICACIONES = ["A", "B", "C"];
 
-export function CuentasToolbar({ filters, onFiltersChange, totalRows }) {
+export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactivateNoSales }) {
   const [ciudades, setCiudades] = useState([]);
   const [asignados, setAsignados] = useState([]);
   const debounceRef = useRef(null);
