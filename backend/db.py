@@ -190,6 +190,28 @@ async def init_database():
 
         logger.info("Soft-disable columns ensured")
 
+        # 2.8b) Add approval columns to cuenta and contacto (idempotent)
+        for tbl in ['crm.cuenta', 'crm.contacto']:
+            for col_def in [
+                ("approval_status", "TEXT NOT NULL DEFAULT 'APPROVED'"),
+                ("approved_at", "TIMESTAMPTZ NULL"),
+                ("approved_by", "TEXT NULL"),
+                ("approval_note", "TEXT NULL"),
+                ("last_seen_at", "TIMESTAMPTZ DEFAULT now()"),
+            ]:
+                try:
+                    await conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_def[0]} {col_def[1]}")
+                except Exception:
+                    pass
+        # Index for fast pending queries
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_cuenta_approval ON crm.cuenta (approval_status);
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_contacto_approval ON crm.contacto (approval_status);
+        """)
+        logger.info("Approval columns ensured")
+
         # 2.9) pos_order_partner_override – manual order-level customer reassignment
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS crm.pos_order_partner_override (
