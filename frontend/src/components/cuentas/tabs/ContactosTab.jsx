@@ -16,6 +16,8 @@ export function ContactosTab({ cuentaId }) {
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [batchLoading, setBatchLoading] = useState(false);
   const [unlinkSearch, setUnlinkSearch] = useState("");
   const [unlinkResults, setUnlinkResults] = useState([]);
   const [unlinkTotal, setUnlinkTotal] = useState(0);
