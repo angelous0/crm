@@ -98,7 +98,7 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
       )}
 
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full border-collapse text-xs table-fixed" style={{ minWidth: "720px" }}>
+        <table className="w-full border-collapse text-xs" style={{ minWidth: "700px" }}>
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="w-[28px] px-1 py-2">
@@ -106,9 +106,9 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
               </th>
               <SortHeader label="Cuenta" sortKey="name" currentSort={sort} currentDir={dir} onSort={onSort} />
               <SortHeader label="Depto" sortKey="depto" currentSort={sort} currentDir={dir} onSort={onSort} />
-              <SortHeader label="Ult. compra" sortKey="last_purchase" currentSort={sort} currentDir={dir} onSort={onSort} />
-              <SortHeader label="Cantidad" sortKey="qty_12m" currentSort={sort} currentDir={dir} onSort={onSort} align="right" />
-              <SortHeader label="#Compras" sortKey="orders_12m" currentSort={sort} currentDir={dir} onSort={onSort} align="right" />
+              <SortHeader label="Últ. compra" sortKey="last_purchase" currentSort={sort} currentDir={dir} onSort={onSort} />
+              <SortHeader label="Cant." sortKey="qty_12m" currentSort={sort} currentDir={dir} onSort={onSort} align="right" />
+              <SortHeader label="#Comp." sortKey="orders_12m" currentSort={sort} currentDir={dir} onSort={onSort} align="right" />
               <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap">Tel</th>
               <SortHeader label="%YTD" sortKey="pct_ytd" currentSort={sort} currentDir={dir} onSort={onSort} align="right" />
             </tr>
