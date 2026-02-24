@@ -111,7 +111,7 @@ export default function CuentasAirtable() {
       <div className="flex flex-1 min-h-0">
         {/* Left: Directory (Desktop) */}
         <div
-          className={`hidden lg:flex flex-col border-r border-slate-200 bg-white shrink-0 transition-all duration-200 ${panelCollapsed ? "w-0 overflow-hidden" : "w-[740px]"}`}
+          className={`hidden lg:flex flex-col border-r border-slate-200 bg-white shrink-0 transition-all duration-200 ${panelCollapsed ? "w-0 overflow-hidden" : "w-[800px]"}`}
           data-testid="left-pane"
         >
           <CuentasDirectoryGrid
