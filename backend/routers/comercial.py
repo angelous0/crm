@@ -169,7 +169,7 @@ async def comercial_lines(
         p2.append(offset)
         rows = records_to_list(await conn.fetch(f"""
             SELECT doc_tipo, order_id, line_id, fecha, partner_id,
-                   owner_partner_id, owner_partner_name,
+                   owner_partner_id, owner_partner_name, has_override,
                    product_product_id, product_tmpl_id,
                    modelo_display, marca, tipo, entalle, tela, hilo,
                    talla, color, barcode, qty, price_unit, subtotal
