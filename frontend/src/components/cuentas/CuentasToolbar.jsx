@@ -109,7 +109,18 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
         <span className="text-[10px] text-slate-500 whitespace-nowrap flex items-center gap-0.5"><EyeOff size={10} />Inactivos</span>
       </div>
 
-      <div className="ml-auto shrink-0">
+      <div className="ml-auto shrink-0 flex items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] text-red-600 border-red-200 hover:bg-red-50 hidden lg:flex"
+                onClick={onInactivateNoSales} data-testid="inactivate-no-sales-btn">
+                <Power size={11} className="mr-1" />Sin ventas
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Inactivar cuentas/contactos sin ventas</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <Badge variant="secondary" className="text-[10px] font-mono">{totalRows.toLocaleString("es-PE")} cuentas</Badge>
       </div>
     </div>
