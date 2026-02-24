@@ -1423,6 +1423,7 @@ async def get_cuenta_ventas_lines(
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
             {_OVERRIDE_JOIN}
             LEFT JOIN odoo.res_partner rp ON rp.odoo_id = {_EFFECTIVE_PARTNER} AND rp.company_key = 'GLOBAL'
+            LEFT JOIN odoo.res_partner rp_orig ON ov_po.order_id IS NOT NULL AND rp_orig.odoo_id = po.partner_id AND rp_orig.company_key = 'GLOBAL'
             {_CATALOG_JOIN}
             WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
