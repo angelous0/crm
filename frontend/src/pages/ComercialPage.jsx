@@ -219,7 +219,8 @@ function HeadersTable({ rows, onSelect, onOverride }) {
               <span className="flex items-center gap-1">
                 {r.order_name || r.order_id}
                 {r.has_override && (
-                  <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none">REASIGNADO</span>
+                  <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none"
+                    title={r.original_partner_name ? `Cliente original: ${r.original_partner_name}` : undefined}>REASIGNADO</span>
                 )}
               </span>
             </td>
