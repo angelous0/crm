@@ -1357,8 +1357,9 @@ async def get_cuenta_ventas_clasificacion_orders(
                    COUNT(*) AS lines_count
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_OVERRIDE_JOIN}
             {_CATALOG_JOIN}
-            WHERE po.partner_id = ANY($1)
+            WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               AND COALESCE(po.reserva, false) = false
