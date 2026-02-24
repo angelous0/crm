@@ -232,6 +232,14 @@ function HeadersTable({ rows, onSelect, onOverride }) {
             <td className="px-2 py-1 text-right font-mono">{fmtMoney(r.amount_total)}</td>
             <td className="px-2 py-1 text-right font-mono font-semibold">{fmtNum(r.qty_total)}</td>
             <td className="px-2 py-1 text-right text-slate-500">{r.lines_count}</td>
+            <td className="px-1 py-1 text-center">
+              <button className="p-0.5 rounded hover:bg-blue-100 text-slate-400 hover:text-blue-600 transition-colors"
+                data-testid={`global-override-btn-${r.order_id}`}
+                title="Reasignar cliente"
+                onClick={(e) => { e.stopPropagation(); onOverride(r); }}>
+                <ArrowRightLeft size={11} />
+              </button>
+            </td>
           </tr>
         ))}
       </tbody>
