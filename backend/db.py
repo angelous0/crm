@@ -190,6 +190,25 @@ async def init_database():
 
         logger.info("Soft-disable columns ensured")
 
+        # 2.9) pos_order_partner_override – manual order-level customer reassignment
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS crm.pos_order_partner_override (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                order_id INT NOT NULL,
+                original_partner_id INT NULL,
+                new_owner_partner_id INT NOT NULL,
+                reason TEXT NULL,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                created_by TEXT NULL,
+                UNIQUE(order_id)
+            );
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_override_new_owner
+            ON crm.pos_order_partner_override (new_owner_partner_id);
+        """)
+        logger.info("pos_order_partner_override table ensured")
+
         # 3) Views - these depend on odoo schema
         await _create_views(conn)
 
