@@ -979,7 +979,7 @@ async def _create_views(conn):
         logger.warning(f"Could not create v_credito_flat: {e}")
 
 
-    # 3.7) v_comercial_order_header – 1 row per POS order (SALE / RESERVA)
+    # 3.7) v_comercial_order_header – 1 row per POS order (SALE / RESERVA) + override
     try:
         await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_order_header CASCADE;")
         await conn.execute("""
@@ -997,8 +997,9 @@ async def _create_views(conn):
                 po.state,
                 po.amount_total,
                 po.partner_id,
-                COALESCE(paf.cuenta_partner_odoo_id, po.partner_id) AS owner_partner_id,
+                COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, po.partner_id) AS owner_partner_id,
                 rp_owner.name AS owner_partner_name,
+                (ov_po.order_id IS NOT NULL) AS has_override,
                 agg.qty_total,
                 agg.lines_count
             FROM odoo.pos_order po
@@ -1022,10 +1023,12 @@ async def _create_views(conn):
                   AND pt.name NOT ILIKE '%publicitario%'
                 GROUP BY pol.order_id
             ) agg ON agg.order_id = po.odoo_id
+            LEFT JOIN crm.pos_order_partner_override ov_po
+                ON ov_po.order_id = po.odoo_id
             LEFT JOIN crm.v_partner_account_final paf
                 ON po.partner_id = paf.contacto_partner_odoo_id
             LEFT JOIN odoo.res_partner rp_owner
-                ON COALESCE(paf.cuenta_partner_odoo_id, po.partner_id) = rp_owner.odoo_id
+                ON COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, po.partner_id) = rp_owner.odoo_id
                 AND rp_owner.company_key = 'GLOBAL'
             WHERE COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false;
