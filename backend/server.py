@@ -3400,7 +3400,8 @@ async def dash_reposicion(
             return {"items": page_recs, "total": total, "kpis": kpis}
         except Exception as e:
             logger.error(f"dash_reposicion error: {e}")
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
             return {"items": [], "total": 0, "kpis": {}}
 
 
