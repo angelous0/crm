@@ -176,6 +176,12 @@ export default function CuentasAirtable() {
           />
         </div>
       </div>
+
+      <InactivateNoSalesModal
+        open={showInactivateModal}
+        onClose={() => setShowInactivateModal(false)}
+        onDone={() => fetchData(filters)}
+      />
     </div>
   );
 }
