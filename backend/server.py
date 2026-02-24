@@ -706,6 +706,16 @@ async def get_cuentas_list(
             return {"rows": [], "total_rows": 0, "page": page, "limit": limit, "error": str(e)}
 
 
+@cuentas_router.post("/refresh-kpis")
+async def refresh_cuenta_kpis(user=Depends(get_current_user)):
+    """Refresh the materialized view for directory KPIs."""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY crm.mv_cuenta_sales_kpi")
+    return {"ok": True, "message": "KPIs actualizados"}
+
+
+
 @cuentas_router.get("/list/filter-options")
 async def get_cuentas_filter_options(user=Depends(get_current_user)):
     """Get distinct filter values for the toolbar dropdowns."""
