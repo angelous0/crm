@@ -612,7 +612,7 @@ async def get_cuentas_list(
     include_inactive: bool = False,
     user=Depends(get_current_user)
 ):
-    """Airtable-style directory listing."""
+    """Airtable-style directory listing with KPIs, phone, %YTD."""
     p = await get_pool()
     async with p.acquire() as conn:
         offset = (page - 1) * limit
@@ -640,20 +640,61 @@ async def get_cuentas_list(
                 params.append(f"%{asignado}%")
                 where += f" AND cu.asignado_a ILIKE ${len(params)}"
 
-            base_from = """
+            base_from_simple = """
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
                 LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
             """
 
             count = await conn.fetchval(
-                f"SELECT COUNT(*) {base_from} {where}", *params
+                f"SELECT COUNT(*) {base_from_simple} {where}", *params
             )
+
+            kpi_cte = """
+            WITH kpis AS (
+                SELECT COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
+                       MAX(po.date_order) AS last_purchase_date,
+                       COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.qty ELSE 0 END), 0) AS qty_12m,
+                       COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m,
+                       COALESCE(SUM(CASE WHEN po.date_order >= date_trunc('year', CURRENT_DATE)
+                                         THEN pol.qty ELSE 0 END), 0) AS qty_ytd_cur,
+                       COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '1 year')
+                                         AND po.date_order < (CURRENT_DATE - interval '1 year' + interval '1 day')
+                                         THEN pol.qty ELSE 0 END), 0) AS qty_ytd_p1,
+                       COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
+                                         AND po.date_order < (CURRENT_DATE - interval '2 years' + interval '1 day')
+                                         THEN pol.qty ELSE 0 END), 0) AS qty_ytd_p2
+                FROM odoo.pos_order po
+                JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
+                LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
+                JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+                JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+                WHERE COALESCE(po.is_cancel, false) = false
+                  AND COALESCE(po.order_cancel, false) = false
+                  AND COALESCE(po.reserva, false) = false
+                  AND pol.product_id IS NOT NULL
+                  AND pt.sale_ok = true AND pt.purchase_ok = false
+                  AND pt.name NOT ILIKE '%correa%' AND pt.name NOT ILIKE '%saco%'
+                  AND pt.name NOT ILIKE '%bolsa%' AND pt.name NOT ILIKE '%probador%'
+                  AND pt.name NOT ILIKE '%paneton%' AND pt.name NOT ILIKE '%publicitario%'
+                GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
+            )
+            """
+
+            base_from_kpi = """
+                FROM crm.v_cuentas_libres cl
+                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                LEFT JOIN kpis k ON k.cuenta_id = cl.cuenta_partner_odoo_id
+            """
 
             sort_map = {
                 "name": "CASE WHEN rp.name IS NULL OR btrim(rp.name) = '' THEN 1 ELSE 0 END, rp.name",
-                "ciudad": "rp.city",
-                "estado": "COALESCE(cu.estado_comercial, 'ACTIVO')",
+                "depto": "rp.city",
+                "last_purchase": "k.last_purchase_date",
+                "qty_12m": "k.qty_12m",
+                "orders_12m": "k.orders_12m",
+                "pct_ytd": "pct_vs_avg_ytd",
             }
             order_col = sort_map.get(sort, "rp.name")
             order_dir = "ASC" if dir.lower() == "asc" else "DESC"
@@ -662,15 +703,23 @@ async def get_cuentas_list(
             data_params = params.copy()
             data_params.extend([limit, offset])
             rows = await conn.fetch(
-                f"""SELECT
+                f"""{kpi_cte}
+                SELECT
                     cl.cuenta_partner_odoo_id AS id,
                     rp.name AS nombre,
-                    COALESCE(rp.city::text, '') AS ciudad,
+                    COALESCE(rp.city::text, '') AS depto_name,
                     COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
-                    cu.clasificacion,
-                    COALESCE(cu.asignado_a, '') AS asignado,
-                    COALESCE(cu.is_active, true) AS is_active
-                {base_from}
+                    COALESCE(cu.is_active, true) AS is_active,
+                    COALESCE(rp.phone::text, '') AS raw_phone,
+                    COALESCE(rp.mobile::text, '') AS raw_mobile,
+                    k.last_purchase_date,
+                    COALESCE(k.qty_12m, 0)::bigint AS qty_12m,
+                    COALESCE(k.orders_12m, 0)::bigint AS orders_12m,
+                    CASE WHEN (COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0)) > 0
+                         THEN (COALESCE(k.qty_ytd_cur, 0)::float
+                               / ((COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0))::float / 2.0)) - 1.0
+                         ELSE NULL END AS pct_vs_avg_ytd
+                {base_from_kpi}
                 {where}
                 ORDER BY {order_col} {order_dir} {nulls}
                 LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
@@ -678,50 +727,15 @@ async def get_cuentas_list(
             )
             result_rows = records_to_list(rows)
 
-            # Batch compute KPIs for this page of results only
-            ids = [r['id'] for r in result_rows]
-            if ids:
-                kpi_rows = await conn.fetch("""
-                    SELECT COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS id,
-                           MAX(po.date_order) AS last_purchase_date,
-                           CASE WHEN MAX(po.date_order) IS NOT NULL
-                                THEN (CURRENT_DATE - MAX(po.date_order)::date)::int
-                                ELSE NULL END AS days_since_last_purchase,
-                           COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.price_subtotal ELSE 0 END), 0) AS sales_12m_amount,
-                           COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m_count
-                    FROM odoo.pos_order po
-                    JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
-                    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-                    JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-                    JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-                    WHERE COALESCE(ov_po.new_owner_partner_id, po.partner_id) = ANY($1)
-                      AND COALESCE(po.is_cancel, false) = false
-                      AND COALESCE(po.order_cancel, false) = false
-                      AND COALESCE(po.reserva, false) = false
-                      AND pol.product_id IS NOT NULL
-                      AND pt.sale_ok = true AND pt.purchase_ok = false
-                      AND pt.name NOT ILIKE '%correa%'
-                      AND pt.name NOT ILIKE '%saco%'
-                      AND pt.name NOT ILIKE '%bolsa%'
-                      AND pt.name NOT ILIKE '%probador%'
-                      AND pt.name NOT ILIKE '%paneton%'
-                      AND pt.name NOT ILIKE '%publicitario%'
-                    GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
-                """, ids)
-                kpi_map = {}
-                for kr in kpi_rows:
-                    kpi_map[kr['id']] = {
-                        "last_purchase_date": str(kr['last_purchase_date']) if kr['last_purchase_date'] else None,
-                        "days_since_last_purchase": int(kr['days_since_last_purchase']) if kr['days_since_last_purchase'] is not None else None,
-                        "sales_12m_amount": float(kr['sales_12m_amount']),
-                        "orders_12m_count": int(kr['orders_12m_count']),
-                    }
-                for r in result_rows:
-                    kpi = kpi_map.get(r['id'], {})
-                    r['last_purchase_date'] = kpi.get('last_purchase_date')
-                    r['days_since_last_purchase'] = kpi.get('days_since_last_purchase')
-                    r['sales_12m_amount'] = kpi.get('sales_12m_amount', 0)
-                    r['orders_12m_count'] = kpi.get('orders_12m_count', 0)
+            for r in result_rows:
+                # Format dates
+                if r.get('last_purchase_date'):
+                    r['last_purchase_date'] = str(r['last_purchase_date'])
+                # Format pct
+                if r.get('pct_vs_avg_ytd') is not None:
+                    r['pct_vs_avg_ytd'] = round(r['pct_vs_avg_ytd'], 4)
+                # Phone normalization
+                _apply_phone(r)
 
             return {"rows": result_rows, "total_rows": count, "page": page, "limit": limit}
         except Exception as e:
