@@ -640,54 +640,16 @@ async def get_cuentas_list(
                 params.append(f"%{asignado}%")
                 where += f" AND cu.asignado_a ILIKE ${len(params)}"
 
-            base_from_simple = """
+            base_from = """
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
                 LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                LEFT JOIN crm.mv_cuenta_sales_kpi k ON k.cuenta_id = cl.cuenta_partner_odoo_id
             """
 
             count = await conn.fetchval(
-                f"SELECT COUNT(*) {base_from_simple} {where}", *params
+                f"SELECT COUNT(*) {base_from} {where}", *params
             )
-
-            kpi_cte = """
-            WITH kpis AS (
-                SELECT COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
-                       MAX(po.date_order) AS last_purchase_date,
-                       COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.qty ELSE 0 END), 0) AS qty_12m,
-                       COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m,
-                       COALESCE(SUM(CASE WHEN po.date_order >= date_trunc('year', CURRENT_DATE)
-                                         THEN pol.qty ELSE 0 END), 0) AS qty_ytd_cur,
-                       COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '1 year')
-                                         AND po.date_order < (CURRENT_DATE - interval '1 year' + interval '1 day')
-                                         THEN pol.qty ELSE 0 END), 0) AS qty_ytd_p1,
-                       COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
-                                         AND po.date_order < (CURRENT_DATE - interval '2 years' + interval '1 day')
-                                         THEN pol.qty ELSE 0 END), 0) AS qty_ytd_p2
-                FROM odoo.pos_order po
-                JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
-                LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-                JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-                JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-                WHERE po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
-                  AND COALESCE(po.is_cancel, false) = false
-                  AND COALESCE(po.order_cancel, false) = false
-                  AND COALESCE(po.reserva, false) = false
-                  AND pol.product_id IS NOT NULL
-                  AND pt.sale_ok = true AND pt.purchase_ok = false
-                  AND pt.name NOT ILIKE '%correa%' AND pt.name NOT ILIKE '%saco%'
-                  AND pt.name NOT ILIKE '%bolsa%' AND pt.name NOT ILIKE '%probador%'
-                  AND pt.name NOT ILIKE '%paneton%' AND pt.name NOT ILIKE '%publicitario%'
-                GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
-            )
-            """
-
-            base_from_kpi = """
-                FROM crm.v_cuentas_libres cl
-                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
-                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
-                LEFT JOIN kpis k ON k.cuenta_id = cl.cuenta_partner_odoo_id
-            """
 
             sort_map = {
                 "name": "CASE WHEN rp.name IS NULL OR btrim(rp.name) = '' THEN 1 ELSE 0 END, rp.name",
