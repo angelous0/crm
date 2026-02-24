@@ -1,0 +1,81 @@
+{
+  "summary": "Iteration 28: Customer Override soft-delete feature FULLY WORKING. All 11 backend tests passed (100%). Frontend testing verified REASIGNADO badge, 'orig: {name}' secondary text, override modal, customer search, and save flow all working correctly in VentasTab.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "performance_issues": [
+      {"page": "ComercialPage", "issue": "Slow loading continues with default 3-month date range (121K+ orders). Database query causes extended loading spinners (>30s). VentasTab in cuenta detail panel loads much faster as workaround."}
+    ]
+  },
+
+  "passed_tests": [
+    "Backend: POST /api/orders/{order_id}/override-customer returns active=true, updated_at, updated_by fields",
+    "Backend: GET /api/orders/{order_id}/override-customer returns ONLY active=true overrides",
+    "Backend: DELETE soft-deletes (sets active=false, returns deactivated=true NOT deleted=true)",
+    "Backend: After soft-delete, GET returns override=null",
+    "Backend: After soft-delete, v_comercial_order_header shows has_override=false",
+    "Backend: POST after soft-delete re-activates existing record (same ID, new updated_at)",
+    "Backend: GET /api/comercial/orders returns original_partner_name field for overridden orders",
+    "Backend: GET /api/comercial/lines returns original_partner_name field",
+    "Backend: GET /api/cuentas/list still works (regression test passed)",
+    "Frontend: VentasTab shows override buttons (data-testid='override-btn-{order_id}')",
+    "Frontend: Override modal opens with correct order info and current customer",
+    "Frontend: Customer search works (debounced, returns results)",
+    "Frontend: Selecting customer and clicking Reasignar creates override successfully",
+    "Frontend: Success toast 'Orden reasignada a {name}' appears",
+    "Frontend: VentasTab shows REASIGNADO badge (data-testid='override-badge')",
+    "Frontend: VentasTab shows 'orig: {original_partner_name}' secondary text below order name"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_customer_override_v2.py",
+    "/app/test_reports/pytest/pytest_override_v2.xml"
+  ],
+
+  "action_items": [
+    "PERFORMANCE: ComercialPage remains slow - consider reducing default date range or adding query indexes",
+    "All soft-delete and original_partner_name features working correctly"
+  ],
+
+  "critical_code_review_comments": [
+    "orders.py: Soft-delete correctly implemented - DELETE sets active=false, not physical delete",
+    "orders.py: POST correctly re-activates existing row after soft-delete (same ID reused)",
+    "db.py: Partial unique index idx_override_order_active WHERE active=true ensures only one active override per order",
+    "db.py: Views v_comercial_mov_flat and v_comercial_order_header correctly use AND ov.active=true in JOINs",
+    "VentasTab.jsx: REASIGNADO badge with data-testid='override-badge' and 'orig: {name}' secondary text working",
+    "ComercialPage.jsx: HeadersTable shows REASIGNADO badge and original client info correctly"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_customer_override_v2.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (11/11 tests passed)",
+    "frontend": "100% (VentasTab fully tested with override creation and badge display)"
+  },
+
+  "test_credentials": {
+    "email": "admin@crm.com",
+    "password": "admin123",
+    "test_order_id": "125714 (order 6289/23825) - override created and soft-deleted during test",
+    "test_customer_id": "11308 (CLIENTE FALABELLA)"
+  },
+
+  "seed_data_creation": "None - used existing PostgreSQL data via PG_URL connection",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Soft-delete override feature fully working. Key changes: DELETE now returns {ok: true, deactivated: true} instead of {deleted: true}. POST after soft-delete reuses existing row (same ID). All JOINs filter AND ov.active=true. VentasTab shows REASIGNADO badge (data-testid='override-badge') with amber background and 'orig: {name}' secondary text in gray. ComercialPage continues to have slow loading due to large dataset - use VentasTab within cuenta detail for faster testing.",
+
+  "rca_of_the_issue": "N/A - no bugs found. All soft-delete, active flag, updated_at/updated_by, and original_partner_name features working correctly per requirements."
+}
