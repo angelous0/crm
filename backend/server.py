@@ -640,7 +640,7 @@ async def get_cuentas_list(
             ids = [r['id'] for r in result_rows]
             if ids:
                 kpi_rows = await conn.fetch("""
-                    SELECT po.partner_id AS id,
+                    SELECT COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS id,
                            MAX(po.date_order) AS last_purchase_date,
                            CASE WHEN MAX(po.date_order) IS NOT NULL
                                 THEN (CURRENT_DATE - MAX(po.date_order)::date)::int
@@ -649,9 +649,10 @@ async def get_cuentas_list(
                            COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END) AS orders_12m_count
                     FROM odoo.pos_order po
                     JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
+                    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id
                     JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
                     JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-                    WHERE po.partner_id = ANY($1)
+                    WHERE COALESCE(ov_po.new_owner_partner_id, po.partner_id) = ANY($1)
                       AND COALESCE(po.is_cancel, false) = false
                       AND COALESCE(po.order_cancel, false) = false
                       AND COALESCE(po.reserva, false) = false
@@ -663,7 +664,7 @@ async def get_cuentas_list(
                       AND pt.name NOT ILIKE '%probador%'
                       AND pt.name NOT ILIKE '%paneton%'
                       AND pt.name NOT ILIKE '%publicitario%'
-                    GROUP BY po.partner_id
+                    GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
                 """, ids)
                 kpi_map = {}
                 for kr in kpi_rows:
