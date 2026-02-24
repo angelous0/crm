@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { CuentasToolbar } from "@/components/cuentas/CuentasToolbar";
 import { CuentasDirectoryGrid } from "@/components/cuentas/CuentasDirectoryGrid";
 import { CuentaDetailPanel } from "@/components/cuentas/CuentaDetailPanel";
+import { InactivateNoSalesModal } from "@/components/cuentas/InactivateNoSalesModal";
 import { Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
