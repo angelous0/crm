@@ -1116,8 +1116,9 @@ async def get_cuenta_ventas_orders(
             SELECT COUNT(DISTINCT po.odoo_id) AS orders_count
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
+            {_OVERRIDE_JOIN}
             {_CATALOG_JOIN}
-            WHERE po.partner_id = ANY($1)
+            WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               {_CATALOG_FILTER}
@@ -1131,11 +1132,13 @@ async def get_cuenta_ventas_orders(
         rows = records_to_list(await conn.fetch(f"""
             SELECT po.odoo_id AS order_id, po.name AS order_name,
                    po.date_order, po.state, po.amount_total,
-                   po.partner_id AS owner_partner_id,
+                   {_EFFECTIVE_PARTNER} AS owner_partner_id,
                    rp.name AS owner_partner_name,
+                   (ov_po.order_id IS NOT NULL) AS has_override,
                    agg.qty_total,
                    agg.lines_count
             FROM odoo.pos_order po
+            {_OVERRIDE_JOIN}
             JOIN (
                 SELECT pol2.order_id, COALESCE(SUM(pol2.qty), 0) AS qty_total, COUNT(*) AS lines_count
                 FROM odoo.pos_order_line pol2
@@ -1151,8 +1154,8 @@ async def get_cuenta_ventas_orders(
                   AND pt2.name NOT ILIKE '%publicitario%'
                 GROUP BY pol2.order_id
             ) agg ON agg.order_id = po.odoo_id
-            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = po.partner_id AND rp.company_key = 'GLOBAL'
-            WHERE po.partner_id = ANY($1)
+            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = {_EFFECTIVE_PARTNER} AND rp.company_key = 'GLOBAL'
+            WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               {doc_filter} {extra}
