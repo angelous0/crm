@@ -1135,6 +1135,7 @@ async def get_cuenta_ventas_orders(
                    {_EFFECTIVE_PARTNER} AS owner_partner_id,
                    rp.name AS owner_partner_name,
                    (ov_po.order_id IS NOT NULL) AS has_override,
+                   CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
                    agg.qty_total,
                    agg.lines_count
             FROM odoo.pos_order po
@@ -1155,6 +1156,7 @@ async def get_cuenta_ventas_orders(
                 GROUP BY pol2.order_id
             ) agg ON agg.order_id = po.odoo_id
             LEFT JOIN odoo.res_partner rp ON rp.odoo_id = {_EFFECTIVE_PARTNER} AND rp.company_key = 'GLOBAL'
+            LEFT JOIN odoo.res_partner rp_orig ON ov_po.order_id IS NOT NULL AND rp_orig.odoo_id = po.partner_id AND rp_orig.company_key = 'GLOBAL'
             WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
