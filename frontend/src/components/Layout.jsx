@@ -75,7 +75,8 @@ export default function Layout({ children }) {
 
           {/* Navigation */}
           <nav className="flex-1 py-3 px-2 space-y-0.5" data-testid="sidebar-nav">
-            {navItems.map(({ to, icon: Icon, label }) => {
+            {navItems.map(({ to, icon: Icon, label, badge }) => {
+              const badgeNum = badge ? pendingCount : 0;
               const link = (
                 <NavLink
                   key={to}
@@ -90,9 +91,22 @@ export default function Layout({ children }) {
                   }
                   data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
                 >
-                  <Icon size={17} strokeWidth={1.5} />
+                  <span className="relative">
+                    <Icon size={17} strokeWidth={1.5} />
+                    {collapsed && badgeNum > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 h-3.5 min-w-[14px] flex items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold px-0.5">
+                        {badgeNum > 99 ? "99+" : badgeNum}
+                      </span>
+                    )}
+                  </span>
                   {!collapsed && <span className="truncate">{label}</span>}
-                  {!collapsed && <ChevronRight size={13} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />}
+                  {!collapsed && badgeNum > 0 && (
+                    <span className="ml-auto inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold"
+                      data-testid="sidebar-pending-badge">
+                      {badgeNum > 99 ? "99+" : badgeNum}
+                    </span>
+                  )}
+                  {!collapsed && !badge && <ChevronRight size={13} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />}
                 </NavLink>
               );
 
