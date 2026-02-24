@@ -193,15 +193,39 @@ async def init_database():
         # 2.9) pos_order_partner_override – manual order-level customer reassignment
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS crm.pos_order_partner_override (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id BIGSERIAL PRIMARY KEY,
                 order_id INT NOT NULL,
                 original_partner_id INT NULL,
                 new_owner_partner_id INT NOT NULL,
                 reason TEXT NULL,
                 created_at TIMESTAMPTZ DEFAULT now(),
                 created_by TEXT NULL,
-                UNIQUE(order_id)
+                updated_at TIMESTAMPTZ DEFAULT now(),
+                updated_by TEXT NULL,
+                active BOOLEAN NOT NULL DEFAULT true
             );
+        """)
+        # Idempotent columns for existing tables
+        for col_def in [
+            ("updated_at", "TIMESTAMPTZ DEFAULT now()"),
+            ("updated_by", "TEXT NULL"),
+            ("active", "BOOLEAN NOT NULL DEFAULT true"),
+        ]:
+            try:
+                await conn.execute(f"ALTER TABLE crm.pos_order_partner_override ADD COLUMN IF NOT EXISTS {col_def[0]} {col_def[1]}")
+            except Exception:
+                pass
+        # Drop old plain unique if exists, create partial unique index
+        await conn.execute("""
+            DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pos_order_partner_override_order_id_key') THEN
+                    ALTER TABLE crm.pos_order_partner_override DROP CONSTRAINT pos_order_partner_override_order_id_key;
+                END IF;
+            END $$;
+        """)
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_override_order_active
+            ON crm.pos_order_partner_override (order_id) WHERE active = true;
         """)
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_override_new_owner
@@ -886,7 +910,7 @@ async def _create_views(conn):
                     vpl.price_subtotal      AS subtotal
                 FROM odoo.v_pos_line_full vpl
                 LEFT JOIN crm.pos_order_partner_override ov_po
-                    ON ov_po.order_id = vpl.order_id
+                    ON ov_po.order_id = vpl.order_id AND ov_po.active = true
                 LEFT JOIN crm.v_partner_account_final paf
                     ON paf.contacto_partner_odoo_id = vpl.contacto_partner_id
                 LEFT JOIN odoo.res_partner rp_owner
@@ -1024,7 +1048,7 @@ async def _create_views(conn):
                 GROUP BY pol.order_id
             ) agg ON agg.order_id = po.odoo_id
             LEFT JOIN crm.pos_order_partner_override ov_po
-                ON ov_po.order_id = po.odoo_id
+                ON ov_po.order_id = po.odoo_id AND ov_po.active = true
             LEFT JOIN crm.v_partner_account_final paf
                 ON po.partner_id = paf.contacto_partner_odoo_id
             LEFT JOIN odoo.res_partner rp_owner
