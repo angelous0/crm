@@ -30,6 +30,7 @@ export default function CuentasAirtable() {
   const [totalRows, setTotalRows] = useState(0);
   const [loading, setLoading] = useState(true);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [showInactivateModal, setShowInactivateModal] = useState(false);
   const limit = 50;
   const fetchRef = useRef(0);
 
