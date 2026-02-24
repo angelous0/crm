@@ -16,6 +16,7 @@ import StockDashboard from "@/pages/StockDashboard";
 import BalanceTallas from "@/pages/BalanceTallas";
 import ComercialPage from "@/pages/ComercialPage";
 import CreditosPage from "@/pages/CreditosPage";
+import PendientesPage from "@/pages/PendientesPage";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }) {
@@ -68,6 +69,7 @@ function App() {
           <Route path="/catalogo" element={<ProtectedRoute><Catalogo /></ProtectedRoute>} />
           <Route path="/cuentas" element={<ProtectedRoute><CuentasAirtable /></ProtectedRoute>} />
           <Route path="/cuentas/:id" element={<ProtectedRoute><CuentaDetalle /></ProtectedRoute>} />
+          <Route path="/pendientes" element={<ProtectedRoute><PendientesPage /></ProtectedRoute>} />
           <Route path="/contactos" element={<ProtectedRoute><Contactos /></ProtectedRoute>} />
           <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
