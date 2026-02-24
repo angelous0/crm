@@ -207,7 +207,7 @@ export default function PendientesPage() {
                   </div>
                 </td></tr>
               ) : rows.map((r) => (
-                <PendingRow key={r.id} row={r} entity={entity} onAction={setModal} />
+                <PendingRow key={r.id} row={r} entity={entity} onAction={handleAction} />
               ))}
             </tbody>
           </table>
