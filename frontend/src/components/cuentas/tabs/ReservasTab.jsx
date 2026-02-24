@@ -3,9 +3,10 @@ import api from "@/lib/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, ChevronLeft, ChevronRight, List } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, List, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { OrderLinesDrawer } from "@/components/DetailDrawers";
+import { CustomerOverrideModal } from "../CustomerOverrideModal";
 
 const fmtMoney = (n) => "S/ " + Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtNum = (n) => Number(n || 0).toLocaleString("es-PE");
@@ -20,6 +21,7 @@ export function ReservasTab({ cuentaId }) {
   const [linesPage, setLinesPage] = useState(1);
   const [linesLoading, setLinesLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [overrideOrder, setOverrideOrder] = useState(null);
 
   const fetchOrders = useCallback(async (pg = 1) => {
     setLoading(true);
@@ -48,6 +50,11 @@ export function ReservasTab({ cuentaId }) {
   const curPage = detailMode ? linesPage : page;
   const curLoading = detailMode ? linesLoading : loading;
 
+  const handleOverrideSaved = () => {
+    if (detailMode) fetchLines(linesPage);
+    else fetchOrders(page);
+  };
+
   return (
     <div data-testid="section-reservas">
       <div className="flex items-center gap-3 mb-3 bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm">
@@ -69,22 +76,38 @@ export function ReservasTab({ cuentaId }) {
                   {!detailMode && <TableHead className="text-xs">Estado</TableHead>}
                   <TableHead className="text-xs text-right">Qty</TableHead>
                   <TableHead className="text-xs text-right">{detailMode ? "Subtotal" : "Total"}</TableHead>
+                  <TableHead className="text-xs w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={detailMode ? 7 : 5} className="h-20 text-center text-slate-500">Sin reservas</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={detailMode ? 7 : 6} className="h-20 text-center text-slate-500">Sin reservas</TableCell></TableRow>
                 ) : rows.map((r, i) => (
                   <TableRow key={detailMode ? `${r.order_id}-${r.line_id}` : r.order_id}
                     className={`${!detailMode ? "cursor-pointer" : ""} ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50`}
-                    onClick={() => !detailMode && setSelectedOrder(r)}>
+                    onClick={() => !detailMode && !overrideOrder && setSelectedOrder(r)}>
                     <TableCell className="text-xs whitespace-nowrap">{fmtDate(detailMode ? r.fecha : r.date_order)}</TableCell>
-                    <TableCell className="text-xs font-mono text-slate-500">{r.order_name || r.order_id}</TableCell>
+                    <TableCell className="text-xs font-mono text-slate-500">
+                      <span className="flex items-center gap-1">
+                        {r.order_name || r.order_id}
+                        {r.has_override && (
+                          <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none" data-testid="override-badge">REASIGNADO</span>
+                        )}
+                      </span>
+                    </TableCell>
                     {detailMode && <TableCell className="text-xs truncate max-w-[140px]">{r.modelo_display || "-"}</TableCell>}
                     {detailMode && <TableCell className="text-xs">{r.talla || "-"}</TableCell>}
                     {!detailMode && <TableCell className="text-xs"><span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600">{r.state}</span></TableCell>}
                     <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(detailMode ? r.qty : r.qty_total)}</TableCell>
                     <TableCell className="text-xs text-right font-mono">{fmtMoney(detailMode ? r.subtotal : r.amount_total)}</TableCell>
+                    <TableCell className="text-xs text-center px-1">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600"
+                        data-testid={`override-btn-${r.order_id}`}
+                        title="Reasignar cliente"
+                        onClick={(e) => { e.stopPropagation(); setOverrideOrder(r); }}>
+                        <ArrowRightLeft size={13} />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -102,6 +125,9 @@ export function ReservasTab({ cuentaId }) {
         </div>
       )}
       {!detailMode && selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      {overrideOrder && (
+        <CustomerOverrideModal order={overrideOrder} onClose={() => setOverrideOrder(null)} onSaved={handleOverrideSaved} />
+      )}
     </div>
   );
 }
