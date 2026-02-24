@@ -4134,3 +4134,5 @@ from routers.orders import router as orders_router
 app.include_router(orders_router)
 from routers.approval import router as approval_router
 app.include_router(approval_router)
+from routers.maintenance import router as maintenance_router
+app.include_router(maintenance_router)
