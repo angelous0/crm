@@ -126,14 +126,35 @@ export function ContactosTab({ cuentaId }) {
     <div data-testid="section-contactos">
       <div className="flex items-center gap-3 mb-3 bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm">
         <div className="flex items-center gap-1.5">
-          <Switch checked={showInactive} onCheckedChange={setShowInactive} className="scale-[0.7]" data-testid="toggle-show-inactive-contactos" />
+          <Switch checked={showInactive} onCheckedChange={v => { setShowInactive(v); setSelected(new Set()); }} className="scale-[0.7]" data-testid="toggle-show-inactive-contactos" />
           <span className="text-[10px] text-slate-500 flex items-center gap-0.5"><EyeOff size={10} />Mostrar inactivos</span>
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1.5 mb-2 bg-slate-800 text-white text-[11px] rounded-lg animate-in slide-in-from-top duration-150" data-testid="bulk-contactos-bar">
+          <span className="font-semibold">{selected.size} seleccionado(s)</span>
+          <Button size="sm" variant="secondary" className="h-6 text-[10px] bg-red-600 hover:bg-red-700 text-white border-0"
+            onClick={() => handleBatchToggle(false)} disabled={batchLoading} data-testid="bulk-deactivate-contactos">
+            {batchLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Power size={11} className="mr-1" />}
+            Inactivar ({selected.size})
+          </Button>
+          <Button size="sm" variant="secondary" className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+            onClick={() => handleBatchToggle(true)} disabled={batchLoading} data-testid="bulk-activate-contactos">
+            <Power size={11} className="mr-1" />Activar ({selected.size})
+          </Button>
+          <button onClick={() => setSelected(new Set())} className="ml-auto text-[10px] text-slate-300 hover:text-white">Deseleccionar</button>
+        </div>
+      )}
+
       <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50/50">
+              <TableHead className="w-[32px] px-1">
+                <Checkbox checked={contactos.length > 0 && selected.size === contactos.length} onCheckedChange={toggleSelectAll} className="scale-[0.8]" data-testid="select-all-contactos" />
+              </TableHead>
               <TableHead>Nombre</TableHead>
               <TableHead>Telefono</TableHead>
               <TableHead>WhatsApp</TableHead>
@@ -144,9 +165,15 @@ export function ContactosTab({ cuentaId }) {
           </TableHeader>
           <TableBody>
             {contactos.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="h-16 text-center text-slate-500 text-xs">Sin contactos</TableCell></TableRow>
-            ) : contactos.map(c => (
-              <TableRow key={c.contacto_partner_odoo_id} className={c.is_active === false ? "opacity-60" : ""}>
+              <TableRow><TableCell colSpan={7} className="h-16 text-center text-slate-500 text-xs">Sin contactos</TableCell></TableRow>
+            ) : contactos.map(c => {
+              const isChecked = selected.has(c.contacto_partner_odoo_id);
+              return (
+              <TableRow key={c.contacto_partner_odoo_id} className={`${c.is_active === false ? "opacity-60" : ""} ${isChecked ? "bg-blue-50" : ""}`}>
+                <TableCell className="px-1 w-[32px]">
+                  <Checkbox checked={isChecked} onCheckedChange={() => toggleSelectOne(c.contacto_partner_odoo_id)} className="scale-[0.8]"
+                    data-testid={`check-contacto-${c.contacto_partner_odoo_id}`} />
+                </TableCell>
                 <TableCell className="font-medium text-xs">
                   {c.partner_nombre || `ID: ${c.contacto_partner_odoo_id}`}
                   {c.is_principal && <Badge variant="outline" className="ml-1 text-[8px]">PRINCIPAL</Badge>}
