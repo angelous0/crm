@@ -162,7 +162,7 @@ export default function ComercialPage() {
                 {detailMode ? (
                   <LinesTable rows={rows} />
                 ) : (
-                  <HeadersTable rows={rows} onSelect={setSelectedOrder} />
+                  <HeadersTable rows={rows} onSelect={setSelectedOrder} onOverride={setOverrideOrder} />
                 )}
               </div>
               {(page > 1 || data.has_next) && (
