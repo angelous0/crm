@@ -93,9 +93,14 @@ export function VentasTab({ cuentaId }) {
                       <span className="flex items-center gap-1">
                         {r.order_name || r.order_id}
                         {r.has_override && (
-                          <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none" data-testid="override-badge">REASIGNADO</span>
+                          <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none"
+                            title={r.original_partner_name ? `Cliente original: ${r.original_partner_name}` : undefined}
+                            data-testid="override-badge">REASIGNADO</span>
                         )}
                       </span>
+                      {r.has_override && r.original_partner_name && (
+                        <span className="block text-[9px] text-slate-400 mt-0.5">orig: {r.original_partner_name}</span>
+                      )}
                     </TableCell>
                     {detailMode && <TableCell className="text-xs truncate max-w-[140px]">{r.modelo_display || "-"}</TableCell>}
                     {detailMode && <TableCell className="text-xs">{r.talla || "-"}</TableCell>}
