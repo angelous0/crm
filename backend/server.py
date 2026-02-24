@@ -1406,8 +1406,9 @@ async def get_cuenta_ventas_lines(
             SELECT pol.odoo_id AS line_id,
                    po.odoo_id AS order_id, po.name AS order_name,
                    po.date_order AS fecha,
-                   po.partner_id AS owner_partner_id,
+                   {_EFFECTIVE_PARTNER} AS owner_partner_id,
                    rp.name AS owner_partner_name,
+                   (ov_po.order_id IS NOT NULL) AS has_override,
                    pol.product_id AS product_product_id,
                    vv.product_tmpl_id,
                    COALESCE(pt.name, '') AS modelo_display,
@@ -1417,9 +1418,10 @@ async def get_cuenta_ventas_lines(
                    pol.qty, pol.price_unit, pol.price_subtotal AS subtotal
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
-            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = po.partner_id AND rp.company_key = 'GLOBAL'
+            {_OVERRIDE_JOIN}
+            LEFT JOIN odoo.res_partner rp ON rp.odoo_id = {_EFFECTIVE_PARTNER} AND rp.company_key = 'GLOBAL'
             {_CATALOG_JOIN}
-            WHERE po.partner_id = ANY($1)
+            WHERE {_EFFECTIVE_PARTNER} = ANY($1)
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
               {_CATALOG_FILTER}
