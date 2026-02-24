@@ -32,6 +32,15 @@ export default function PendientesPage() {
   const [modal, setModal] = useState({ type: null, row: null });
   const [actionLoading, setActionLoading] = useState(false);
 
+  /* Handle action dispatch */
+  const handleAction = useCallback((action) => {
+    if (action.type === "approve") {
+      doApproveDirectly(action.row);
+    } else {
+      setModal(action);
+    }
+  }, []); // eslint-disable-line
+
   /* Fetch counts */
   const fetchCounts = useCallback(async () => {
     try {
