@@ -843,7 +843,7 @@ async def _create_views(conn):
         logger.warning(f"Could not create v_ventas_pos_filtradas: {e}")
 
 
-    # 3.5) v_comercial_mov_flat – unified SALE + RESERVA view with owner mapping
+    # 3.5) v_comercial_mov_flat – unified SALE + RESERVA view with owner mapping + override
     try:
         has_vpl = 'v_pos_line_full' in odoo_tables
         has_rp = 'res_partner' in odoo_tables
@@ -863,8 +863,9 @@ async def _create_views(conn):
                     vpl.pos_order_line_id AS line_id,
                     vpl.date_order AS fecha,
                     vpl.contacto_partner_id AS partner_id,
-                    COALESCE(paf.cuenta_partner_odoo_id, vpl.contacto_partner_id) AS owner_partner_id,
+                    COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, vpl.contacto_partner_id) AS owner_partner_id,
                     rp_owner.name           AS owner_partner_name,
+                    (ov_po.order_id IS NOT NULL) AS has_override,
                     vpl.product_id          AS product_product_id,
                     vpl.product_tmpl_id,
                     pt.name                 AS modelo,
@@ -884,11 +885,13 @@ async def _create_views(conn):
                     vpl.price_unit,
                     vpl.price_subtotal      AS subtotal
                 FROM odoo.v_pos_line_full vpl
+                LEFT JOIN crm.pos_order_partner_override ov_po
+                    ON ov_po.order_id = vpl.order_id
                 LEFT JOIN crm.v_partner_account_final paf
                     ON paf.contacto_partner_odoo_id = vpl.contacto_partner_id
                 LEFT JOIN odoo.res_partner rp_owner
                     ON rp_owner.company_key = 'GLOBAL'
-                    AND rp_owner.odoo_id = COALESCE(paf.cuenta_partner_odoo_id, vpl.contacto_partner_id)
+                    AND rp_owner.odoo_id = COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, vpl.contacto_partner_id)
                 LEFT JOIN odoo.product_template pt
                     ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vpl.product_tmpl_id
                 WHERE vpl.is_cancelled = false
