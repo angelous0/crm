@@ -12,7 +12,6 @@ import CuentasAirtable from "@/pages/CuentasAirtable";
 import CuentaDetalle from "@/pages/CuentaDetalle";
 import Contactos from "@/pages/Contactos";
 import Agenda from "@/pages/Agenda";
-import Ventas from "@/pages/Ventas";
 import StockDashboard from "@/pages/StockDashboard";
 import BalanceTallas from "@/pages/BalanceTallas";
 import ComercialPage from "@/pages/ComercialPage";
