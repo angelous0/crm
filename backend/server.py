@@ -1411,6 +1411,7 @@ async def get_cuenta_ventas_lines(
                    {_EFFECTIVE_PARTNER} AS owner_partner_id,
                    rp.name AS owner_partner_name,
                    (ov_po.order_id IS NOT NULL) AS has_override,
+                   CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
                    pol.product_id AS product_product_id,
                    vv.product_tmpl_id,
                    COALESCE(pt.name, '') AS modelo_display,
