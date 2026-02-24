@@ -1,0 +1,71 @@
+{
+  "summary": "Iteration 31: Bulk inactivation feature (Sin ventas) - ALL 10 TEST SCENARIOS PASSED. Backend preview endpoint working correctly. Frontend modal with scope/period selectors, preview functionality, and UI all working as expected. Execute button NOT clicked as instructed (destructive action).",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "console_warnings": [
+      {"component": "CuentasDirectoryGrid", "issue": "React hydration warning about span inside tr/tbody - cosmetic only, caused by development tooling injection, not affecting functionality"}
+    ]
+  },
+
+  "passed_tests": [
+    "1. Backend: GET /api/maintenance/inactivate-no-sales/preview returns correct counts for scope=ambos (2,238 cuentas, 0 contactos)",
+    "2. Backend: Preview with months=12 returns more candidates than all-time (verified >= all-time count)",
+    "3. Backend: Preview with scope=cuentas only returns cuentas data (contactos_candidates=0)",
+    "4. Backend: Preview with scope=contactos returns 0 contactos (all are linked - cuenta_partner_odoo_id NOT NULL)",
+    "5. Backend: Invalid scope parameter returns 400 error",
+    "6. Backend: Unauthenticated request returns 401",
+    "7. Backend: Sample cuentas structure validated (id, nombre, vat, ciudad fields present)",
+    "8. Frontend: 'Sin ventas' button visible in Cuentas toolbar at /cuentas page (top-right, lg+ screens only)",
+    "9. Frontend: Clicking 'Sin ventas' opens modal with scope and period selectors",
+    "10. Frontend: Click 'Ver preview' loads candidate counts (2,238 cuentas, 0 contactos) and sample list",
+    "11. Frontend: Changing scope cleared preview results (re-enables preview)",
+    "12. Frontend: Execute button is red (bg-red-600) and shows total count 'Inactivar 2,238 registro(s)'",
+    "13. Frontend: Cancel button closes modal cleanly"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_maintenance_preview.py",
+    "/app/test_reports/pytest/pytest_maintenance_preview.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "maintenance.py: Well-structured router with proper SQL query construction and date filtering",
+    "InactivateNoSalesModal.jsx: Good UX with warning message before destructive action, proper data-testid attributes",
+    "CuentasToolbar.jsx: Sin ventas button properly hidden on mobile (hidden lg:flex)",
+    "Preview clearing on scope/period change is good behavior - prevents stale data display"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_maintenance_preview.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (7/7 pytest tests passed)",
+    "frontend": "100% (all 6 UI scenarios verified via Playwright)"
+  },
+
+  "test_credentials": {
+    "email": "admin@crm.com",
+    "password": "admin123"
+  },
+
+  "seed_data_creation": "None - used existing production data for preview testing only",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Bulk inactivation feature complete. Key endpoints: GET /api/maintenance/inactivate-no-sales/preview (tested), POST /api/maintenance/inactivate-no-sales (NOT tested - destructive). Frontend modal at /cuentas with 'Sin ventas' button in toolbar. Current state: 2,238 cuentas with 0 sales all-time are candidates, 0 contactos (all linked). Execute button was NOT clicked to protect production data.",
+
+  "rca_of_the_issue": "N/A - no bugs found. All bulk inactivation preview features working as specified."
+}
