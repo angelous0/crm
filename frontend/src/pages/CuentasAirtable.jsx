@@ -104,7 +104,8 @@ export default function CuentasAirtable() {
   return (
     <div className="flex flex-col" style={{ height: "100vh" }} data-testid="cuentas-airtable">
       {/* Top Toolbar */}
-      <CuentasToolbar filters={filters} onFiltersChange={handleFiltersChange} totalRows={totalRows} />
+      <CuentasToolbar filters={filters} onFiltersChange={handleFiltersChange} totalRows={totalRows}
+        onInactivateNoSales={() => setShowInactivateModal(true)} />
 
       {/* Split View */}
       <div className="flex flex-1 min-h-0">
