@@ -99,6 +99,11 @@ class ToggleActiveInput(BaseModel):
     is_active: bool
     reason: Optional[str] = None
 
+class BatchToggleActiveInput(BaseModel):
+    ids: list
+    is_active: bool
+    reason: Optional[str] = None
+
 
 # ─── APP SETUP ─────────────────────────────────────────────────────────────────
 
