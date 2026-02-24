@@ -71,7 +71,7 @@ async def comercial_orders(
         rows = records_to_list(await conn.fetch(f"""
             SELECT doc_tipo, order_id, order_name, date_order, state,
                    amount_total, owner_partner_id, owner_partner_name,
-                   qty_total, lines_count
+                   has_override, qty_total, lines_count
             FROM {HEADER_VIEW} {where}
             ORDER BY date_order DESC, order_id DESC
             LIMIT ${len(p2)-1} OFFSET ${len(p2)}
