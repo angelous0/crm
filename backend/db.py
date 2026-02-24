@@ -1055,6 +1055,8 @@ async def _create_views(conn):
             LEFT JOIN odoo.res_partner rp_owner
                 ON COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, po.partner_id) = rp_owner.odoo_id
                 AND rp_owner.company_key = 'GLOBAL'
+            LEFT JOIN odoo.res_partner rp_orig
+                ON ov_po.order_id IS NOT NULL AND rp_orig.odoo_id = po.partner_id AND rp_orig.company_key = 'GLOBAL'
             WHERE COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false;
         """)
