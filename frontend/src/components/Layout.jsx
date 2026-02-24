@@ -4,10 +4,11 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
   CalendarClock, LogOut, ChevronRight, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText
+  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText, ClipboardCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import api from "@/lib/api";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -17,6 +18,7 @@ const navItems = [
   { to: "/creditos", icon: FileText, label: "Creditos" },
   { to: "/catalogo", icon: Package, label: "Catalogo" },
   { to: "/cuentas", icon: Users, label: "Cuentas" },
+  { to: "/pendientes", icon: ClipboardCheck, label: "Pendientes", badge: true },
   { to: "/contactos", icon: UserCircle, label: "Contactos" },
   { to: "/agenda", icon: CalendarClock, label: "Agenda" },
 ];
