@@ -890,6 +890,7 @@ async def _create_views(conn):
                     COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, vpl.contacto_partner_id) AS owner_partner_id,
                     rp_owner.name           AS owner_partner_name,
                     (ov_po.order_id IS NOT NULL) AS has_override,
+                    CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
                     vpl.product_id          AS product_product_id,
                     vpl.product_tmpl_id,
                     pt.name                 AS modelo,
