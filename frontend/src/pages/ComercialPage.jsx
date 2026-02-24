@@ -51,6 +51,7 @@ export default function ComercialPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [overrideOrder, setOverrideOrder] = useState(null);
   const debounceRef = useRef(null);
   const LIMIT = 50;
 
