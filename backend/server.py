@@ -666,8 +666,7 @@ async def get_cuentas_list(
             data_params = params.copy()
             data_params.extend([limit, offset])
             rows = await conn.fetch(
-                f"""{kpi_cte}
-                SELECT
+                f"""SELECT
                     cl.cuenta_partner_odoo_id AS id,
                     rp.name AS nombre,
                     COALESCE(rp.city::text, '') AS depto_name,
@@ -682,7 +681,7 @@ async def get_cuentas_list(
                          THEN (COALESCE(k.qty_ytd_cur, 0)::float
                                / ((COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0))::float / 2.0)) - 1.0
                          ELSE NULL END AS pct_vs_avg_ytd
-                {base_from_kpi}
+                {base_from}
                 {where}
                 ORDER BY {order_col} {order_dir} {nulls}
                 LIMIT ${len(data_params)-1} OFFSET ${len(data_params)}""",
