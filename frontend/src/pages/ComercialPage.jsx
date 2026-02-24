@@ -185,11 +185,15 @@ export default function ComercialPage() {
 
       {/* Order detail drawer (only in header mode) */}
       {!detailMode && selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      {overrideOrder && (
+        <CustomerOverrideModal order={overrideOrder} onClose={() => setOverrideOrder(null)}
+          onSaved={() => fetchData(page)} />
+      )}
     </div>
   );
 }
 
-function HeadersTable({ rows, onSelect }) {
+function HeadersTable({ rows, onSelect, onOverride }) {
   return (
     <table className="w-full text-[10px] border-collapse" data-testid="orders-table">
       <thead className="sticky top-0 bg-slate-100 z-10">
