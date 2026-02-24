@@ -632,7 +632,7 @@ async def get_cuentas_list(
             if q:
                 params.append(f"%{q}%")
                 idx = len(params)
-                where += f" AND (rp.name ILIKE ${idx} OR COALESCE(rp.vat,'') ILIKE ${idx} OR COALESCE(rp.phone::text,'') ILIKE ${idx} OR COALESCE(rp.mobile::text,'') ILIKE ${idx} OR COALESCE(rp.city::text,'') ILIKE ${idx})"
+                where += f" AND (rp.name ILIKE ${idx} OR COALESCE(rp.vat,'') ILIKE ${idx} OR COALESCE(rp.phone::text,'') ILIKE ${idx} OR COALESCE(rp.mobile::text,'') ILIKE ${idx} OR COALESCE(rp.state_name::text,'') ILIKE ${idx})"
             if estado:
                 params.append(estado)
                 where += f" AND COALESCE(cu.estado_comercial, 'ACTIVO') = ${len(params)}"
@@ -641,7 +641,7 @@ async def get_cuentas_list(
                 where += f" AND cu.clasificacion = ${len(params)}"
             if ciudad:
                 params.append(f"%{ciudad}%")
-                where += f" AND rp.city::text ILIKE ${len(params)}"
+                where += f" AND rp.state_name::text ILIKE ${len(params)}"
             if asignado:
                 params.append(f"%{asignado}%")
                 where += f" AND cu.asignado_a ILIKE ${len(params)}"
@@ -659,7 +659,7 @@ async def get_cuentas_list(
 
             sort_map = {
                 "name": "CASE WHEN rp.name IS NULL OR btrim(rp.name) = '' THEN 1 ELSE 0 END, rp.name",
-                "depto": "rp.city",
+                "depto": "rp.state_name",
                 "last_purchase": "k.last_purchase_date",
                 "qty_12m": "k.qty_12m",
                 "orders_12m": "k.orders_12m",
@@ -675,7 +675,7 @@ async def get_cuentas_list(
                 f"""SELECT
                     cl.cuenta_partner_odoo_id AS id,
                     rp.name AS nombre,
-                    COALESCE(rp.city::text, '') AS depto_name,
+                    COALESCE(rp.state_name::text, '') AS depto_name,
                     COALESCE(cu.estado_comercial, 'ACTIVO') AS estado,
                     COALESCE(cu.is_active, true) AS is_active,
                     COALESCE(rp.phone::text, '') AS raw_phone,
@@ -728,12 +728,12 @@ async def get_cuentas_filter_options(user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
         try:
-            ciudades = [r['city'] for r in await conn.fetch("""
-                SELECT DISTINCT rp.city::text AS city
+            ciudades = [r['state_name'] for r in await conn.fetch("""
+                SELECT DISTINCT rp.state_name::text AS state_name
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
-                WHERE rp.city IS NOT NULL AND btrim(rp.city::text) <> ''
-                ORDER BY city
+                WHERE rp.state_name IS NOT NULL AND btrim(rp.state_name::text) <> ''
+                ORDER BY state_name
             """)]
             asignados = [r['asignado_a'] for r in await conn.fetch("""
                 SELECT DISTINCT cu.asignado_a
