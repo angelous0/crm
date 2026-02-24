@@ -19,7 +19,6 @@ const navItems = [
   { to: "/cuentas", icon: Users, label: "Cuentas" },
   { to: "/contactos", icon: UserCircle, label: "Contactos" },
   { to: "/agenda", icon: CalendarClock, label: "Agenda" },
-  { to: "/ventas", icon: ShoppingCart, label: "Ventas" },
 ];
 
 export default function Layout({ children }) {
