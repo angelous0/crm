@@ -4091,3 +4091,5 @@ app.include_router(sync_router)
 
 from routers.creditos import router as creditos_router
 app.include_router(creditos_router)
+from routers.orders import router as orders_router
+app.include_router(orders_router)
