@@ -561,6 +561,48 @@ async def get_cuentas(
             return {"items": [], "total": 0, "page": page, "error": str(e)}
 
 
+import re as _re
+
+def _normalize_phone(raw):
+    """Strip non-digits from a phone string."""
+    if not raw:
+        return ""
+    return _re.sub(r'[^0-9]', '', str(raw))
+
+def _apply_phone(row):
+    """Compute phone_display and phone_whatsapp from raw_phone/raw_mobile."""
+    rp = _normalize_phone(row.get('raw_phone', ''))
+    rm = _normalize_phone(row.get('raw_mobile', ''))
+    # Dedup: if both are the same normalized, treat as one
+    if rp and rm and rp == rm:
+        rp = ""  # keep mobile only
+    # Priority: mobile > phone
+    if rm:
+        primary_norm = rm
+        primary_display = str(row.get('raw_mobile', '')).strip()
+    elif rp:
+        primary_norm = rp
+        primary_display = str(row.get('raw_phone', '')).strip()
+    else:
+        row['phone_display'] = ""
+        row['phone_whatsapp'] = ""
+        row.pop('raw_phone', None)
+        row.pop('raw_mobile', None)
+        return
+    row['phone_display'] = primary_display
+    # Build wa.me number
+    wa = ""
+    if len(primary_norm) == 9 and primary_norm[0] == '9':
+        wa = f"51{primary_norm}"
+    elif primary_norm.startswith("51") and len(primary_norm) >= 11:
+        wa = primary_norm
+    elif len(primary_norm) >= 10:
+        wa = primary_norm
+    row['phone_whatsapp'] = wa
+    row.pop('raw_phone', None)
+    row.pop('raw_mobile', None)
+
+
 @cuentas_router.get("/list")
 async def get_cuentas_list(
     q: str = "", estado: str = "", clasificacion: str = "",
