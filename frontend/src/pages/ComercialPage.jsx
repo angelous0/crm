@@ -205,16 +205,24 @@ function HeadersTable({ rows, onSelect, onOverride }) {
           <th className="text-right px-2 py-1.5 font-semibold">Total</th>
           <th className="text-right px-2 py-1.5 font-semibold">Uds</th>
           <th className="text-right px-2 py-1.5 font-semibold">Lineas</th>
+          <th className="px-2 py-1.5 w-6"></th>
         </tr>
       </thead>
       <tbody>
         {!rows.length ? (
-          <tr><td colSpan={7} className="text-center py-8 text-slate-400">Sin datos</td></tr>
+          <tr><td colSpan={8} className="text-center py-8 text-slate-400">Sin datos</td></tr>
         ) : rows.map((r, i) => (
           <tr key={`${r.order_id}-${i}`} className={`cursor-pointer ${i % 2 ? "bg-slate-50/50" : ""} hover:bg-blue-50 transition-colors`}
             onClick={() => onSelect(r)} data-testid={`order-row-${r.order_id}`}>
             <td className="px-2 py-1 whitespace-nowrap">{fmtDate(r.date_order)}</td>
-            <td className="px-2 py-1 font-mono text-slate-600 text-[9px]">{r.order_name || r.order_id}</td>
+            <td className="px-2 py-1 font-mono text-slate-600 text-[9px]">
+              <span className="flex items-center gap-1">
+                {r.order_name || r.order_id}
+                {r.has_override && (
+                  <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none">REASIGNADO</span>
+                )}
+              </span>
+            </td>
             <td className="px-2 py-1">
               <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "paid" ? "bg-emerald-100 text-emerald-700" : r.state === "done" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
                 {r.state}
