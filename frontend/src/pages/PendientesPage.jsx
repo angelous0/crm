@@ -12,6 +12,7 @@ import {
   Loader2, Search, Check, X, Link2, ChevronLeft, ChevronRight,
   MessageCircle, ShieldCheck, ShieldX, ArrowRightLeft, AlertTriangle, Users
 } from "lucide-react";
+import { SyncButton } from "@/components/SyncButton";
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" }) : "-";
 
@@ -129,6 +130,7 @@ export default function PendientesPage() {
             <p className="text-xs text-slate-500 mt-0.5">Nuevos registros sincronizados desde Odoo</p>
           </div>
           <div className="flex items-center gap-2">
+            <SyncButton jobCode="RES_PARTNER" label="Actualizar Clientes" onSuccess={refresh} />
             <Badge variant="outline" className="text-xs font-mono" data-testid="pending-total-badge">
               {counts.cuentas + counts.contactos} pendientes
             </Badge>
