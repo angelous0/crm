@@ -7,6 +7,7 @@ import {
   Loader2, Calendar, Hash, Users, FileText, DollarSign,
   ChevronLeft, ChevronRight, Download, List
 } from "lucide-react";
+import { SyncButton } from "@/components/SyncButton";
 
 function fmtNum(n) { return Number(n || 0).toLocaleString("es-PE"); }
 function fmtMoney(n) { return "S/ " + Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -136,6 +137,7 @@ export default function CreditosPage() {
         </label>
 
         <div className="ml-auto flex items-center gap-3 text-[10px]">
+          <SyncButton jobCode="AR_CREDIT_INVOICES" label="Actualizar Creditos" onSuccess={() => fetchData(page)} variant="bar" />
           <span className="text-slate-400">Pag <b className="text-white">{page}</b></span>
         </div>
       </div>
