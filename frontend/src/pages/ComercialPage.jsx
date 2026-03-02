@@ -8,6 +8,7 @@ import {
   Loader2, Calendar, Hash, Users, ShoppingBag,
   ChevronLeft, ChevronRight, Download, List, ArrowRightLeft
 } from "lucide-react";
+import { SyncButton } from "@/components/SyncButton";
 
 function fmtNum(n) { return Number(n || 0).toLocaleString("es-PE"); }
 function fmtMoney(n) { return "S/ " + Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -120,6 +121,7 @@ export default function ComercialPage() {
         </label>
 
         <div className="ml-auto flex items-center gap-3 text-[10px]">
+          <SyncButton jobCode="POS_ORDERS" label="Actualizar Ventas" onSuccess={() => fetchData(page)} variant="bar" />
           <span className="text-slate-400">Pag <b className="text-white">{page}</b></span>
         </div>
       </div>
