@@ -55,7 +55,7 @@ async def init_database():
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS crm.usuario (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                email TEXT NOT NULL UNIQUE,
+                usuario TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 nombre TEXT,
                 rol TEXT DEFAULT 'vendedor',

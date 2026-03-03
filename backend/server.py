@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 
 # ─── JWT HELPERS ───────────────────────────────────────────────────────────────
 
-def create_token(user_id: str, email: str) -> str:
+def create_token(user_id: str, usuario: str) -> str:
     payload = {
         'sub': user_id,
-        'email': email,
+        'usuario': usuario,
         'exp': datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -52,12 +52,12 @@ async def get_current_user(authorization: str = Header(None)):
 # ─── PYDANTIC MODELS ──────────────────────────────────────────────────────────
 
 class RegisterInput(BaseModel):
-    email: str
+    usuario: str
     password: str
     nombre: Optional[str] = None
 
 class LoginInput(BaseModel):
-    email: str
+    usuario: str
     password: str
 
 class AprobarProductoInput(BaseModel):
@@ -141,16 +141,16 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 async def register(data: RegisterInput):
     p = await get_pool()
     async with p.acquire() as conn:
-        existing = await conn.fetchrow("SELECT id FROM crm.usuario WHERE email = $1", data.email)
+        existing = await conn.fetchrow("SELECT id FROM crm.usuario WHERE usuario = $1", data.usuario)
         if existing:
-            raise HTTPException(400, "Email ya registrado")
+            raise HTTPException(400, "Usuario ya registrado")
         pw_hash = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
         row = await conn.fetchrow(
-            "INSERT INTO crm.usuario (email, password_hash, nombre) VALUES ($1, $2, $3) RETURNING id, email, nombre, rol",
-            data.email, pw_hash, data.nombre
+            "INSERT INTO crm.usuario (usuario, password_hash, nombre) VALUES ($1, $2, $3) RETURNING id, usuario, nombre, rol",
+            data.usuario, pw_hash, data.nombre
         )
         user = record_to_dict(row)
-        token = create_token(user['id'], user['email'])
+        token = create_token(user['id'], user['usuario'])
         return {"token": token, "user": user}
 
 
@@ -158,14 +158,14 @@ async def register(data: RegisterInput):
 async def login(data: LoginInput):
     p = await get_pool()
     async with p.acquire() as conn:
-        row = await conn.fetchrow("SELECT id, email, nombre, rol, password_hash FROM crm.usuario WHERE email = $1", data.email)
+        row = await conn.fetchrow("SELECT id, usuario, nombre, rol, password_hash FROM crm.usuario WHERE usuario = $1", data.usuario)
         if not row:
             raise HTTPException(401, "Credenciales incorrectas")
         if not bcrypt.checkpw(data.password.encode(), row['password_hash'].encode()):
             raise HTTPException(401, "Credenciales incorrectas")
         user = record_to_dict(row)
         del user['password_hash']
-        token = create_token(user['id'], user['email'])
+        token = create_token(user['id'], user['usuario'])
         return {"token": token, "user": user}
 
 
@@ -173,7 +173,7 @@ async def login(data: LoginInput):
 async def me(user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
-        row = await conn.fetchrow("SELECT id, email, nombre, rol FROM crm.usuario WHERE id = $1::uuid", user['sub'])
+        row = await conn.fetchrow("SELECT id, usuario, nombre, rol FROM crm.usuario WHERE id = $1::uuid", user['sub'])
         if not row:
             raise HTTPException(404, "Usuario no encontrado")
         return record_to_dict(row)
@@ -752,7 +752,7 @@ async def batch_toggle_cuentas_active(data: BatchToggleActiveInput, user=Depends
     """Batch activate/deactivate cuentas with cascade to contactos."""
     p = await get_pool()
     async with p.acquire() as conn:
-        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+        user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
         ids = [int(i) for i in data.ids]
         if not ids:
             return {"ok": True, "cuentas_affected": 0, "contactos_affected": 0}
@@ -916,7 +916,7 @@ async def toggle_cuenta_active(cuenta_id: str, data: ToggleActiveInput, user=Dep
     p = await get_pool()
     async with p.acquire() as conn:
         odoo_id = int(cuenta_id)
-        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+        user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
 
         await conn.execute(
             "INSERT INTO crm.cuenta (cuenta_partner_odoo_id) VALUES ($1) ON CONFLICT DO NOTHING", odoo_id
@@ -2123,7 +2123,7 @@ async def batch_toggle_contactos_active(data: BatchToggleActiveInput, user=Depen
     """Batch activate/deactivate contactos with cascade if principal."""
     p = await get_pool()
     async with p.acquire() as conn:
-        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+        user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
         ids = [int(i) for i in data.ids]
         if not ids:
             return {"ok": True, "contactos_affected": 0, "cuentas_affected": 0}
@@ -2182,7 +2182,7 @@ async def toggle_contacto_active(contacto_odoo_id: str, data: ToggleActiveInput,
     p = await get_pool()
     async with p.acquire() as conn:
         odoo_id = int(contacto_odoo_id)
-        user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+        user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
 
         contacto = await conn.fetchrow(
             "SELECT * FROM crm.contacto WHERE contacto_partner_odoo_id = $1", odoo_id

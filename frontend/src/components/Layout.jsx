@@ -128,11 +128,11 @@ export default function Layout({ children }) {
               <div className="flex items-center gap-2.5 mb-2">
                 <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center">
                   <span className="text-[10px] font-semibold text-slate-600">
-                    {user?.nombre?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
+                    {user?.nombre?.[0]?.toUpperCase() || user?.usuario?.[0]?.toUpperCase() || "U"}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-900 truncate">{user?.nombre || user?.email}</p>
+                  <p className="text-xs font-medium text-slate-900 truncate">{user?.nombre || user?.usuario}</p>
                   <p className="text-[10px] text-slate-500 truncate">{user?.rol || "vendedor"}</p>
                 </div>
               </div>

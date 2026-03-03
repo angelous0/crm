@@ -26,16 +26,16 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.post("/auth/login", { email, password });
+  const login = async (usuario, password) => {
+    const res = await api.post("/auth/login", { usuario, password });
     localStorage.setItem("crm_token", res.data.token);
     localStorage.setItem("crm_user", JSON.stringify(res.data.user));
     setUser(res.data.user);
     return res.data;
   };
 
-  const register = async (email, password, nombre) => {
-    const res = await api.post("/auth/register", { email, password, nombre });
+  const register = async (usuario, password, nombre) => {
+    const res = await api.post("/auth/register", { usuario, password, nombre });
     localStorage.setItem("crm_token", res.data.token);
     localStorage.setItem("crm_user", JSON.stringify(res.data.user));
     setUser(res.data.user);

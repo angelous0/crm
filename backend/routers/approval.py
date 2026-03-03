@@ -200,7 +200,7 @@ async def approve_entity(
     if entity not in ("cuenta", "contacto"):
         raise HTTPException(400, "entity must be 'cuenta' or 'contacto'")
     pool = await get_pool()
-    user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+    user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
     async with pool.acquire() as conn:
         if entity == "cuenta":
             id_col = "cuenta_partner_odoo_id"
@@ -247,7 +247,7 @@ async def reject_entity(
     if len((data.note or "").strip()) < 3:
         raise HTTPException(422, "La nota debe tener al menos 3 caracteres")
     pool = await get_pool()
-    user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+    user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
     async with pool.acquire() as conn:
         if entity == "cuenta":
             id_col = "cuenta_partner_odoo_id"
@@ -289,7 +289,7 @@ async def link_cuenta(
 ):
     """Link a pending account to an existing approved account."""
     pool = await get_pool()
-    user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+    user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
     async with pool.acquire() as conn:
         # Find target cuenta UUID
         target = await conn.fetchrow(

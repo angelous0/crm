@@ -128,7 +128,7 @@ async def execute_inactivation(
 ):
     pool = await get_pool()
     date_clause = _date_filter(data.months)
-    user_email = user.get("email", "unknown") if isinstance(user, dict) else "unknown"
+    user_email = user.get("usuario", "unknown") if isinstance(user, dict) else "unknown"
     reason = data.reason or "SIN_VENTAS"
 
     async with pool.acquire() as conn:

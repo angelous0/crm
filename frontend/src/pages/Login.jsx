@@ -12,17 +12,17 @@ export default function Login() {
   const navigate = useNavigate();
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "", nombre: "" });
+  const [form, setForm] = useState({ usuario: "", password: "", nombre: "" });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       if (isRegister) {
-        await register(form.email, form.password, form.nombre);
+        await register(form.usuario, form.password, form.nombre);
         toast.success("Cuenta creada exitosamente");
       } else {
-        await login(form.email, form.password);
+        await login(form.usuario, form.password);
         toast.success("Bienvenido");
       }
       navigate("/");
@@ -72,17 +72,17 @@ export default function Login() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs uppercase tracking-wider font-semibold text-slate-500">
-                Email
+              <Label htmlFor="usuario" className="text-xs uppercase tracking-wider font-semibold text-slate-500">
+                Usuario
               </Label>
               <Input
-                id="email"
-                type="email"
-                data-testid="login-email-input"
-                placeholder="tu@empresa.com"
+                id="usuario"
+                type="text"
+                data-testid="login-usuario-input"
+                placeholder="Tu usuario"
                 required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                value={form.usuario}
+                onChange={(e) => setForm({ ...form, usuario: e.target.value })}
               />
             </div>
             <div className="space-y-2">
