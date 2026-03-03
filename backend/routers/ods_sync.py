@@ -59,6 +59,23 @@ async def _ods_post(path: str, json_body: dict):
         raise HTTPException(502, f"Error de conexion con ODS: {str(e)[:200]}")
 
 
+def _normalize_status(raw: dict) -> dict:
+    """Normalize the ODS job-status response to a flat format for the frontend."""
+    job = raw.get("job", {})
+    last_run = raw.get("last_run", {})
+    run_status = last_run.get("status", "")
+    status_map = {"OK": "SUCCESS", "RUNNING": "RUNNING", "ERROR": "ERROR"}
+    return {
+        "status": status_map.get(run_status, "IDLE"),
+        "last_success_at": job.get("last_success_at"),
+        "last_error": job.get("last_error") or last_run.get("error_message"),
+        "last_run_at": job.get("last_run_at"),
+        "rows_upserted": last_run.get("rows_upserted", 0),
+        "rows_updated": last_run.get("rows_updated", 0),
+        "job_code": job.get("job_code"),
+    }
+
+
 @router.post("/run")
 async def run_job(data: RunJobInput, user=Depends(_get_auth())):
     """Trigger a single sync job on the ODS."""
@@ -73,5 +90,6 @@ async def run_batch(data: RunBatchInput, user=Depends(_get_auth())):
 
 @router.get("/job-status")
 async def get_job_status(job_code: str, user=Depends(_get_auth())):
-    """Get the status of a sync job from the ODS."""
-    return await _ods_get("/api/odoo-sync/job-status", {"job_code": job_code})
+    """Get the status of a sync job from the ODS, normalized for frontend."""
+    raw = await _ods_get("/api/odoo-sync/job-status", {"job_code": job_code})
+    return _normalize_status(raw)

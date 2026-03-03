@@ -55,14 +55,17 @@ export function SyncButton({ jobCode, label, onSuccess, variant = "card" }) {
 
   const startPolling = useCallback(() => {
     clearInterval(pollRef.current);
+    let polls = 0;
     pollRef.current = setInterval(async () => {
+      polls++;
       const s = await fetchStatus();
-      if (!s || s.status !== "RUNNING") {
+      // Job finished (SUCCESS or ERROR) or max polls reached
+      if (!s || s.status !== "RUNNING" || polls >= 30) {
         clearInterval(pollRef.current);
         if (mountedRef.current) {
           setRunning(false);
           if (s?.status === "SUCCESS") {
-            toast.success(`${label}: sincronizacion completada`);
+            toast.success(`${label}: sincronizacion completada`, { duration: 4000 });
             if (onSuccess) onSuccess();
           } else if (s?.status === "ERROR") {
             toast.error(`${label}: error - ${s.last_error || "desconocido"}`);
@@ -76,8 +79,9 @@ export function SyncButton({ jobCode, label, onSuccess, variant = "card" }) {
     setRunning(true);
     try {
       await api.post("/ods-sync/run", { job_code: jobCode });
-      toast.info(`${label}: iniciando sincronizacion...`);
-      startPolling();
+      toast.info(`${label}: sincronizacion iniciada...`);
+      // Small delay then start polling (ODS processes in background)
+      setTimeout(() => startPolling(), 1500);
     } catch (e) {
       setRunning(false);
       const msg = e.response?.data?.detail || `Error al iniciar ${label}`;
