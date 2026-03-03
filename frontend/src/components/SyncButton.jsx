@@ -80,7 +80,12 @@ export function SyncButton({ jobCode, label, onSuccess, variant = "card" }) {
       startPolling();
     } catch (e) {
       setRunning(false);
-      toast.error(e.response?.data?.detail || `Error al iniciar ${label}`);
+      const msg = e.response?.data?.detail || `Error al iniciar ${label}`;
+      if (e.response?.status === 503) {
+        toast.error("Servidor ODS no disponible. Asegurate de que este activo.", { duration: 5000 });
+      } else {
+        toast.error(msg);
+      }
     }
   };
 
