@@ -4,14 +4,15 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
   CalendarClock, LogOut, ChevronRight, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText, ClipboardCheck
+  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText, ClipboardCheck, Sun
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import api from "@/lib/api";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/mi-dia", icon: Sun, label: "Mi Dia" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/stock-dashboard", icon: BarChart3, label: "Stock Dashboard" },
   { to: "/balance-tallas", icon: Grid3X3, label: "Balance de Tallas" },
   { to: "/comercial", icon: ShoppingBag, label: "Ventas y Reservas" },

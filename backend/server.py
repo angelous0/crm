@@ -4138,3 +4138,5 @@ from routers.maintenance import router as maintenance_router
 app.include_router(maintenance_router)
 from routers.ods_sync import router as ods_sync_router
 app.include_router(ods_sync_router)
+from routers.mi_dia import router as mi_dia_router
+app.include_router(mi_dia_router)

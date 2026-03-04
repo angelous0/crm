@@ -17,6 +17,7 @@ import BalanceTallas from "@/pages/BalanceTallas";
 import ComercialPage from "@/pages/ComercialPage";
 import CreditosPage from "@/pages/CreditosPage";
 import PendientesPage from "@/pages/PendientesPage";
+import MiDiaPage from "@/pages/MiDiaPage";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }) {
@@ -61,7 +62,9 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><MiDiaPage /></ProtectedRoute>} />
+          <Route path="/mi-dia" element={<ProtectedRoute><MiDiaPage /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/stock-dashboard" element={<ProtectedRoute><StockDashboard /></ProtectedRoute>} />
           <Route path="/balance-tallas" element={<ProtectedRoute><BalanceTallas /></ProtectedRoute>} />
           <Route path="/comercial" element={<ProtectedRoute><ComercialPage /></ProtectedRoute>} />
