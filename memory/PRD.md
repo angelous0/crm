@@ -62,8 +62,23 @@ frontend/src/
 - Added Tienda and Usuario Creador columns to pending approval list
 - Fallback to UID:XX when res_users sync is incomplete
 
+### 12. Reportes > Ventas Module (DONE - Mar 2026)
+- **Materialized view** `crm.mv_ventas_reporte`: Pre-computes flat reporting data with tienda, assigned_user_id (~0.7s queries vs 14s with raw views)
+- **Backend**: 4 endpoints in `/api/reportes/ventas/` (summary, by-day, top, filter-options)
+  - Summary: KPIs + YoY comparison (current vs same period last year)
+  - By-day: Daily series for chart (current + previous year)
+  - Top: Rankings by clientes/modelos/items/tallas/colores/tiendas with pagination
+  - Filter-options: Optimized dropdown values from base tables
+- **Frontend**: `ReportesVentasPage.jsx` with:
+  - Tab "Resumen": 4 KPI cards with YoY%, daily area chart (recharts) overlaying actual vs previous year
+  - Tab "Top": Ranked table with group-by selector + CSV export
+  - Filter bar: Range (YTD/MTD/Custom), Tienda, Vendedor, Marca, Tipo, Entalle, Tela, Hilo, Talla, Color
+- **Sidebar**: Collapsible "Reportes" section with "Ventas" sub-item
+- MV refreshes automatically when `/api/cuentas/refresh-kpis` is called (after sync)
+
 ## Backlog
 - P1: Manual account assignment (user selector in cuenta profile)
+- P1: Reportes > Stock, Créditos, Clientes (future sub-reports)
 - P2: Supervisor dashboard (team ranking)
 - P2: Quick action buttons in cuenta detail
 - P2: KPI time range toggle
