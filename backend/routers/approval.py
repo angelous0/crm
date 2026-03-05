@@ -85,10 +85,14 @@ async def get_pending(
                     COALESCE(rp.mobile::text, '') AS raw_mobile,
                     cu.created_at,
                     cu.last_seen_at,
-                    COALESCE(cu.approval_status, 'APPROVED') AS approval_status
+                    COALESCE(cu.approval_status, 'APPROVED') AS approval_status,
+                    COALESCE(k.orders_12m, 0) AS ventas_orders,
+                    COALESCE(k.qty_12m, 0) AS ventas_qty,
+                    k.last_purchase_date AS ventas_ultima
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
                 LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                LEFT JOIN crm.mv_cuenta_sales_kpi k ON k.cuenta_id = cl.cuenta_partner_odoo_id
                 {where}
                 ORDER BY cu.created_at DESC NULLS LAST
                 LIMIT ${len(data_params) - 1} OFFSET ${len(data_params)}
@@ -189,6 +193,36 @@ async def get_pending_count(user=Depends(_get_auth())):
             WHERE COALESCE(co.approval_status, 'APPROVED') = 'PENDING'
         """)
         return {"cuentas": cuenta_count or 0, "contactos": contacto_count or 0, "total": (cuenta_count or 0) + (contacto_count or 0)}
+
+
+@router.get("/partner/{partner_id}/sales")
+async def get_partner_sales(partner_id: int, user=Depends(_get_auth())):
+    """Get POS sales detail for a specific partner (for pending approval review)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = records_to_list(await conn.fetch("""
+            SELECT
+                po.odoo_id AS order_id,
+                po.name AS order_name,
+                po.date_order,
+                po.amount_total,
+                COALESCE(agg.qty_total, 0) AS qty_total,
+                COALESCE(agg.lines_count, 0) AS lines_count
+            FROM odoo.pos_order po
+            JOIN (
+                SELECT pol.order_id,
+                       COALESCE(SUM(pol.qty), 0) AS qty_total,
+                       COUNT(*) AS lines_count
+                FROM odoo.pos_order_line pol
+                GROUP BY pol.order_id
+            ) agg ON agg.order_id = po.odoo_id
+            WHERE po.partner_id = $1
+              AND COALESCE(po.is_cancel, false) = false
+              AND COALESCE(po.order_cancel, false) = false
+            ORDER BY po.date_order DESC
+            LIMIT 50
+        """, partner_id))
+        return {"rows": rows, "partner_id": partner_id}
 
 
 @router.post("/detect-new")

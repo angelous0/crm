@@ -10,11 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   Loader2, Search, Check, X, Link2, ChevronLeft, ChevronRight,
-  MessageCircle, ShieldCheck, ShieldX, ArrowRightLeft, AlertTriangle, Users
+  MessageCircle, ShieldCheck, ShieldX, ArrowRightLeft, AlertTriangle, Users,
+  ShoppingBag, Eye
 } from "lucide-react";
 import { SyncButton } from "@/components/SyncButton";
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" }) : "-";
+const fmtMoney = (n) => n ? `S/ ${Number(n).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "-";
 
 /* ───────── Main Page ───────── */
 export default function PendientesPage() {
@@ -32,6 +34,7 @@ export default function PendientesPage() {
   /* Modal state */
   const [modal, setModal] = useState({ type: null, row: null });
   const [actionLoading, setActionLoading] = useState(false);
+  const [salesModal, setSalesModal] = useState({ open: false, row: null });
 
   /* Handle action dispatch */
   const handleAction = useCallback((action) => {
@@ -180,8 +183,8 @@ export default function PendientesPage() {
 
       {/* Table */}
       <div className="flex-1 overflow-auto min-h-0 px-4 py-3">
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-          <table className="w-full text-xs border-collapse" style={{ minWidth: entity === "cuenta" ? "800px" : "700px" }}>
+        <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto shadow-sm">
+          <table className="w-full text-xs border-collapse" style={{ minWidth: entity === "cuenta" ? "950px" : "800px" }}>
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">Nombre</th>
@@ -192,24 +195,25 @@ export default function PendientesPage() {
                   <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">Cuenta</th>
                 )}
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">Creado</th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[180px]">Sugerencia</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[90px]">Ventas</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[160px]">Sugerencia</th>
                 <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[200px]">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={entity === "contacto" ? 8 : 7} className="h-40 text-center">
+                <tr><td colSpan={entity === "contacto" ? 9 : 8} className="h-40 text-center">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />
                 </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={entity === "contacto" ? 8 : 7} className="h-40 text-center text-slate-400">
+                <tr><td colSpan={entity === "contacto" ? 9 : 8} className="h-40 text-center text-slate-400">
                   <div className="flex flex-col items-center gap-2">
                     <ShieldCheck size={28} className="text-emerald-400" />
                     <span>No hay registros pendientes</span>
                   </div>
                 </td></tr>
               ) : rows.map((r) => (
-                <PendingRow key={r.id} row={r} entity={entity} onAction={handleAction} />
+                <PendingRow key={r.id} row={r} entity={entity} onAction={handleAction} onViewSales={(row) => setSalesModal({ open: true, row })} />
               ))}
             </tbody>
           </table>
@@ -253,13 +257,19 @@ export default function PendientesPage() {
         onClose={() => setModal({ type: null, row: null })}
         onConfirm={() => doApprove(modal.row, false)}
       />
+      <SalesDetailModal
+        open={salesModal.open}
+        row={salesModal.row}
+        onClose={() => setSalesModal({ open: false, row: null })}
+      />
     </div>
   );
 }
 
 /* ───────── Row Component ───────── */
-function PendingRow({ row, entity, onAction }) {
+function PendingRow({ row, entity, onAction, onViewSales }) {
   const s = row.suggestion;
+  const hasVentas = row.ventas_orders > 0;
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors h-[42px]" data-testid={`pending-row-${row.id}`}>
       <td className="px-3 py-1.5 font-medium text-slate-900 truncate max-w-[200px]" data-testid={`pending-name-${row.id}`}>
@@ -281,6 +291,21 @@ function PendingRow({ row, entity, onAction }) {
         <td className="px-3 py-1.5 text-slate-500 truncate max-w-[140px]" data-testid={`pending-cuenta-${row.id}`}>{row.cuenta_nombre || "-"}</td>
       )}
       <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap" data-testid={`pending-created-${row.id}`}>{fmtDate(row.created_at)}</td>
+      <td className="px-3 py-1.5" data-testid={`pending-ventas-${row.id}`}>
+        {hasVentas ? (
+          <button
+            onClick={() => onViewSales(row)}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-medium hover:bg-blue-100 transition-colors cursor-pointer"
+            data-testid={`view-sales-btn-${row.id}`}
+          >
+            <ShoppingBag size={10} />
+            {row.ventas_orders} ord · {row.ventas_qty} pzas
+            <Eye size={9} className="ml-0.5 opacity-60" />
+          </button>
+        ) : (
+          <span className="text-slate-300 text-[10px]">Sin ventas</span>
+        )}
+      </td>
       <td className="px-3 py-1.5" data-testid={`pending-suggestion-${row.id}`}>
         {s ? (
           <SuggestionBadge suggestion={s} onLink={() => onAction({ type: "link", row: { ...row, preselected: s.suggested_cuenta_id } })} />
@@ -557,6 +582,85 @@ function LinkModal({ open, row, loading, onClose, onConfirm }) {
             {loading && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
             {mode === "LINK" ? "Vincular" : "Fusionar"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+/* ───────── Sales Detail Modal ───────── */
+function SalesDetailModal({ open, row, onClose }) {
+  const [sales, setSales] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && row) {
+      setLoading(true);
+      setSales([]);
+      api.get(`/approval/partner/${row.id}/sales`)
+        .then((r) => setSales(r.data.rows || []))
+        .catch(() => toast.error("Error cargando ventas"))
+        .finally(() => setLoading(false));
+    }
+  }, [open, row]);
+
+  if (!row) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col" data-testid="sales-detail-modal">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <ShoppingBag size={16} className="text-blue-500" />
+            Ventas de "{row.nombre}"
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            {row.ventas_orders} orden(es) · {row.ventas_qty} piezas · Ultima: {fmtDate(row.ventas_ultima)}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-auto min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            </div>
+          ) : sales.length === 0 ? (
+            <div className="py-10 text-center text-xs text-slate-400">Sin ordenes encontradas</div>
+          ) : (
+            <table className="w-full text-xs border-collapse">
+              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">Orden</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">Fecha</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Piezas</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Lineas</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.map((s) => (
+                  <tr key={s.order_id} className="border-b border-slate-100 hover:bg-slate-50/60" data-testid={`sale-row-${s.order_id}`}>
+                    <td className="px-3 py-1.5 font-mono text-slate-700">{s.order_name || `#${s.order_id}`}</td>
+                    <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(s.date_order)}</td>
+                    <td className="px-3 py-1.5 text-right font-medium text-slate-800">{Math.round(s.qty_total)}</td>
+                    <td className="px-3 py-1.5 text-right text-slate-500">{s.lines_count}</td>
+                    <td className="px-3 py-1.5 text-right font-medium text-slate-800">{fmtMoney(s.amount_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-slate-50 border-t border-slate-300">
+                <tr>
+                  <td className="px-3 py-2 font-semibold text-slate-700" colSpan={2}>Total ({sales.length} ordenes)</td>
+                  <td className="px-3 py-2 text-right font-bold text-slate-900">{Math.round(sales.reduce((a, s) => a + (s.qty_total || 0), 0))}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{sales.reduce((a, s) => a + (s.lines_count || 0), 0)}</td>
+                  <td className="px-3 py-2 text-right font-bold text-slate-900">{fmtMoney(sales.reduce((a, s) => a + (s.amount_total || 0), 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose} className="text-xs" data-testid="sales-modal-close">Cerrar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -32,6 +32,12 @@ CRM B2B for managing accounts, contacts, sales, credits, stock, analytics, and s
 - **Integration**: SyncButton auto-calls detect-new after successful RES_PARTNER sync
 - **Performance**: Optimized `_compute_suggestions` from N individual queries to 2 batch queries (12s -> 2.7s)
 
+### 7. Ventas en Pendientes + Scroll Fix (DONE - Mar 2026)
+- **Sales Summary in Pending Table**: Added VENTAS column showing order count + piece count from `mv_cuenta_sales_kpi`
+- **Sales Detail Modal**: `GET /api/approval/partner/{id}/sales` endpoint returns POS orders with qty, lines, and total
+- **Click-to-detail**: Clicking the ventas badge opens a modal with full order detail and totals
+- **Horizontal Scroll Fix**: Changed table container from `overflow-hidden` to `overflow-x-auto` for small screens
+
 ## Architecture
 ```
 backend/routers/
@@ -47,7 +53,8 @@ frontend/src/
 - PATCH /api/cuentas/{id}/next-action, GET /api/users
 - GET /api/cuentas/list, POST /api/cuentas/refresh-kpis
 - GET /api/approval/pending, POST /api/approval/{entity}/{id}/approve|reject
-- POST /api/approval/detect-new (NEW)
+- POST /api/approval/detect-new
+- GET /api/approval/partner/{id}/sales (NEW)
 - POST/GET /api/ods-sync/run|job-status
 - GET /api/maintenance/inactivate-no-sales/preview
 
