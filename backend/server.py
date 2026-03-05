@@ -669,6 +669,8 @@ async def get_cuentas_list(
                 "last_purchase": "k.last_purchase_date",
                 "qty_12m": "k.qty_12m",
                 "orders_12m": "k.orders_12m",
+                "qty_total": "k.qty_total",
+                "orders_total": "k.orders_total",
                 "pct_ytd": "pct_vs_avg_ytd",
                 "tienda": "k.tienda",
             }
@@ -690,6 +692,8 @@ async def get_cuentas_list(
                     k.last_purchase_date,
                     COALESCE(k.qty_12m, 0)::bigint AS qty_12m,
                     COALESCE(k.orders_12m, 0)::bigint AS orders_12m,
+                    COALESCE(k.qty_total, 0)::bigint AS qty_total,
+                    COALESCE(k.orders_total, 0)::bigint AS orders_total,
                     CASE WHEN (COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0)) > 0
                          THEN (COALESCE(k.qty_ytd_cur, 0)::float
                                / ((COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0))::float / 2.0)) - 1.0

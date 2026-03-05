@@ -52,8 +52,10 @@ const COLUMNS = [
   { key: "tienda", label: "Tienda", sortKey: "tienda", defaultW: 100, minW: 60 },
   { key: "last_purchase", label: "Ult. compra", sortKey: "last_purchase", defaultW: 100, minW: 70 },
   { key: "hace", label: "Hace", sortKey: "last_purchase", defaultW: 55, minW: 40, align: "right" },
-  { key: "qty_12m", label: "Cant.", sortKey: "qty_12m", defaultW: 60, minW: 40, align: "right" },
-  { key: "orders_12m", label: "#Comp.", sortKey: "orders_12m", defaultW: 60, minW: 40, align: "right" },
+  { key: "qty_12m", label: "Cant. 12m", sortKey: "qty_12m", defaultW: 65, minW: 45, align: "right" },
+  { key: "orders_12m", label: "#Comp. 12m", sortKey: "orders_12m", defaultW: 70, minW: 45, align: "right" },
+  { key: "qty_total", label: "Cant. Total", sortKey: "qty_total", defaultW: 70, minW: 45, align: "right" },
+  { key: "orders_total", label: "#Comp. Total", sortKey: "orders_total", defaultW: 75, minW: 50, align: "right" },
   { key: "tel", label: "Tel", defaultW: 110, minW: 60 },
   { key: "pct_ytd", label: "%YTD", sortKey: "pct_ytd", defaultW: 65, minW: 45, align: "right" },
 ];
@@ -257,12 +259,18 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                   {/* Hace (días) */}
                   <td className={`px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap ${daysColor(r.last_purchase_date)}`}
                     data-testid={`days-since-${r.id}`}>{fmtDays(r.last_purchase_date)}</td>
-                  {/* Cant. */}
+                  {/* Cant. 12m */}
                   <td className="px-2 py-1 text-right font-mono text-slate-700"
                     data-testid={`qty-${r.id}`}>{fmtNum(r.qty_12m)}</td>
-                  {/* #Comp. */}
+                  {/* #Comp. 12m */}
                   <td className="px-2 py-1 text-right font-mono text-slate-500"
                     data-testid={`orders-${r.id}`}>{fmtNum(r.orders_12m)}</td>
+                  {/* Cant. Total */}
+                  <td className="px-2 py-1 text-right font-mono text-slate-500"
+                    data-testid={`qty-total-${r.id}`}>{fmtNum(r.qty_total)}</td>
+                  {/* #Comp. Total */}
+                  <td className="px-2 py-1 text-right font-mono text-slate-500"
+                    data-testid={`orders-total-${r.id}`}>{fmtNum(r.orders_total)}</td>
                   {/* Tel */}
                   <td className="px-2 py-1 whitespace-nowrap" data-testid={`phone-${r.id}`}>
                     {r.phone_display ? (
