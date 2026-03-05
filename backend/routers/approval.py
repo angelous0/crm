@@ -90,7 +90,7 @@ async def get_pending(
                     COALESCE(sales.qty_total, 0) AS ventas_qty,
                     sales.last_date AS ventas_ultima,
                     COALESCE(sales.monto_total, 0) AS ventas_monto,
-                    COALESCE(ru.name, '') AS creado_por,
+                    COALESCE(ru.name, CONCAT('UID:', rp.odoo_create_uid::text), '') AS creado_por,
                     k.tienda
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
