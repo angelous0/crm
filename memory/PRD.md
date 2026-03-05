@@ -44,8 +44,28 @@ frontend/src/
 - GET /api/my-day, POST/GET /api/tareas, POST /api/interacciones
 - POST/GET /api/ods-sync/run|job-status
 
+### 8. Tienda Column in Cuentas Directory & Filters (DONE - Mar 2026)
+- Materialized view mv_cuenta_sales_kpi includes tienda (hybrid: location_id > name-based fallback)
+- Filter dropdown with "Sin tienda" option
+- Labels added to all filter dropdowns
+
+### 9. Total Lifetime Columns (DONE - Mar 2026)
+- Added CANT. TOTAL and #COMP. TOTAL columns to directory
+- Resizable splitter between directory and detail panel (react-resizable-panels)
+
+### 10. Tienda Column in Detail Tabs (DONE - Mar 2026)
+- Added "Tienda" column to Ventas and Reservas tabs (order + detail modes)
+- Uses _TIENDA_JOIN (stock_location via location_id) + _TIENDA_EXPR (COALESCE with CASE fallback)
+- Créditos tab excluded: account_invoice_credit lacks location_id field
+
+### 11. Tienda + Usuario in Pendientes Page (DONE - Mar 2026)
+- Added Tienda and Usuario Creador columns to pending approval list
+- Fallback to UID:XX when res_users sync is incomplete
+
 ## Backlog
 - P1: Manual account assignment (user selector in cuenta profile)
 - P2: Supervisor dashboard (team ranking)
 - P2: Quick action buttons in cuenta detail
 - P2: KPI time range toggle
+- Known: Some res_users UIDs (92, 108) show as "UID:XX" - needs ODS sync fix
+- Known: CASE fallback for tienda is temporary - ODS should fully backfill location_id
