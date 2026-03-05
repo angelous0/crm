@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Package, Users, UserCircle,
   CalendarClock, LogOut, ChevronRight, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText, ClipboardCheck, Sun
+  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText, ClipboardCheck, Sun,
+  ChevronDown, TrendingUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -24,13 +25,23 @@ const navItems = [
   { to: "/agenda", icon: CalendarClock, label: "Agenda" },
 ];
 
+const reportesGroup = {
+  icon: TrendingUp,
+  label: "Reportes",
+  children: [
+    { to: "/reportes/ventas", label: "Ventas" },
+  ],
+};
+
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar_collapsed") === "true"; } catch { return false; }
   });
   const [pendingCount, setPendingCount] = useState(0);
+  const [reportesOpen, setReportesOpen] = useState(() => location.pathname.startsWith("/reportes"));
 
   useEffect(() => {
     try { localStorage.setItem("sidebar_collapsed", collapsed); } catch {}
@@ -121,6 +132,68 @@ export default function Layout({ children }) {
               }
               return link;
             })}
+
+            {/* Reportes Group */}
+            {(() => {
+              const isReportesActive = location.pathname.startsWith("/reportes");
+              const GroupIcon = reportesGroup.icon;
+
+              if (collapsed) {
+                return reportesGroup.children.map(child => (
+                  <Tooltip key={child.to}>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to={child.to}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 justify-center px-0 ${
+                            isActive ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                          }`
+                        }
+                        data-testid={`nav-reportes-${child.label.toLowerCase()}`}
+                      >
+                        <GroupIcon size={17} strokeWidth={1.5} />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="text-xs">{reportesGroup.label} &gt; {child.label}</TooltipContent>
+                  </Tooltip>
+                ));
+              }
+
+              return (
+                <div key="reportes-group">
+                  <button
+                    onClick={() => setReportesOpen(o => !o)}
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 ${
+                      isReportesActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                    data-testid="nav-reportes-toggle"
+                  >
+                    <GroupIcon size={17} strokeWidth={1.5} />
+                    <span className="truncate">{reportesGroup.label}</span>
+                    <ChevronDown size={13} className={`ml-auto transition-transform ${reportesOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {reportesOpen && (
+                    <div className="ml-6 mt-0.5 space-y-0.5">
+                      {reportesGroup.children.map(child => (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          className={({ isActive }) =>
+                            `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors duration-150 ${
+                              isActive ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                            }`
+                          }
+                          data-testid={`nav-reportes-${child.label.toLowerCase()}`}
+                        >
+                          <span className="w-1 h-1 rounded-full bg-current opacity-60"></span>
+                          {child.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </nav>
 
           {/* User section */}

@@ -18,6 +18,7 @@ import ComercialPage from "@/pages/ComercialPage";
 import CreditosPage from "@/pages/CreditosPage";
 import PendientesPage from "@/pages/PendientesPage";
 import MiDiaPage from "@/pages/MiDiaPage";
+import ReportesVentasPage from "@/pages/ReportesVentasPage";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }) {
@@ -75,6 +76,7 @@ function App() {
           <Route path="/pendientes" element={<ProtectedRoute><PendientesPage /></ProtectedRoute>} />
           <Route path="/contactos" element={<ProtectedRoute><Contactos /></ProtectedRoute>} />
           <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
+          <Route path="/reportes/ventas" element={<ProtectedRoute><ReportesVentasPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

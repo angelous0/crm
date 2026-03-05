@@ -730,6 +730,10 @@ async def refresh_cuenta_kpis(user=Depends(get_current_user)):
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY crm.mv_cuenta_sales_kpi")
+        try:
+            await conn.execute("REFRESH MATERIALIZED VIEW crm.mv_ventas_reporte")
+        except Exception:
+            pass
     return {"ok": True, "message": "KPIs actualizados"}
 
 
@@ -4185,3 +4189,5 @@ from routers.ods_sync import router as ods_sync_router
 app.include_router(ods_sync_router)
 from routers.mi_dia import router as mi_dia_router
 app.include_router(mi_dia_router)
+from routers.reportes import router as reportes_router
+app.include_router(reportes_router)

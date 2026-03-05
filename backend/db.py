@@ -1212,6 +1212,61 @@ async def _create_views(conn):
     except Exception as e:
         logger.warning(f"Could not create mv_cuenta_sales_kpi: {e}")
 
+    # 3.7c) mv_ventas_reporte – flat materialized view optimized for sales reporting
+    try:
+        await conn.execute("DROP MATERIALIZED VIEW IF EXISTS crm.mv_ventas_reporte CASCADE;")
+        await conn.execute("""
+            CREATE MATERIALIZED VIEW crm.mv_ventas_reporte AS
+            SELECT
+                (v.fecha AT TIME ZONE 'America/Lima')::date AS dia,
+                v.order_id,
+                v.owner_partner_id,
+                v.owner_partner_name,
+                v.product_tmpl_id,
+                v.modelo_display,
+                v.marca,
+                v.tipo,
+                v.entalle,
+                v.tela,
+                v.hilo,
+                v.talla,
+                v.color,
+                v.qty,
+                v.subtotal,
+                COALESCE(sl.x_nombre,
+                    CASE SPLIT_PART(po.name, '/', 1)
+                        WHEN 'BOSH GAMARRA' THEN 'BOOSH'
+                        WHEN 'G209' THEN 'GM209'
+                        WHEN 'GaleriaAzul' THEN 'AZUL'
+                        WHEN 'Gamarra207A' THEN 'GM207'
+                        WHEN 'Grau 238' THEN 'GR238'
+                        WHEN 'Grau238' THEN 'GR238'
+                        WHEN 'Grau 555-' THEN 'GR55'
+                        WHEN 'Sebastian Barranca 1556' THEN 'GM218'
+                        WHEN 'Venta Taller' THEN 'TALLER'
+                        WHEN 'Zapaton' THEN 'ZAP'
+                        ELSE NULL
+                    END
+                ) AS tienda,
+                cu.assigned_user_id
+            FROM crm.v_comercial_mov_flat v
+            LEFT JOIN odoo.pos_order po ON po.odoo_id = v.order_id
+            LEFT JOIN odoo.stock_location sl
+                ON sl.odoo_id = po.location_id AND sl.company_key = 'GLOBAL'
+                AND sl.x_nombre IS NOT NULL AND btrim(sl.x_nombre) <> ''
+            LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = v.owner_partner_id
+            WHERE v.doc_tipo = 'SALE';
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_dia ON crm.mv_ventas_reporte (dia);
+            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_partner ON crm.mv_ventas_reporte (owner_partner_id);
+            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_tienda ON crm.mv_ventas_reporte (tienda);
+            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_marca ON crm.mv_ventas_reporte (marca);
+        """)
+        logger.info("Materialized view crm.mv_ventas_reporte created")
+    except Exception as e:
+        logger.warning(f"Could not create mv_ventas_reporte: {e}")
+
 
     # 3.8) v_credito_invoice_header – 1 row per credit invoice
     try:
