@@ -191,6 +191,25 @@ async def get_pending_count(user=Depends(_get_auth())):
         return {"cuentas": cuenta_count or 0, "contactos": contacto_count or 0, "total": (cuenta_count or 0) + (contacto_count or 0)}
 
 
+@router.post("/detect-new")
+async def detect_new_pending(user=Depends(_get_auth())):
+    """Detect partners in v_cuentas_libres without a crm.cuenta row and create them as PENDING."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            INSERT INTO crm.cuenta (cuenta_partner_odoo_id, approval_status, created_at)
+            SELECT cl.cuenta_partner_odoo_id, 'PENDING', now()
+            FROM crm.v_cuentas_libres cl
+            LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+            WHERE cu.id IS NULL
+            ON CONFLICT (cuenta_partner_odoo_id) DO NOTHING
+            RETURNING cuenta_partner_odoo_id
+        """)
+        count = len(rows)
+        logger.info(f"detect-new: created {count} PENDING accounts")
+        return {"ok": True, "new_pending_count": count}
+
+
 @router.post("/{entity}/{partner_id}/approve")
 async def approve_entity(
     entity: str, partner_id: int, data: ApproveInput,
@@ -350,7 +369,7 @@ async def link_cuenta(
 
 
 async def _compute_suggestions(conn, pending_ids):
-    """Compute duplicate suggestions for pending accounts."""
+    """Compute duplicate suggestions for pending accounts using batch queries."""
     if not pending_ids:
         return {}
 
@@ -363,80 +382,92 @@ async def _compute_suggestions(conn, pending_ids):
         WHERE rp.odoo_id = ANY($1) AND rp.company_key = 'GLOBAL'
     """, pending_ids)
 
-    suggestions = {}
+    if not pending_rows:
+        return {}
+
+    # Build lookup dicts
+    pending_map = {}
+    docs = {}  # normalized_doc -> pending_id
+    phones = {}  # normalized_phone -> pending_id
+    names = {}  # pending_id -> name
 
     for pr in pending_rows:
         pid = pr['id']
+        pending_map[pid] = pr
         doc = _normalize(pr['vat'])
-        ph = _norm_phone(pr['mobile']) or _norm_phone(pr['phone'])
-        name = (pr['name'] or '').strip()
-
-        suggestion = None
-
-        # 1) Match by DOC (highest priority)
         if doc and len(doc) >= 6:
-            match = await conn.fetchrow("""
-                SELECT rp.odoo_id AS id, rp.name
-                FROM crm.v_cuentas_libres cl
-                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
-                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
-                WHERE COALESCE(cu.approval_status, 'APPROVED') = 'APPROVED'
-                  AND UPPER(TRIM(COALESCE(rp.vat, ''))) = $1
-                  AND rp.odoo_id <> $2
-                LIMIT 1
-            """, doc, pid)
-            if match:
-                suggestion = {
-                    "suggested_cuenta_id": match['id'],
-                    "suggested_name": match['name'],
-                    "reason": "DOC",
-                    "confidence": 1.0,
-                }
+            docs[doc] = pid
+        ph = _norm_phone(pr['mobile']) or _norm_phone(pr['phone'])
+        if ph and len(ph) >= 7:
+            phones[ph] = pid
+        name = (pr['name'] or '').strip()
+        if name and len(name) >= 4:
+            names[pid] = name
 
-        # 2) Match by TEL
-        if not suggestion and ph and len(ph) >= 7:
-            match = await conn.fetchrow("""
-                SELECT rp.odoo_id AS id, rp.name
-                FROM crm.v_cuentas_libres cl
-                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
-                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
-                WHERE COALESCE(cu.approval_status, 'APPROVED') = 'APPROVED'
-                  AND rp.odoo_id <> $2
-                  AND (
-                      REGEXP_REPLACE(COALESCE(rp.phone::text,''), '[^0-9]', '', 'g') = $1
-                      OR REGEXP_REPLACE(COALESCE(rp.mobile::text,''), '[^0-9]', '', 'g') = $1
-                  )
-                LIMIT 1
-            """, ph, pid)
-            if match:
-                suggestion = {
-                    "suggested_cuenta_id": match['id'],
-                    "suggested_name": match['name'],
+    suggestions = {}
+    matched_pids = set()
+
+    # 1) Batch DOC match – single query
+    if docs:
+        doc_values = list(docs.keys())
+        doc_matches = await conn.fetch("""
+            SELECT DISTINCT ON (UPPER(TRIM(COALESCE(rp.vat, ''))))
+                UPPER(TRIM(COALESCE(rp.vat, ''))) AS norm_vat,
+                rp.odoo_id AS id, rp.name
+            FROM crm.v_cuentas_libres cl
+            JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+            LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+            WHERE COALESCE(cu.approval_status, 'APPROVED') = 'APPROVED'
+              AND UPPER(TRIM(COALESCE(rp.vat, ''))) = ANY($1)
+              AND rp.odoo_id <> ALL($2)
+            ORDER BY UPPER(TRIM(COALESCE(rp.vat, ''))), rp.odoo_id
+        """, doc_values, pending_ids)
+        for m in doc_matches:
+            norm_vat = m['norm_vat']
+            if norm_vat in docs:
+                pid = docs[norm_vat]
+                if pid not in matched_pids:
+                    suggestions[pid] = {
+                        "suggested_cuenta_id": m['id'],
+                        "suggested_name": m['name'],
+                        "reason": "DOC",
+                        "confidence": 1.0,
+                    }
+                    matched_pids.add(pid)
+
+    # 2) Batch TEL match – single query for unmatched
+    unmatched_phones = {ph: pid for ph, pid in phones.items() if pid not in matched_pids}
+    if unmatched_phones:
+        phone_values = list(unmatched_phones.keys())
+        unmatched_pids = list(set(unmatched_phones.values()))
+        tel_matches = await conn.fetch("""
+            SELECT
+                REGEXP_REPLACE(COALESCE(rp.phone::text,''), '[^0-9]', '', 'g') AS norm_phone,
+                REGEXP_REPLACE(COALESCE(rp.mobile::text,''), '[^0-9]', '', 'g') AS norm_mobile,
+                rp.odoo_id AS id, rp.name
+            FROM crm.v_cuentas_libres cl
+            JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
+            LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+            WHERE COALESCE(cu.approval_status, 'APPROVED') = 'APPROVED'
+              AND rp.odoo_id <> ALL($2)
+              AND (
+                  REGEXP_REPLACE(COALESCE(rp.phone::text,''), '[^0-9]', '', 'g') = ANY($1)
+                  OR REGEXP_REPLACE(COALESCE(rp.mobile::text,''), '[^0-9]', '', 'g') = ANY($1)
+              )
+        """, phone_values, unmatched_pids)
+        for m in tel_matches:
+            matched_ph = m['norm_phone'] if m['norm_phone'] in unmatched_phones else (m['norm_mobile'] if m['norm_mobile'] in unmatched_phones else None)
+            if matched_ph and unmatched_phones[matched_ph] not in matched_pids:
+                pid = unmatched_phones[matched_ph]
+                suggestions[pid] = {
+                    "suggested_cuenta_id": m['id'],
+                    "suggested_name": m['name'],
                     "reason": "TEL",
                     "confidence": 1.0,
                 }
+                matched_pids.add(pid)
 
-        # 3) Match by NAME (fuzzy)
-        if not suggestion and name and len(name) >= 4:
-            match = await conn.fetchrow("""
-                SELECT rp.odoo_id AS id, rp.name
-                FROM crm.v_cuentas_libres cl
-                JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
-                LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
-                WHERE COALESCE(cu.approval_status, 'APPROVED') = 'APPROVED'
-                  AND rp.odoo_id <> $2
-                  AND rp.name ILIKE $1
-                LIMIT 1
-            """, f"%{name[:20]}%", pid)
-            if match:
-                suggestion = {
-                    "suggested_cuenta_id": match['id'],
-                    "suggested_name": match['name'],
-                    "reason": "NAME",
-                    "confidence": 0.6,
-                }
-
-        if suggestion:
-            suggestions[pid] = suggestion
+    # 3) Skip name matching for performance (low confidence, expensive ILIKE)
+    # Name matches are O(N) ILIKE queries and rarely actionable
 
     return suggestions

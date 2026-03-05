@@ -65,7 +65,22 @@ export function SyncButton({ jobCode, label, onSuccess, variant = "card" }) {
         if (mountedRef.current) {
           setRunning(false);
           if (s?.status === "SUCCESS") {
-            toast.success(`${label}: sincronizacion completada`, { duration: 4000 });
+            // After customer sync, detect new pending accounts
+            if (jobCode === "RES_PARTNER") {
+              try {
+                const det = await api.post("/approval/detect-new");
+                const nc = det.data?.new_pending_count || 0;
+                if (nc > 0) {
+                  toast.success(`${label}: ${nc} nuevo(s) cliente(s) detectado(s) como pendientes`, { duration: 5000 });
+                } else {
+                  toast.success(`${label}: sincronizacion completada (sin nuevos)`, { duration: 4000 });
+                }
+              } catch {
+                toast.success(`${label}: sincronizacion completada`, { duration: 4000 });
+              }
+            } else {
+              toast.success(`${label}: sincronizacion completada`, { duration: 4000 });
+            }
             if (onSuccess) onSuccess();
           } else if (s?.status === "ERROR") {
             toast.error(`${label}: error - ${s.last_error || "desconocido"}`);
