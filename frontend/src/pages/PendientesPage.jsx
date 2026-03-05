@@ -299,7 +299,7 @@ function PendingRow({ row, entity, onAction, onViewSales }) {
             data-testid={`view-sales-btn-${row.id}`}
           >
             <ShoppingBag size={10} />
-            {row.ventas_orders} ord · {fmtMoney(row.ventas_monto)}
+            {row.ventas_orders} ord · {Math.round(row.ventas_qty)} pzas
             <Eye size={9} className="ml-0.5 opacity-60" />
           </button>
         ) : (
@@ -672,7 +672,7 @@ function SalesDetailModal({ open, row, onClose }) {
                               <td className="px-2 py-1 text-slate-500">{ln.color || "-"}</td>
                               <td className="px-2 py-1 text-right font-medium text-slate-800">{Math.round(ln.qty)}</td>
                               <td className="px-2 py-1 text-right text-slate-500">{fmtMoney(ln.price_unit)}</td>
-                              <td className="px-3 py-1 text-right font-medium text-slate-800">{fmtMoney(ln.price_subtotal)}</td>
+                              <td className="px-3 py-1 text-right font-medium text-slate-800">{fmtMoney((ln.price_unit || 0) * (ln.qty || 0))}</td>
                             </tr>
                           ))}
                         </tbody>
