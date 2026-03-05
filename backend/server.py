@@ -646,8 +646,11 @@ async def get_cuentas_list(
                 params.append(f"%{asignado}%")
                 where += f" AND cu.asignado_a ILIKE ${len(params)}"
             if tienda:
-                params.append(tienda)
-                where += f" AND k.tienda = ${len(params)}"
+                if tienda == "Sin tienda":
+                    where += " AND k.tienda IS NULL"
+                else:
+                    params.append(tienda)
+                    where += f" AND k.tienda = ${len(params)}"
 
             base_from = """
                 FROM crm.v_cuentas_libres cl
@@ -752,6 +755,7 @@ async def get_cuentas_filter_options(user=Depends(get_current_user)):
                 WHERE k.tienda IS NOT NULL AND btrim(k.tienda) <> ''
                 ORDER BY k.tienda
             """)]
+            tiendas.append("Sin tienda")
             return {"ciudades": ciudades, "asignados": asignados, "tiendas": tiendas}
         except Exception as e:
             logger.error(f"Error fetching filter options: {e}")

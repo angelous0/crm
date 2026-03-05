@@ -1119,6 +1119,7 @@ async def _create_views(conn):
                             WHEN 'Grau 238' THEN 'GR238'
                             WHEN 'Grau238' THEN 'GR238'
                             WHEN 'Grau 555-' THEN 'GR55'
+                            WHEN 'Sebastian Barranca 1556' THEN 'GM218'
                             WHEN 'Venta Taller' THEN 'TALLER'
                             WHEN 'Zapaton' THEN 'ZAP'
                             ELSE NULL
@@ -1145,6 +1146,7 @@ async def _create_views(conn):
                                  WHEN 'Grau 238' THEN 'GR238'
                                  WHEN 'Grau238' THEN 'GR238'
                                  WHEN 'Grau 555-' THEN 'GR55'
+                                 WHEN 'Sebastian Barranca 1556' THEN 'GM218'
                                  WHEN 'Venta Taller' THEN 'TALLER'
                                  WHEN 'Zapaton' THEN 'ZAP'
                                  ELSE NULL
