@@ -14,12 +14,14 @@ const CLASIFICACIONES = ["A", "B", "C"];
 export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactivateNoSales }) {
   const [ciudades, setCiudades] = useState([]);
   const [asignados, setAsignados] = useState([]);
+  const [tiendas, setTiendas] = useState([]);
   const debounceRef = useRef(null);
 
   useEffect(() => {
     api.get("/cuentas/list/filter-options").then(r => {
       setCiudades(r.data.ciudades || []);
       setAsignados(r.data.asignados || []);
+      setTiendas(r.data.tiendas || []);
     }).catch(() => {});
   }, []);
 
@@ -30,7 +32,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
     }, 300);
   };
 
-  const activeFilters = [filters.estado, filters.clasificacion, filters.ciudad, filters.asignado].filter(Boolean).length;
+  const activeFilters = [filters.estado, filters.clasificacion, filters.ciudad, filters.asignado, filters.tienda].filter(Boolean).length;
 
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-white shrink-0" data-testid="cuentas-toolbar">
@@ -77,6 +79,18 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
         </Select>
       )}
 
+      {tiendas.length > 0 && (
+        <Select value={filters.tienda || "ALL"} onValueChange={v => onFiltersChange({ ...filters, tienda: v === "ALL" ? "" : v, page: 1 })}>
+          <SelectTrigger className="w-[130px] h-8 text-xs hidden lg:flex" data-testid="filter-tienda">
+            <SelectValue placeholder="Tienda" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todas</SelectItem>
+            {tiendas.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+
       {asignados.length > 0 && (
         <Select value={filters.asignado || "ALL"} onValueChange={v => onFiltersChange({ ...filters, asignado: v === "ALL" ? "" : v, page: 1 })}>
           <SelectTrigger className="w-[130px] h-8 text-xs hidden lg:flex" data-testid="filter-asignado">
@@ -91,7 +105,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
 
       {activeFilters > 0 && (
         <button
-          onClick={() => onFiltersChange({ q: filters.q, estado: "", clasificacion: "", ciudad: "", asignado: "", sort: filters.sort, dir: filters.dir, page: 1, include_inactive: filters.include_inactive })}
+          onClick={() => onFiltersChange({ q: filters.q, estado: "", clasificacion: "", ciudad: "", asignado: "", tienda: "", sort: filters.sort, dir: filters.dir, page: 1, include_inactive: filters.include_inactive })}
           className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-700 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors"
           data-testid="clear-filters"
         >

@@ -20,6 +20,7 @@ export default function CuentasAirtable() {
     clasificacion: searchParams.get("clasificacion") || "",
     ciudad: searchParams.get("ciudad") || "",
     asignado: searchParams.get("asignado") || "",
+    tienda: searchParams.get("tienda") || "",
     sort: searchParams.get("sort") || "name",
     dir: searchParams.get("dir") || "asc",
     page: parseInt(searchParams.get("page")) || 1,
@@ -41,6 +42,7 @@ export default function CuentasAirtable() {
     if (newFilters.clasificacion) p.clasificacion = newFilters.clasificacion;
     if (newFilters.ciudad) p.ciudad = newFilters.ciudad;
     if (newFilters.asignado) p.asignado = newFilters.asignado;
+    if (newFilters.tienda) p.tienda = newFilters.tienda;
     if (newFilters.sort !== "name") p.sort = newFilters.sort;
     if (newFilters.dir !== "asc") p.dir = newFilters.dir;
     if (newFilters.page > 1) p.page = String(newFilters.page);
@@ -57,7 +59,7 @@ export default function CuentasAirtable() {
       const r = await api.get("/cuentas/list", {
         params: {
           q: f.q, estado: f.estado, clasificacion: f.clasificacion,
-          ciudad: f.ciudad, asignado: f.asignado,
+          ciudad: f.ciudad, asignado: f.asignado, tienda: f.tienda,
           sort: f.sort, dir: f.dir,
           page: f.page, limit,
           include_inactive: f.include_inactive || false,

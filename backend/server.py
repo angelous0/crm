@@ -606,7 +606,7 @@ def _apply_phone(row):
 @cuentas_router.get("/list")
 async def get_cuentas_list(
     q: str = "", estado: str = "", clasificacion: str = "",
-    ciudad: str = "", asignado: str = "",
+    ciudad: str = "", asignado: str = "", tienda: str = "",
     sort: str = "name", dir: str = "asc",
     page: int = 1, limit: int = 50,
     include_inactive: bool = False,
@@ -645,6 +645,9 @@ async def get_cuentas_list(
             if asignado:
                 params.append(f"%{asignado}%")
                 where += f" AND cu.asignado_a ILIKE ${len(params)}"
+            if tienda:
+                params.append(tienda)
+                where += f" AND k.tienda = ${len(params)}"
 
             base_from = """
                 FROM crm.v_cuentas_libres cl
@@ -743,7 +746,13 @@ async def get_cuentas_filter_options(user=Depends(get_current_user)):
                 WHERE cu.asignado_a IS NOT NULL AND btrim(cu.asignado_a) <> ''
                 ORDER BY cu.asignado_a
             """)]
-            return {"ciudades": ciudades, "asignados": asignados}
+            tiendas = [r['tienda'] for r in await conn.fetch("""
+                SELECT DISTINCT k.tienda
+                FROM crm.mv_cuenta_sales_kpi k
+                WHERE k.tienda IS NOT NULL AND btrim(k.tienda) <> ''
+                ORDER BY k.tienda
+            """)]
+            return {"ciudades": ciudades, "asignados": asignados, "tiendas": tiendas}
         except Exception as e:
             logger.error(f"Error fetching filter options: {e}")
             return {"ciudades": [], "asignados": []}
