@@ -184,7 +184,7 @@ export default function PendientesPage() {
       {/* Table */}
       <div className="flex-1 overflow-auto min-h-0 px-4 py-3">
         <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto shadow-sm">
-          <table className="w-full text-xs border-collapse" style={{ minWidth: entity === "cuenta" ? "950px" : "800px" }}>
+          <table className="w-full text-xs border-collapse" style={{ minWidth: entity === "cuenta" ? "1100px" : "950px" }}>
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">Nombre</th>
@@ -195,6 +195,8 @@ export default function PendientesPage() {
                   <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">Cuenta</th>
                 )}
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">Creado</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[80px]">Tienda</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[90px]">Usuario</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[90px]">Ventas</th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[160px]">Sugerencia</th>
                 <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500 min-w-[200px]">Acciones</th>
@@ -202,11 +204,11 @@ export default function PendientesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={entity === "contacto" ? 9 : 8} className="h-40 text-center">
+                <tr><td colSpan={entity === "contacto" ? 11 : 10} className="h-40 text-center">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />
                 </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={entity === "contacto" ? 9 : 8} className="h-40 text-center text-slate-400">
+                <tr><td colSpan={entity === "contacto" ? 11 : 10} className="h-40 text-center text-slate-400">
                   <div className="flex flex-col items-center gap-2">
                     <ShieldCheck size={28} className="text-emerald-400" />
                     <span>No hay registros pendientes</span>
@@ -291,6 +293,12 @@ function PendingRow({ row, entity, onAction, onViewSales }) {
         <td className="px-3 py-1.5 text-slate-500 truncate max-w-[140px]" data-testid={`pending-cuenta-${row.id}`}>{row.cuenta_nombre || "-"}</td>
       )}
       <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap" data-testid={`pending-created-${row.id}`}>{fmtDate(row.created_at)}</td>
+      <td className="px-3 py-1.5 text-[10px] font-medium text-slate-600" data-testid={`pending-tienda-${row.id}`}>
+        {row.tienda || <span className="text-slate-300">Sin tienda</span>}
+      </td>
+      <td className="px-3 py-1.5 text-[10px] text-slate-500 truncate max-w-[120px]" data-testid={`pending-usuario-${row.id}`}>
+        {row.creado_por || "-"}
+      </td>
       <td className="px-3 py-1.5" data-testid={`pending-ventas-${row.id}`}>
         {hasVentas ? (
           <button

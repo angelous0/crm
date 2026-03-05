@@ -89,10 +89,14 @@ async def get_pending(
                     COALESCE(sales.order_count, 0) AS ventas_orders,
                     COALESCE(sales.qty_total, 0) AS ventas_qty,
                     sales.last_date AS ventas_ultima,
-                    COALESCE(sales.monto_total, 0) AS ventas_monto
+                    COALESCE(sales.monto_total, 0) AS ventas_monto,
+                    COALESCE(ru.name, '') AS creado_por,
+                    k.tienda
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
                 LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
+                LEFT JOIN odoo.res_users ru ON ru.odoo_id = rp.odoo_create_uid AND ru.company_key = 'GLOBAL'
+                LEFT JOIN crm.mv_cuenta_sales_kpi k ON k.cuenta_id = cl.cuenta_partner_odoo_id
                 LEFT JOIN LATERAL (
                     SELECT COUNT(DISTINCT po.odoo_id) AS order_count,
                            COALESCE(SUM(pol.qty), 0) AS qty_total,
