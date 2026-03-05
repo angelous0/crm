@@ -749,11 +749,12 @@ async def get_cuentas_filter_options(user=Depends(get_current_user)):
                 WHERE cu.asignado_a IS NOT NULL AND btrim(cu.asignado_a) <> ''
                 ORDER BY cu.asignado_a
             """)]
-            tiendas = [r['tienda'] for r in await conn.fetch("""
-                SELECT DISTINCT k.tienda
-                FROM crm.mv_cuenta_sales_kpi k
-                WHERE k.tienda IS NOT NULL AND btrim(k.tienda) <> ''
-                ORDER BY k.tienda
+            tiendas = [r['x_nombre'] for r in await conn.fetch("""
+                SELECT DISTINCT x_nombre
+                FROM odoo.stock_location
+                WHERE company_key = 'GLOBAL' AND x_nombre IS NOT NULL AND btrim(x_nombre) <> ''
+                  AND COALESCE(active, true) = true AND usage = 'internal'
+                ORDER BY x_nombre
             """)]
             tiendas.append("Sin tienda")
             return {"ciudades": ciudades, "asignados": asignados, "tiendas": tiendas}
