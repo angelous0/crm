@@ -6,7 +6,7 @@ import { CuentasToolbar } from "@/components/cuentas/CuentasToolbar";
 import { CuentasDirectoryGrid } from "@/components/cuentas/CuentasDirectoryGrid";
 import { CuentaDetailPanel } from "@/components/cuentas/CuentaDetailPanel";
 import { InactivateNoSalesModal } from "@/components/cuentas/InactivateNoSalesModal";
-import { Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function CuentasAirtable() {
@@ -30,7 +30,23 @@ export default function CuentasAirtable() {
   const [rows, setRows] = useState([]);
   const [totalRows, setTotalRows] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(800);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!isDragging.current) return;
+      const delta = e.clientX - startX.current;
+      const newW = Math.max(300, Math.min(startWidth.current + delta, window.innerWidth - 300));
+      setPanelWidth(newW);
+    };
+    const onMouseUp = () => { isDragging.current = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => { window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); };
+  }, []);
   const [showInactivateModal, setShowInactivateModal] = useState(false);
   const limit = 50;
   const fetchRef = useRef(0);
@@ -113,7 +129,8 @@ export default function CuentasAirtable() {
       <div className="flex flex-1 min-h-0">
         {/* Left: Directory (Desktop) */}
         <div
-          className={`hidden lg:flex flex-col border-r border-slate-200 bg-white shrink-0 transition-all duration-200 ${panelCollapsed ? "w-0 overflow-hidden" : "w-[800px]"}`}
+          className="hidden lg:flex flex-col border-r border-slate-200 bg-white shrink-0"
+          style={{ width: panelWidth }}
           data-testid="left-pane"
         >
           <CuentasDirectoryGrid
@@ -131,17 +148,13 @@ export default function CuentasAirtable() {
           />
         </div>
 
-        {/* Collapse toggle */}
-        <div className="hidden lg:flex items-start pt-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
-            onClick={() => setPanelCollapsed(!panelCollapsed)}
-            data-testid="toggle-panel"
-          >
-            {panelCollapsed ? <PanelLeft size={14} /> : <PanelLeftClose size={14} />}
-          </Button>
+        {/* Draggable divider */}
+        <div
+          className="hidden lg:flex items-stretch shrink-0 cursor-col-resize group"
+          onMouseDown={(e) => { isDragging.current = true; startX.current = e.clientX; startWidth.current = panelWidth; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; }}
+          data-testid="panel-divider"
+        >
+          <div className="w-1.5 hover:bg-blue-400 group-active:bg-blue-500 bg-slate-200 transition-colors" />
         </div>
 
         {/* Mobile: Show directory as list when no selection */}
