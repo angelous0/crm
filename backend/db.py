@@ -1105,6 +1105,30 @@ async def _create_views(conn):
                   AND COALESCE(po.order_cancel, false) = false
                 GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
             ),
+            top_store AS (
+                SELECT DISTINCT ON (sub.cuenta_id)
+                    sub.cuenta_id, sub.tienda
+                FROM (
+                    SELECT
+                        COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
+                        SPLIT_PART(po.name, '/', 1) AS tienda,
+                        COUNT(*) AS cnt
+                    FROM (
+                        SELECT po2.*, ROW_NUMBER() OVER (
+                            PARTITION BY COALESCE(ov2.new_owner_partner_id, po2.partner_id)
+                            ORDER BY po2.date_order DESC
+                        ) AS rn
+                        FROM odoo.pos_order po2
+                        LEFT JOIN crm.pos_order_partner_override ov2 ON ov2.order_id = po2.odoo_id AND ov2.active = true
+                        WHERE COALESCE(po2.is_cancel, false) = false
+                          AND COALESCE(po2.order_cancel, false) = false
+                    ) po
+                    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
+                    WHERE po.rn <= 5
+                    GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id), SPLIT_PART(po.name, '/', 1)
+                ) sub
+                ORDER BY sub.cuenta_id, sub.cnt DESC
+            ),
             filtered_qty AS (
                 SELECT
                     COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
@@ -1137,9 +1161,11 @@ async def _create_views(conn):
                 COALESCE(fq.qty_12m, 0) AS qty_12m,
                 COALESCE(fq.qty_ytd_cur, 0) AS qty_ytd_cur,
                 COALESCE(fq.qty_ytd_p1, 0) AS qty_ytd_p1,
-                COALESCE(fq.qty_ytd_p2, 0) AS qty_ytd_p2
+                COALESCE(fq.qty_ytd_p2, 0) AS qty_ytd_p2,
+                ts.tienda
             FROM all_orders ao
-            LEFT JOIN filtered_qty fq ON fq.cuenta_id = ao.cuenta_id;
+            LEFT JOIN filtered_qty fq ON fq.cuenta_id = ao.cuenta_id
+            LEFT JOIN top_store ts ON ts.cuenta_id = ao.cuenta_id;
         """)
         await conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_cuenta_kpi_pk ON crm.mv_cuenta_sales_kpi (cuenta_id);

@@ -664,6 +664,7 @@ async def get_cuentas_list(
                 "qty_12m": "k.qty_12m",
                 "orders_12m": "k.orders_12m",
                 "pct_ytd": "pct_vs_avg_ytd",
+                "tienda": "k.tienda",
             }
             order_col = sort_map.get(sort, "rp.name")
             order_dir = "ASC" if dir.lower() == "asc" else "DESC"
@@ -686,7 +687,8 @@ async def get_cuentas_list(
                     CASE WHEN (COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0)) > 0
                          THEN (COALESCE(k.qty_ytd_cur, 0)::float
                                / ((COALESCE(k.qty_ytd_p1, 0) + COALESCE(k.qty_ytd_p2, 0))::float / 2.0)) - 1.0
-                         ELSE NULL END AS pct_vs_avg_ytd
+                         ELSE NULL END AS pct_vs_avg_ytd,
+                    k.tienda
                 {base_from}
                 {where}
                 ORDER BY {order_col} {order_dir} {nulls}

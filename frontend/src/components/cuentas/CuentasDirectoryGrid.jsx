@@ -49,6 +49,7 @@ function pctColor(v) {
 const COLUMNS = [
   { key: "name", label: "Cuenta", sortKey: "name", defaultW: 180, minW: 100 },
   { key: "depto", label: "Depto", sortKey: "depto", defaultW: 90, minW: 50 },
+  { key: "tienda", label: "Tienda", sortKey: "tienda", defaultW: 100, minW: 60 },
   { key: "last_purchase", label: "Ult. compra", sortKey: "last_purchase", defaultW: 100, minW: 70 },
   { key: "hace", label: "Hace", sortKey: "last_purchase", defaultW: 55, minW: 40, align: "right" },
   { key: "qty_12m", label: "Cant.", sortKey: "qty_12m", defaultW: 60, minW: 40, align: "right" },
@@ -246,6 +247,10 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                   <td className="px-2 py-1 text-slate-500 truncate"
                     style={{ maxWidth: colWidths.depto || 90 }}
                     data-testid={`depto-${r.id}`}>{r.depto_name || "-"}</td>
+                  {/* Tienda */}
+                  <td className="px-2 py-1 text-slate-600 truncate text-[10px] font-medium"
+                    style={{ maxWidth: colWidths.tienda || 100 }}
+                    data-testid={`tienda-${r.id}`}>{r.tienda || "-"}</td>
                   {/* Últ. compra (con año) */}
                   <td className="px-2 py-1 text-slate-500 whitespace-nowrap"
                     data-testid={`last-purchase-${r.id}`}>{fmtDate(r.last_purchase_date)}</td>
