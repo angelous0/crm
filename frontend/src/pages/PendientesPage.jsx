@@ -299,7 +299,7 @@ function PendingRow({ row, entity, onAction, onViewSales }) {
             data-testid={`view-sales-btn-${row.id}`}
           >
             <ShoppingBag size={10} />
-            {row.ventas_orders} ord · {row.ventas_qty} pzas
+            {row.ventas_orders} ord · {fmtMoney(row.ventas_monto)}
             <Eye size={9} className="ml-0.5 opacity-60" />
           </button>
         ) : (
@@ -591,15 +591,17 @@ function LinkModal({ open, row, loading, onClose, onConfirm }) {
 
 /* ───────── Sales Detail Modal ───────── */
 function SalesDetailModal({ open, row, onClose }) {
-  const [sales, setSales] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [expandedOrder, setExpandedOrder] = useState(null);
 
   useEffect(() => {
     if (open && row) {
       setLoading(true);
-      setSales([]);
+      setOrders([]);
+      setExpandedOrder(null);
       api.get(`/approval/partner/${row.id}/sales`)
-        .then((r) => setSales(r.data.rows || []))
+        .then((r) => setOrders(r.data.orders || []))
         .catch(() => toast.error("Error cargando ventas"))
         .finally(() => setLoading(false));
     }
@@ -607,16 +609,19 @@ function SalesDetailModal({ open, row, onClose }) {
 
   if (!row) return null;
 
+  const totalQty = orders.reduce((a, o) => a + (o.qty_total || 0), 0);
+  const totalMonto = orders.reduce((a, o) => a + (o.amount_total || 0), 0);
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col" data-testid="sales-detail-modal">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col" data-testid="sales-detail-modal">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
             <ShoppingBag size={16} className="text-blue-500" />
             Ventas de "{row.nombre}"
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {row.ventas_orders} orden(es) · {row.ventas_qty} piezas · Ultima: {fmtDate(row.ventas_ultima)}
+            {row.ventas_orders} orden(es) · {Math.round(row.ventas_qty)} piezas · Ultima: {fmtDate(row.ventas_ultima)}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-auto min-h-0">
@@ -624,39 +629,68 @@ function SalesDetailModal({ open, row, onClose }) {
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
-          ) : sales.length === 0 ? (
+          ) : orders.length === 0 ? (
             <div className="py-10 text-center text-xs text-slate-400">Sin ordenes encontradas</div>
           ) : (
-            <table className="w-full text-xs border-collapse">
-              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
-                <tr>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">Orden</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">Fecha</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Piezas</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Lineas</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sales.map((s) => (
-                  <tr key={s.order_id} className="border-b border-slate-100 hover:bg-slate-50/60" data-testid={`sale-row-${s.order_id}`}>
-                    <td className="px-3 py-1.5 font-mono text-slate-700">{s.order_name || `#${s.order_id}`}</td>
-                    <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(s.date_order)}</td>
-                    <td className="px-3 py-1.5 text-right font-medium text-slate-800">{Math.round(s.qty_total)}</td>
-                    <td className="px-3 py-1.5 text-right text-slate-500">{s.lines_count}</td>
-                    <td className="px-3 py-1.5 text-right font-medium text-slate-800">{fmtMoney(s.amount_total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-slate-50 border-t border-slate-300">
-                <tr>
-                  <td className="px-3 py-2 font-semibold text-slate-700" colSpan={2}>Total ({sales.length} ordenes)</td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-900">{Math.round(sales.reduce((a, s) => a + (s.qty_total || 0), 0))}</td>
-                  <td className="px-3 py-2 text-right text-slate-500">{sales.reduce((a, s) => a + (s.lines_count || 0), 0)}</td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-900">{fmtMoney(sales.reduce((a, s) => a + (s.amount_total || 0), 0))}</td>
-                </tr>
-              </tfoot>
-            </table>
+            <div className="space-y-1">
+              {orders.map((o) => (
+                <div key={o.order_id} className="border border-slate-200 rounded-md overflow-hidden">
+                  {/* Order header - clickable */}
+                  <button
+                    onClick={() => setExpandedOrder(expandedOrder === o.order_id ? null : o.order_id)}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-xs hover:bg-slate-50 transition-colors text-left"
+                    data-testid={`order-header-${o.order_id}`}
+                  >
+                    <ChevronRight size={12} className={`text-slate-400 transition-transform shrink-0 ${expandedOrder === o.order_id ? "rotate-90" : ""}`} />
+                    <span className="font-mono font-medium text-slate-700 min-w-[120px]">{o.order_name || `#${o.order_id}`}</span>
+                    <span className="text-slate-500 whitespace-nowrap">{fmtDate(o.date_order)}</span>
+                    <span className="ml-auto flex items-center gap-3 text-slate-600">
+                      <span>{Math.round(o.qty_total)} pzas</span>
+                      <span className="font-medium text-slate-800">{fmtMoney(o.amount_total)}</span>
+                    </span>
+                  </button>
+
+                  {/* Order lines - expandable */}
+                  {expandedOrder === o.order_id && o.lines && (
+                    <div className="border-t border-slate-200 bg-slate-50/50">
+                      <table className="w-full text-[11px] border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-1.5 text-left text-[9px] font-semibold uppercase text-slate-400">Producto</th>
+                            <th className="px-2 py-1.5 text-left text-[9px] font-semibold uppercase text-slate-400">Talla</th>
+                            <th className="px-2 py-1.5 text-left text-[9px] font-semibold uppercase text-slate-400">Color</th>
+                            <th className="px-2 py-1.5 text-right text-[9px] font-semibold uppercase text-slate-400">Cant</th>
+                            <th className="px-2 py-1.5 text-right text-[9px] font-semibold uppercase text-slate-400">P.Unit</th>
+                            <th className="px-3 py-1.5 text-right text-[9px] font-semibold uppercase text-slate-400">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {o.lines.map((ln, i) => (
+                            <tr key={i} className="border-b border-slate-100 last:border-0">
+                              <td className="px-3 py-1 text-slate-700 truncate max-w-[200px]" title={ln.producto}>{ln.producto}</td>
+                              <td className="px-2 py-1 text-slate-500">{ln.talla || "-"}</td>
+                              <td className="px-2 py-1 text-slate-500">{ln.color || "-"}</td>
+                              <td className="px-2 py-1 text-right font-medium text-slate-800">{Math.round(ln.qty)}</td>
+                              <td className="px-2 py-1 text-right text-slate-500">{fmtMoney(ln.price_unit)}</td>
+                              <td className="px-3 py-1 text-right font-medium text-slate-800">{fmtMoney(ln.price_subtotal)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Totals */}
+              <div className="flex items-center justify-between px-3 py-2 bg-slate-100 rounded-md text-xs font-semibold text-slate-800 mt-2">
+                <span>Total ({orders.length} ordenes)</span>
+                <span className="flex items-center gap-4">
+                  <span>{Math.round(totalQty)} pzas</span>
+                  <span>{fmtMoney(totalMonto)}</span>
+                </span>
+              </div>
+            </div>
           )}
         </div>
         <DialogFooter>

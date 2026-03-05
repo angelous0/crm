@@ -86,13 +86,24 @@ async def get_pending(
                     cu.created_at,
                     cu.last_seen_at,
                     COALESCE(cu.approval_status, 'APPROVED') AS approval_status,
-                    COALESCE(k.orders_12m, 0) AS ventas_orders,
-                    COALESCE(k.qty_12m, 0) AS ventas_qty,
-                    k.last_purchase_date AS ventas_ultima
+                    COALESCE(sales.order_count, 0) AS ventas_orders,
+                    COALESCE(sales.qty_total, 0) AS ventas_qty,
+                    sales.last_date AS ventas_ultima,
+                    COALESCE(sales.monto_total, 0) AS ventas_monto
                 FROM crm.v_cuentas_libres cl
                 JOIN odoo.res_partner rp ON rp.odoo_id = cl.cuenta_partner_odoo_id AND rp.company_key='GLOBAL'
                 LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = cl.cuenta_partner_odoo_id
-                LEFT JOIN crm.mv_cuenta_sales_kpi k ON k.cuenta_id = cl.cuenta_partner_odoo_id
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(DISTINCT po.odoo_id) AS order_count,
+                           COALESCE(SUM(pol.qty), 0) AS qty_total,
+                           MAX(po.date_order) AS last_date,
+                           COALESCE(SUM(pol.price_subtotal), 0) AS monto_total
+                    FROM odoo.pos_order po
+                    JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
+                    WHERE po.partner_id = cl.cuenta_partner_odoo_id
+                      AND COALESCE(po.is_cancel, false) = false
+                      AND COALESCE(po.order_cancel, false) = false
+                ) sales ON true
                 {where}
                 ORDER BY cu.created_at DESC NULLS LAST
                 LIMIT ${len(data_params) - 1} OFFSET ${len(data_params)}
@@ -197,32 +208,63 @@ async def get_pending_count(user=Depends(_get_auth())):
 
 @router.get("/partner/{partner_id}/sales")
 async def get_partner_sales(partner_id: int, user=Depends(_get_auth())):
-    """Get POS sales detail for a specific partner (for pending approval review)."""
+    """Get POS sales detail for a specific partner with order lines (product, talla, color)."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        rows = records_to_list(await conn.fetch("""
+        # Orders summary
+        orders = records_to_list(await conn.fetch("""
             SELECT
                 po.odoo_id AS order_id,
                 po.name AS order_name,
                 po.date_order,
-                po.amount_total,
-                COALESCE(agg.qty_total, 0) AS qty_total,
-                COALESCE(agg.lines_count, 0) AS lines_count
+                po.amount_total
             FROM odoo.pos_order po
-            JOIN (
-                SELECT pol.order_id,
-                       COALESCE(SUM(pol.qty), 0) AS qty_total,
-                       COUNT(*) AS lines_count
-                FROM odoo.pos_order_line pol
-                GROUP BY pol.order_id
-            ) agg ON agg.order_id = po.odoo_id
             WHERE po.partner_id = $1
               AND COALESCE(po.is_cancel, false) = false
               AND COALESCE(po.order_cancel, false) = false
             ORDER BY po.date_order DESC
             LIMIT 50
         """, partner_id))
-        return {"rows": rows, "partner_id": partner_id}
+
+        if not orders:
+            return {"orders": [], "partner_id": partner_id}
+
+        order_ids = [o['order_id'] for o in orders]
+
+        # Lines with product detail
+        lines = records_to_list(await conn.fetch("""
+            SELECT
+                pol.order_id,
+                pol.product_id,
+                pol.qty,
+                pol.price_unit,
+                pol.price_subtotal,
+                pol.discount,
+                COALESCE(pt.name, CONCAT('Producto #', pol.product_id)) AS producto,
+                vv.talla,
+                vv.color,
+                vv.barcode
+            FROM odoo.pos_order_line pol
+            LEFT JOIN odoo.v_product_variant_flat vv
+                ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+            LEFT JOIN odoo.product_template pt
+                ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+            WHERE pol.order_id = ANY($1)
+            ORDER BY pol.order_id, pol.odoo_id
+        """, order_ids))
+
+        # Group lines by order
+        lines_by_order = {}
+        for ln in lines:
+            oid = ln.pop('order_id')
+            lines_by_order.setdefault(oid, []).append(ln)
+
+        for o in orders:
+            o['lines'] = lines_by_order.get(o['order_id'], [])
+            o['qty_total'] = sum(ln.get('qty', 0) or 0 for ln in o['lines'])
+            o['lines_count'] = len(o['lines'])
+
+        return {"orders": orders, "partner_id": partner_id}
 
 
 @router.post("/detect-new")
