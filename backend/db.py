@@ -1111,7 +1111,18 @@ async def _create_views(conn):
                 FROM (
                     SELECT
                         COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
-                        SPLIT_PART(po.name, '/', 1) AS tienda,
+                        CASE SPLIT_PART(po.name, '/', 1)
+                            WHEN 'BOSH GAMARRA' THEN 'BOOSH'
+                            WHEN 'G209' THEN 'GM209'
+                            WHEN 'GaleriaAzul' THEN 'AZUL'
+                            WHEN 'Gamarra207A' THEN 'GM207'
+                            WHEN 'Grau 238' THEN 'GR238'
+                            WHEN 'Grau238' THEN 'GR238'
+                            WHEN 'Grau 555-' THEN 'GR55'
+                            WHEN 'Venta Taller' THEN 'TALLER'
+                            WHEN 'Zapaton' THEN 'ZAP'
+                            ELSE NULL
+                        END AS tienda,
                         COUNT(*) AS cnt
                     FROM (
                         SELECT po2.*, ROW_NUMBER() OVER (
@@ -1125,8 +1136,21 @@ async def _create_views(conn):
                     ) po
                     LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
                     WHERE po.rn <= 5
-                    GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id), SPLIT_PART(po.name, '/', 1)
+                    GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id),
+                             CASE SPLIT_PART(po.name, '/', 1)
+                                 WHEN 'BOSH GAMARRA' THEN 'BOOSH'
+                                 WHEN 'G209' THEN 'GM209'
+                                 WHEN 'GaleriaAzul' THEN 'AZUL'
+                                 WHEN 'Gamarra207A' THEN 'GM207'
+                                 WHEN 'Grau 238' THEN 'GR238'
+                                 WHEN 'Grau238' THEN 'GR238'
+                                 WHEN 'Grau 555-' THEN 'GR55'
+                                 WHEN 'Venta Taller' THEN 'TALLER'
+                                 WHEN 'Zapaton' THEN 'ZAP'
+                                 ELSE NULL
+                             END
                 ) sub
+                WHERE sub.tienda IS NOT NULL
                 ORDER BY sub.cuenta_id, sub.cnt DESC
             ),
             filtered_qty AS (

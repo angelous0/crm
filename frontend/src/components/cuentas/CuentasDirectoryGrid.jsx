@@ -250,7 +250,7 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                   {/* Tienda */}
                   <td className="px-2 py-1 text-slate-600 truncate text-[10px] font-medium"
                     style={{ maxWidth: colWidths.tienda || 100 }}
-                    data-testid={`tienda-${r.id}`}>{r.tienda || "-"}</td>
+                    data-testid={`tienda-${r.id}`}>{r.tienda || "Sin tienda"}</td>
                   {/* Últ. compra (con año) */}
                   <td className="px-2 py-1 text-slate-500 whitespace-nowrap"
                     data-testid={`last-purchase-${r.id}`}>{fmtDate(r.last_purchase_date)}</td>
