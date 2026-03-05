@@ -1123,7 +1123,6 @@ async def _create_views(conn):
                 JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
                 WHERE COALESCE(po.is_cancel, false) = false
                   AND COALESCE(po.order_cancel, false) = false
-                  AND COALESCE(po.reserva, false) = false
                   AND pol.product_id IS NOT NULL
                   AND pt.sale_ok = true AND pt.purchase_ok = false
                   AND pt.name NOT ILIKE '%correa%' AND pt.name NOT ILIKE '%saco%'
