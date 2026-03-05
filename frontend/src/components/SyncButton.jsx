@@ -65,6 +65,9 @@ export function SyncButton({ jobCode, label, onSuccess, variant = "card" }) {
         if (mountedRef.current) {
           setRunning(false);
           if (s?.status === "SUCCESS") {
+            // Refresh materialized KPIs after any successful sync
+            try { await api.post("/cuentas/refresh-kpis"); } catch {}
+
             // After customer sync, detect new pending accounts
             if (jobCode === "RES_PARTNER") {
               try {
