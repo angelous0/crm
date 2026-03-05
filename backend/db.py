@@ -1094,32 +1094,53 @@ async def _create_views(conn):
         await conn.execute("DROP MATERIALIZED VIEW IF EXISTS crm.mv_cuenta_sales_kpi CASCADE;")
         await conn.execute("""
             CREATE MATERIALIZED VIEW crm.mv_cuenta_sales_kpi AS
+            WITH all_orders AS (
+                SELECT
+                    COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
+                    MAX(po.date_order) AS last_purchase_date,
+                    COUNT(DISTINCT po.odoo_id) FILTER (WHERE po.date_order >= CURRENT_DATE - 365) AS orders_12m
+                FROM odoo.pos_order po
+                LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
+                WHERE COALESCE(po.is_cancel, false) = false
+                  AND COALESCE(po.order_cancel, false) = false
+                GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
+            ),
+            filtered_qty AS (
+                SELECT
+                    COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
+                    COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.qty ELSE 0 END), 0)::bigint AS qty_12m,
+                    COALESCE(SUM(CASE WHEN po.date_order >= date_trunc('year', CURRENT_DATE) THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_cur,
+                    COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '1 year')
+                                       AND po.date_order < (CURRENT_DATE - interval '1 year' + interval '1 day')
+                                       THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_p1,
+                    COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
+                                       AND po.date_order < (CURRENT_DATE - interval '2 years' + interval '1 day')
+                                       THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_p2
+                FROM odoo.pos_order po
+                JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
+                LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
+                JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
+                JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
+                WHERE COALESCE(po.is_cancel, false) = false
+                  AND COALESCE(po.order_cancel, false) = false
+                  AND COALESCE(po.reserva, false) = false
+                  AND pol.product_id IS NOT NULL
+                  AND pt.sale_ok = true AND pt.purchase_ok = false
+                  AND pt.name NOT ILIKE '%correa%' AND pt.name NOT ILIKE '%saco%'
+                  AND pt.name NOT ILIKE '%bolsa%' AND pt.name NOT ILIKE '%probador%'
+                  AND pt.name NOT ILIKE '%paneton%' AND pt.name NOT ILIKE '%publicitario%'
+                GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
+            )
             SELECT
-                COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
-                MAX(po.date_order) AS last_purchase_date,
-                COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.qty ELSE 0 END), 0)::bigint AS qty_12m,
-                COUNT(DISTINCT CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN po.odoo_id END)::bigint AS orders_12m,
-                COALESCE(SUM(CASE WHEN po.date_order >= date_trunc('year', CURRENT_DATE) THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_cur,
-                COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '1 year')
-                                   AND po.date_order < (CURRENT_DATE - interval '1 year' + interval '1 day')
-                                   THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_p1,
-                COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
-                                   AND po.date_order < (CURRENT_DATE - interval '2 years' + interval '1 day')
-                                   THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_p2
-            FROM odoo.pos_order po
-            JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
-            LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-            JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-            JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-            WHERE COALESCE(po.is_cancel, false) = false
-              AND COALESCE(po.order_cancel, false) = false
-              AND COALESCE(po.reserva, false) = false
-              AND pol.product_id IS NOT NULL
-              AND pt.sale_ok = true AND pt.purchase_ok = false
-              AND pt.name NOT ILIKE '%correa%' AND pt.name NOT ILIKE '%saco%'
-              AND pt.name NOT ILIKE '%bolsa%' AND pt.name NOT ILIKE '%probador%'
-              AND pt.name NOT ILIKE '%paneton%' AND pt.name NOT ILIKE '%publicitario%'
-            GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id);
+                ao.cuenta_id,
+                ao.last_purchase_date,
+                ao.orders_12m::bigint,
+                COALESCE(fq.qty_12m, 0) AS qty_12m,
+                COALESCE(fq.qty_ytd_cur, 0) AS qty_ytd_cur,
+                COALESCE(fq.qty_ytd_p1, 0) AS qty_ytd_p1,
+                COALESCE(fq.qty_ytd_p2, 0) AS qty_ytd_p2
+            FROM all_orders ao
+            LEFT JOIN filtered_qty fq ON fq.cuenta_id = ao.cuenta_id;
         """)
         await conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_cuenta_kpi_pk ON crm.mv_cuenta_sales_kpi (cuenta_id);
