@@ -52,7 +52,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
           <SelectValue placeholder="Estado" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="ALL">Todos</SelectItem>
+          <SelectItem value="ALL">Estado: Todos</SelectItem>
           {ESTADOS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
         </SelectContent>
       </Select>
@@ -62,8 +62,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
           <SelectValue placeholder="Clasif." />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="ALL">Todas</SelectItem>
-          {CLASIFICACIONES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          <SelectItem value="ALL">Clasif: Todas</SelectItem>
         </SelectContent>
       </Select>
 
@@ -73,7 +72,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
             <SelectValue placeholder="Ciudad" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Todas</SelectItem>
+            <SelectItem value="ALL">Ciudad: Todas</SelectItem>
             {ciudades.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -85,7 +84,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
             <SelectValue placeholder="Tienda" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Todas</SelectItem>
+            <SelectItem value="ALL">Tienda: Todas</SelectItem>
             {tiendas.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -97,7 +96,7 @@ export function CuentasToolbar({ filters, onFiltersChange, totalRows, onInactiva
             <SelectValue placeholder="Vendedor" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Todos</SelectItem>
+            <SelectItem value="ALL">Vendedor: Todos</SelectItem>
             {asignados.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
           </SelectContent>
         </Select>
