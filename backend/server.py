@@ -1092,6 +1092,27 @@ _CATALOG_FILTER = """
     AND pt.name NOT ILIKE '%paneton%'
     AND pt.name NOT ILIKE '%publicitario%'"""
 
+_TIENDA_JOIN = """LEFT JOIN odoo.stock_location sl_tienda
+    ON sl_tienda.odoo_id = po.location_id AND sl_tienda.company_key = 'GLOBAL'
+    AND sl_tienda.x_nombre IS NOT NULL AND btrim(sl_tienda.x_nombre) <> ''"""
+
+_TIENDA_EXPR = """COALESCE(
+                    sl_tienda.x_nombre,
+                    CASE SPLIT_PART(po.name, '/', 1)
+                        WHEN 'BOSH GAMARRA' THEN 'BOOSH'
+                        WHEN 'G209' THEN 'GM209'
+                        WHEN 'GaleriaAzul' THEN 'AZUL'
+                        WHEN 'Gamarra207A' THEN 'GM207'
+                        WHEN 'Grau 238' THEN 'GR238'
+                        WHEN 'Grau238' THEN 'GR238'
+                        WHEN 'Grau 555-' THEN 'GR55'
+                        WHEN 'Sebastian Barranca 1556' THEN 'GM218'
+                        WHEN 'Venta Taller' THEN 'TALLER'
+                        WHEN 'Zapaton' THEN 'ZAP'
+                        ELSE NULL
+                    END
+                ) AS tienda"""
+
 
 @cuentas_router.get("/{cuenta_id}/ventas/metrics")
 async def get_cuenta_ventas_metrics(
@@ -1191,9 +1212,11 @@ async def get_cuenta_ventas_orders(
                    (ov_po.order_id IS NOT NULL) AS has_override,
                    CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
                    agg.qty_total,
-                   agg.lines_count
+                   agg.lines_count,
+                   {_TIENDA_EXPR}
             FROM odoo.pos_order po
             {_OVERRIDE_JOIN}
+            {_TIENDA_JOIN}
             JOIN (
                 SELECT pol2.order_id, COALESCE(SUM(pol2.qty), 0) AS qty_total, COUNT(*) AS lines_count
                 FROM odoo.pos_order_line pol2
@@ -1472,10 +1495,12 @@ async def get_cuenta_ventas_lines(
                    pt.marca, pt.tipo, pt.entalle, pt.tela,
                    COALESCE(pt.hilo::text, '') AS hilo,
                    vv.talla, vv.color, vv.barcode,
-                   pol.qty, pol.price_unit, pol.price_subtotal AS subtotal
+                   pol.qty, pol.price_unit, pol.price_subtotal AS subtotal,
+                   {_TIENDA_EXPR}
             FROM odoo.pos_order_line pol
             JOIN odoo.pos_order po ON pol.order_id = po.odoo_id
             {_OVERRIDE_JOIN}
+            {_TIENDA_JOIN}
             LEFT JOIN odoo.res_partner rp ON rp.odoo_id = {_EFFECTIVE_PARTNER} AND rp.company_key = 'GLOBAL'
             LEFT JOIN odoo.res_partner rp_orig ON ov_po.order_id IS NOT NULL AND rp_orig.odoo_id = po.partner_id AND rp_orig.company_key = 'GLOBAL'
             {_CATALOG_JOIN}

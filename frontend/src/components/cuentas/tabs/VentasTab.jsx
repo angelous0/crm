@@ -74,6 +74,7 @@ export function VentasTab({ cuentaId }) {
                   {detailMode && <TableHead className="text-xs">Modelo</TableHead>}
                   {detailMode && <TableHead className="text-xs">Talla</TableHead>}
                   {detailMode && <TableHead className="text-xs">Color</TableHead>}
+                  <TableHead className="text-xs">Tienda</TableHead>
                   {!detailMode && <TableHead className="text-xs">Estado</TableHead>}
                   <TableHead className="text-xs text-right">Qty</TableHead>
                   <TableHead className="text-xs text-right">{detailMode ? "P.Unit" : "Total"}</TableHead>
@@ -83,7 +84,7 @@ export function VentasTab({ cuentaId }) {
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={detailMode ? 9 : 7} className="h-20 text-center text-slate-500">Sin datos</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={detailMode ? 10 : 8} className="h-20 text-center text-slate-500">Sin datos</TableCell></TableRow>
                 ) : rows.map((r, i) => (
                   <TableRow key={detailMode ? `${r.order_id}-${r.line_id}` : r.order_id}
                     className={`${!detailMode ? "cursor-pointer" : ""} ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50`}
@@ -105,6 +106,7 @@ export function VentasTab({ cuentaId }) {
                     {detailMode && <TableCell className="text-xs truncate max-w-[140px]">{r.modelo_display || "-"}</TableCell>}
                     {detailMode && <TableCell className="text-xs">{r.talla || "-"}</TableCell>}
                     {detailMode && <TableCell className="text-xs">{r.color || "-"}</TableCell>}
+                    <TableCell className="text-xs whitespace-nowrap">{r.tienda || <span className="text-slate-400">-</span>}</TableCell>
                     {!detailMode && (
                       <TableCell className="text-xs">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{r.state}</span>

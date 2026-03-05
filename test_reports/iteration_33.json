@@ -62,7 +62,7 @@
 
   "should_main_agent_self_test": false,
 
-  "context_for_next_testing_agent": "ODS sync integration complete. SyncButton components on Pendientes, Comercial, and Creditos pages working correctly. ODS (https://odoo-pending-issue.preview.emergentagent.com) returns 404 as expected (not yet deployed). Backend proxy at /api/ods-sync/* returns 502 with meaningful error messages. Status badges show 'nunca' since no sync history exists. Button click triggers error toast and re-enables.",
+  "context_for_next_testing_agent": "ODS sync integration complete. SyncButton components on Pendientes, Comercial, and Creditos pages working correctly. ODS (https://tienda-sync-feature.preview.emergentagent.com) returns 404 as expected (not yet deployed). Backend proxy at /api/ods-sync/* returns 502 with meaningful error messages. Status badges show 'nunca' since no sync history exists. Button click triggers error toast and re-enables.",
 
   "rca_of_the_issue": "N/A - no bugs found. All ODS sync features working as specified. ODS unavailability (404) is expected behavior - external service not yet deployed."
 }

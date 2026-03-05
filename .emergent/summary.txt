@@ -1,134 +1,148 @@
 <analysis>**original_problem_statement:**
-The user has requested a series of features for their CRM application, including:
-1.  **Approval Workflow for New Customers:** A manual approval flow for new accounts and contacts synced from Odoo. This is now fully implemented (backend and frontend).
-2.  **Mass Inactivation:** A tool for admins to inactivate accounts and contacts that have no sales activity. This is complete.
-3.  **UI/UX Enhancements for Cuentas Directory:** Displaying the year in dates, adding a Days Since Purchase column, and making columns resizable. This is complete.
-4.  **Login Change:** Migrating the login system from  to  (username). This is complete.
-5.  **ODS Sync Integration:** Integrating buttons into the CRM to trigger data synchronization jobs (for customers, sales, etc.) on an external ODS (Odoo Data Service) application. This is complete.
-6.  **Mi Día Seller Dashboard (Phase 1):** A new home page for salespeople showing daily tasks, overdue items, accounts to contact, and at-risk accounts. Includes full CRUD for tasks and interactions with a mandatory Next Action workflow. This is complete.
+The user's initial problem was a critical bug where new customers synced from an external Odoo Data Service (ODS) were not appearing in the Pendientes de Aprobación (Pending Approval) list.
 
-The current problem is a **critical bug**: After the user syncs customers using the Actualizar Clientes button, newly created customers from Odoo are not appearing in the Pendientes de Aprobación list as expected.
+After fixing this bug, the user requested a series of significant enhancements to two main pages: Pendientes de Aprobación and Cuentas (Accounts).
+
+**PRODUCT REQUIREMENTS:**
+1.  **Pendientes de Aprobación Page:**
+    *   Display associated sales data (summary and line-item details in a modal) for each pending client to aid in the approval decision.
+    *   Add Tienda (Store) and Usuario (Odoo Creator) columns to the pending list.
+    *   Fix horizontal scrolling on small screens.
+2.  **Cuentas (Accounts) Page:**
+    *   Fix stale data for Última Compra (Last Purchase) by refreshing data views after each sync.
+    *   Correct KPI calculations for CANT. (Quantity), #COMP. (Purchase Count), and %YTD by including all relevant orders ().
+    *   Add a Tienda column based on the store's  from the  table.
+    *   Add a filter dropdown for the new Tienda column.
+    *   Improve UI by adding labels to filter dropdowns (e.g., Tienda: Todas).
+    *   Add columns for all-time statistics: CANT. TOTAL and #COMP. TOTAL.
+    *   Make the vertical divider between the accounts list and the detail panel resizable.
+    *   **Current Request:** Add a Tienda column to the Ventas, Reservas, and Crédito tabs within the account detail panel.
 
 **User's preferred language**: Spanish
 
 **what currently exists?**
-The application is a full-featured CRM with a FastAPI backend and React frontend. All major features requested by the user have been implemented, including a complete approval workflow, mass data inactivation tools, significant UI/UX enhancements to the main customer directory, and a new Mi Día dashboard for salespeople. The application is integrated with an external ODS service for data synchronization. The login has been changed from email-based to username-based, with the admin user being /.
+The application is a full-stack CRM with a FastAPI backend, a React frontend, and a PostgreSQL database. It features a complete customer approval workflow, a seller dashboard (Mi Día), and a comprehensive customer directory (Cuentas). The initial P0 bug has been resolved, and numerous data accuracy and UI/UX enhancements have been implemented on the Pendientes and Cuentas pages, including new data columns, filters, corrected KPI logic, and layout improvements. The system is integrated with an external ODS for data synchronization.
 
 **Last working item**:
--   Last item agent was working: Investigating a critical bug where new customers synced from Odoo are not appearing in the Pendientes de Aprobación page. The user confirmed via a screenshot that new customers are being created in Odoo, but the sync process in the CRM doesn't result in new  records. The agent's last action was to acknowledge the problem based on the user's feedback.
+-   Last item agent was working: The user wants to add a Tienda (Store) column to the tables inside the Ventas, Reservas, and Crédito tabs of the account detail panel on the Cuentas page. The agent had just begun investigating the three backend endpoints that power these tabs.
 -   Status: IN PROGRESS
--   Agent Testing Done: Y (For previously completed features)
--   Which testing method agent to use? Backend testing agent or manual /DB queries. The agent needs to inspect the data flow from the ODS service.
--   User Testing Done: Y (The user discovered and reported the bug).
+-   Agent Testing Done: N
+-   Which testing method agent to use? backend testing agent
+-   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: New Odoo clients are not appearing in the Pendientes list (P0)**
-    -   **Description:** The Actualizar Clientes sync runs successfully but fails to create new  records in the CRM, even though new clients exist in the source Odoo system. This makes the entire approval workflow unusable.
-    -   **Attempted fixes:** The agent improved error messages for the ODS sync and corrected the ODS URL, but this did not fix the underlying logic issue.
-    -   **Next debug checklist:**
-        1.  Run the Actualizar Clientes sync again.
-        2.  Immediately after the sync, query the  table to check the  of the most recently created records.
-        3.  Execute in bash: 
-        4.  Analyze the result: If the new clients are present but have a status of , it confirms the issue is in the external ODS service logic, which this agent cannot modify. If they are not present at all, the issue is also in the ODS sync job.
-    -   **Why fix this issue?** This bug completely blocks the core functionality of the Approval Workflow feature.
-    -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Backend
-    -   **Blocked on other issue:** Potentially blocked, as the fix might be required in the external ODS project (), which is outside this agent's scope.
+-   None. The current work is a feature request.
 
 **In progress Task List**:
--   None. All development tasks are paused until the P0 bug is resolved.
+-   **Task 1: Add Tienda column to Account Detail Tabs (P0)**
+    -   **Where to resume:** The agent has identified the three backend endpoints to modify: , , and  in . The next step is to update the SQL queries for these endpoints to join and retrieve the Tienda name, reusing the hybrid logic already developed (checking  first, then falling back to name-based mapping). Afterwards, the frontend components in  must be updated to render the new column in each tab's table.
+    -   **What will be achieved with this?** The user will be able to see which store is associated with each sale, reservation, or credit note directly in the account's detailed view, providing more contextual information.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on something:** No.
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks (P1):**
-    -   **Phase 2 of Mi Día - Manual Account Assignment:** Implement a UI for supervisors/admins to manually assign or reassign accounts to specific salespeople (). This will involve adding a user selector to the account profile page.
+    -   **Phase 2 of Mi Día - Manual Account Assignment:** Implement a UI for supervisors/admins to manually assign or reassign accounts to specific salespeople.
 -   **Future Tasks (P2):**
-    -   **Phase 3 of Mi Día - Supervisor Dashboard:** Create an Equipo (Team) page with performance rankings for salespeople (e.g., tasks completed, interactions logged).
+    -   **Phase 3 of Mi Día - Supervisor Dashboard:** Create an Equipo (Team) page with performance rankings for salespeople.
 
 **Completed work in this session**
--   **Mi Día Dashboard (Phase 1):** Implemented a new primary dashboard for sellers with tasks, interactions, and a mandatory Next Action workflow.
--   **ODS Sync Integration:** Added buttons and backend proxy to sync data from an external ODS, including improved error handling and URL correction.
--   **Login System Overhaul:** Changed authentication from  to  and created the / admin user.
--   **Cuentas Directory Enhancements:** Added year to dates, a Days Since Purchase column, and resizable column widths.
--   **Data Correction:** Fixed the DEPTO column to show the correct state name.
--   **Mass Inactivation Feature:** Created a tool for admins to bulk-inactivate customers/contacts with no sales.
--   **Approval Workflow Frontend:** Completed the UI for managing pending approvals.
+-   **Resolved P0 Bug:** Fixed the core issue where new customers were not appearing in the Pendientes de Aprobación list after an Odoo sync.
+-   **Optimized Performance:** Drastically improved the load time of the Pendientes page from over 12 seconds to ~2.7 seconds by optimizing database queries.
+-   **Enhanced Pendientes Page:** Added columns for Tienda, Usuario Creador, and a sales summary. Implemented a modal to show line-item details of sales. Fixed horizontal scrolling.
+-   **Enhanced Cuentas Page:**
+    -   **Data Accuracy:** Corrected all major KPIs (CANT., #COMP., %YTD, Últ. Compra) by fixing the underlying materialized view logic to include all order types and refreshing it automatically after every data sync.
+    -   **Tienda Column & Filter:** Added a Tienda column derived from . Implemented a hybrid data retrieval strategy to handle partially synced data. Added a corresponding filter dropdown.
+    -   **New Columns:** Added CANT. TOTAL and #COMP. TOTAL to show lifetime customer statistics.
+    -   **UI/UX:** Implemented a resizable splitter between the main list and the detail panel. Added labels to all filter dropdowns for clarity.
+-   **Corrected ODS Integration:** Fixed an incorrect  that was causing authentication errors during sync.
 
 **Earlier issues found/mentioned but not fixed**
--   None.
+-   **Issue 1: Incomplete  Sync**
+    -   **Description:** Some user creators (e.g., with  92 and 108) appear as UID:XX instead of their names because they are missing from the synced  table.
+    -   **Why to solve this issue and what will be achieved with this?** This is an external data sync issue within the ODS project. The agent has already implemented a fallback in the CRM to show the ID. The permanent fix requires the user to adjust the  sync job in the ODS project.
+    -   **Is recurring issue?** Y
 
 **Known issue recurrence from previous fork**
 -   None.
 
 **Code Architecture**
-
+mv_cuenta_sales_kpi
 
 **Key Technical Concepts**
--   **External Service Proxy:** A backend router () acts as an intermediary to an external API (the ODS). This encapsulates logic, normalizes responses, and decouples the frontend from the external service.
--   **Mandatory UI Workflow:** The Registrar Interacción flow uses chained modals to enforce a business rule (setting a Next Action is mandatory), guiding the user through a required process.
--   **Foreign Key Data Model:** The Mi Día feature is built on a relational model using UUIDs and foreign keys (, ) to link all activities to accounts and users.
+-   **Materialized View Management:** The session heavily involved refining a materialized view () to fix complex business logic, and then implementing an automatic refresh mechanism triggered by an external event (data sync) to prevent stale data.
+-   **Hybrid Data Sourcing (Fallback Logic):** To handle incomplete data from an external source (the  column), a hybrid query was created. It prioritizes the correct data source () and falls back to a less reliable mapping method if the primary source is NULL, ensuring maximum data visibility for the user.
+-   **Chained Asynchronous Frontend Operations:** The main  was enhanced to sequentially trigger three different API calls (, , ) to ensure data integrity and a smooth user experience after a single click.
+-   **Resizable UI Panels:** The  library was introduced to create a modern, flexible, and user-friendly split-screen layout.
 
 **key DB schema**
--   : { uid=0(root) gid=0(root) groups=0(root) (uuid),  (text),  (text),  (text),  (text) }
--   : {  (uuid),  (text),  (timestamptz), ... }
--   : { uid=0(root) gid=0(root) groups=0(root) (uuid),  (uuid),  (uuid),  (text),  (timestamptz),  (text) }
--   : { uid=0(root) gid=0(root) groups=0(root) (uuid),  (uuid),  (uuid),  (text),  (text),  (text),  (timestamptz) }
+-   : A materialized view that aggregates sales data for each customer. It has been heavily modified to include , total lifetime quantity (), and total lifetime orders (), and its filtering logic has been corrected.
+-   : The  column was added externally by the user and is now the primary source for determining a transaction's store. It is known to be partially NULL.
+-   : The  column is the source of truth for store names.
 
 **changes in tech stack**
--   : Added to the backend dependencies for making async HTTP requests.
+-   : Added as a new frontend dependency to implement the resizable layout on the Cuentas page.
 
 **All files of reference**
--   : The proxy that communicates with the ODS. The logic for how data is handled post-sync might need review.
--   : The page where the user expects new clients to appear.
--   : Contains the schema for , which needs to be queried to debug the issue.
+-   : Contains the three endpoints for the account detail tabs (, , ) that need to be modified for the current task.
+-   : Contains the definition of  and the complex  statement used for the Tienda fallback logic, which should be reused.
+-   : The main React component for the Cuentas page, where the UI for the detail tabs must be updated to show the new Tienda column.
 
 **Areas that need refactoring**:
--   The  router has a route for . For better organization, task-related CRUD could be moved to its own  router in the future.
+-   The manual  statement in  for mapping order prefixes to store names is a temporary workaround. The user should be reminded that the long-term solution is to have the external ODS project fully backfill the  column in the  table, which would make this workaround obsolete.
 
 **key api endpoints**
--   
--   
--   
--   
--    (Body now requires )
+-   **GET **: (To be modified) Fetches sales orders for the account detail panel.
+-   **GET **: (To be modified) Fetches reservations for the account detail panel.
+-   **GET **: (To be modified) Fetches credit notes for the account detail panel.
+-   **POST **: Refreshes the main sales KPI materialized view.
+-   **POST **: Detects newly synced customers and adds them to the pending approval list.
 
 **Critical Info for New Agent**
--   **Your immediate and only priority is to debug why new customers from Odoo are not appearing in the Pendientes de Aprobación list after a sync.**
--   The user has already confirmed new customers exist in Odoo. The problem is very likely that the external ODS service () is inserting them directly with an  status, bypassing the  state.
--   You cannot modify the ODS service. Your task is to investigate and prove where the issue lies. If it's in the ODS, you must clearly explain this to the user as the next step would be to fix the ODS project itself.
--   Use the debug checklist provided in the All Pending/In progress Issue list section to start your investigation.
--   The CRM login credentials are : , : .
+-   Your immediate priority is to add a Tienda column to the Ventas, Reservas, and Crédito tabs in the account detail view on the Cuentas page.
+-   You must reuse the existing hybrid logic for determining the store, which is located in the  view definition in . This logic uses  to prioritize the direct join via  and falls back to the manual name-based mapping.
+-   Remember that the  column in  is only partially filled. The fallback logic is essential for full data coverage.
 
 **documents and test reports created in this job**
 -   
--    (Most recent test report for Mi Día)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** Asks for an explanation of all the new features. (DONE)
-2.  **Agent:** Provides a detailed summary of all implemented features. (DONE)
-3.  **User:** Reports that after syncing customers, no new pending clients appear. (CURRENT ISSUE)
-4.  **Agent:** Explains the possible reasons (no new clients, or they were auto-approved). (DONE)
-5.  **User:** Posts a screenshot proving new clients were created in Odoo, confirming it's a bug. (CURRENT ISSUE)
-6.  **Agent:** Acknowledges the issue and confirms it's a problem to be investigated. (DONE)
-7.  **User:** Asks about which Odoo instance the sync is pointing to. (RESOLVED)
-8.  **User:** Provides the correct URL for the ODS service. (RESOLVED)
-9.  **Agent:** Implements the URL change and fixes related parsing issues. (RESOLVED)
-10. **User:** Explains that they are still getting a 404 page not found error, which the agent clarifies is because the ODS server itself is offline/asleep. This sub-issue is resolved from the CRM side. (RESOLVED)
+1.  **User:** Asks why CANT. and #COMP. have different values (12 months vs. total).
+2.  **Agent:** Clarifies that one is for the last 12 months.
+3.  **User:** Requests two new columns for all-time totals (CANT. TOTAL, #COMP. TOTAL). (DONE)
+4.  **Agent:** Implements the new total columns. (DONE)
+5.  **User:** Asks to make the divider in the Cuentas page layout resizable. (DONE)
+6.  **Agent:** Implements the resizable divider. (DONE)
+7.  **User:** Requests adding the Tienda column to the detail tabs (Ventas, Reservas, Credito). (CURRENT TASK)
+8.  **Agent:** Starts investigating the relevant backend endpoints.
+9.  **User:** Asks if the agent is using .
+10. **Agent:** Confirms they were using a name-based workaround because  was missing, and asks the user to add it in the ODS.
+11. **User:** Says  is now available. (AGENT CONFIRMED IT'S PARTIALLY FILLED)
+12. **User:** Asks why a specific customer still appears as Sin tienda.
+13. **Agent:** Explains the hybrid logic (using  when available, fallback to name mapping) and asks for clarification on mappings.
+14. **User:** Clarifies mappings and asks for Sin tienda to be an option in the filter. (DONE)
+15. **User:** Asks to add labels to the filter dropdowns. (DONE)
+16. **User:** Asks to add Tienda and Usuario columns to the Pendientes de Aprobación page. (DONE)
+17. **User:** Asks why the Usuario column is sometimes empty.
+18. **Agent:** Explains it's due to missing users in the  sync from ODS and implements a fallback to show the user ID. (DONE)
 
 **Project Health Check:**
--   **Broken:** Yes. The Approval Workflow feature is currently non-functional due to the P0 bug preventing new customers from entering the pending queue.
+-   **Broken:** No.
 -   **Mocked:** None.
 
 **3rd Party Integrations**
--   **Odoo Data Service:** The CRM connects to an external ODS application running at  to trigger and monitor data synchronization jobs.
+-   **Odoo Data Service:** An external application used to sync data from an Odoo instance into the CRM's PostgreSQL database. The CRM connects to it via HTTP API calls.
 
 **Testing status**
--   **Testing agent used after significant changes:** YES, for all completed features.
--   **Test files created:** None.
--   **Known regressions:** None.
+-   **Testing agent used after significant changes:** NO (Agent self-tested via curl and screenshots).
+-   **Troubleshoot agent used after agent stuck in loop:** NO
+-   **Test files created:** []
+-   **Known regressions:** []
 
 **Credentials to test flow:**
--   **CRM:** : , : 
+-   **Usuario:** 
+-   **Contraseña:** 
 
 **What agent forgot to execute**
--   The agent did not forget anything; the session ended just as the investigation into the critical bug was about to begin.</analysis>
+The agent has not forgotten anything; they are in the middle of implementing the user's latest feature request.</analysis>

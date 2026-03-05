@@ -23,7 +23,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://odoo-pending-issue.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://tienda-sync-feature.preview.emergentagent.com')
 
 # Excluded product name patterns (case-insensitive)
 EXCLUDED_PATTERNS = ['correa', 'saco', 'bolsa', 'probador', 'paneton', 'publicitario']

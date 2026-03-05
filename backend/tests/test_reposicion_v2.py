@@ -7,7 +7,7 @@ import requests
 import os
 from collections import defaultdict
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://odoo-pending-issue.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://tienda-sync-feature.preview.emergentagent.com').rstrip('/')
 
 
 @pytest.fixture(scope="module")
