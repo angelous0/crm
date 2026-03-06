@@ -63,18 +63,18 @@ frontend/src/
 - Fallback to UID:XX when res_users sync is incomplete
 
 ### 12. Reportes > Ventas Module (DONE - Mar 2026)
-- **Materialized view** `crm.mv_ventas_reporte`: Pre-computes flat reporting data with tienda, assigned_user_id (~0.7s queries vs 14s with raw views)
-- **Backend**: 4 endpoints in `/api/reportes/ventas/` (summary, by-day, top, filter-options)
-  - Summary: KPIs + YoY comparison (current vs same period last year)
-  - By-day: Daily series for chart (current + previous year)
-  - Top: Rankings by clientes/modelos/items/tallas/colores/tiendas with pagination
-  - Filter-options: Optimized dropdown values from base tables
-- **Frontend**: `ReportesVentasPage.jsx` with:
-  - Tab "Resumen": 4 KPI cards with YoY%, daily area chart (recharts) overlaying actual vs previous year
-  - Tab "Top": Ranked table with group-by selector + CSV export
-  - Filter bar: Range (YTD/MTD/Custom), Tienda, Vendedor, Marca, Tipo, Entalle, Tela, Hilo, Talla, Color
-- **Sidebar**: Collapsible "Reportes" section with "Ventas" sub-item
-- MV refreshes automatically when `/api/cuentas/refresh-kpis` is called (after sync)
+- **Materialized view** `crm.mv_ventas_reporte`: Pre-computes flat reporting data (~0.7s queries vs 14s raw)
+- **Backend**: 5 endpoints `/api/reportes/ventas/` (summary, by-day, by-month, top, filter-options)
+  - Summary: KPIs + YoY comparison (Unidades prioritized)
+  - By-day: Daily series (current + previous year)
+  - By-month: Multi-year monthly comparison (2019-2026) with fair cut at today's day
+  - Top: Rankings by clientes/modelos/items/tallas/colores/tiendas **ordered by unidades DESC**
+- **Frontend**: `ReportesVentasPage.jsx` with 3 tabs:
+  - **Resumen**: 4 KPI cards (Unidades highlighted first), daily area chart showing unidades
+  - **Comparación Anual**: Line/Bar chart toggle (8 years), numeric table with %YoY per cell, TOTAL YTD row, CSV export
+  - **Top**: Ranked table with group-by selector + CSV export
+- Sidebar: Collapsible "Reportes" section with "Ventas" sub-item
+- MV refreshes automatically via `/api/cuentas/refresh-kpis`
 
 ## Backlog
 - P1: Manual account assignment (user selector in cuenta profile)
