@@ -258,6 +258,95 @@ async def ventas_by_day(
         }
 
 
+# ── 2b) Monthly multi-year comparison ──
+
+_MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+
+@router.get("/ventas/by-month")
+async def ventas_by_month(
+    tienda: str = "",
+    vendedor: str = "",
+    marca: str = "",
+    tipo: str = "",
+    entalle: str = "",
+    tela: str = "",
+    hilo: str = "",
+    modelo: str = "",
+    talla: str = "",
+    color: str = "",
+    user=Depends(_get_auth()),
+):
+    """Monthly comparison across all years from 2019+, cut at today's day for fairness."""
+    today = date.today()
+    cur_month = today.month
+    cur_day = today.day
+
+    p = await get_pool()
+    async with p.acquire() as conn:
+        params = []
+        flt = _build_filters(params, tienda, vendedor, marca, tipo, entalle, tela, hilo, modelo, talla, color)
+
+        rows = await conn.fetch(f"""
+            SELECT EXTRACT(YEAR FROM r.dia)::int AS yr,
+                   EXTRACT(MONTH FROM r.dia)::int AS mo,
+                   COALESCE(SUM(r.qty), 0) AS unidades,
+                   COALESCE(SUM(r.subtotal), 0) AS ventas_soles,
+                   COUNT(DISTINCT r.order_id) AS ordenes,
+                   COUNT(DISTINCT r.owner_partner_id) AS clientes
+            FROM crm.mv_ventas_reporte r
+            WHERE r.dia >= '2019-01-01'
+              AND (
+                EXTRACT(MONTH FROM r.dia) < {cur_month}
+                OR (
+                  EXTRACT(MONTH FROM r.dia) = {cur_month}
+                  AND EXTRACT(DAY FROM r.dia) <= {cur_day}
+                )
+              )
+              {flt}
+            GROUP BY yr, mo
+            ORDER BY yr, mo
+        """, *params)
+
+        # Build structured response
+        years = sorted(set(r["yr"] for r in rows))
+        # Build per-month data
+        data_map = {}
+        for r in rows:
+            key = (r["yr"], r["mo"])
+            data_map[key] = {
+                "unidades": float(r["unidades"]),
+                "ventas_soles": float(r["ventas_soles"]),
+                "ordenes": int(r["ordenes"]),
+                "clientes": int(r["clientes"]),
+            }
+
+        months = []
+        for mo in range(1, cur_month + 1):
+            entry = {"month": mo, "month_name": _MONTH_NAMES[mo - 1]}
+            for yr in years:
+                entry[str(yr)] = data_map.get((yr, mo), {"unidades": 0, "ventas_soles": 0, "ordenes": 0, "clientes": 0})
+            months.append(entry)
+
+        # YTD totals per year
+        ytd_totals = {}
+        for yr in years:
+            tot = {"unidades": 0, "ventas_soles": 0, "ordenes": 0, "clientes": 0}
+            for mo in range(1, cur_month + 1):
+                d = data_map.get((yr, mo), {})
+                tot["unidades"] += d.get("unidades", 0)
+                tot["ventas_soles"] += d.get("ventas_soles", 0)
+                tot["ordenes"] += d.get("ordenes", 0)
+            # clientes YTD needs a separate query for dedup across months
+            ytd_totals[str(yr)] = tot
+
+        return {
+            "months": months,
+            "years": [str(y) for y in years],
+            "ytd_totals": ytd_totals,
+            "cut_date": f"{_MONTH_NAMES[cur_month-1]} {cur_day}",
+        }
+
+
 # ── 3) Top rankings ──
 
 @router.get("/ventas/top")
@@ -331,7 +420,7 @@ async def ventas_top(
             WHERE r.dia >= ($1::text::date) AND r.dia <= ($2::text::date)
               {flt}
             GROUP BY {cfg['group']}
-            ORDER BY ventas_soles DESC
+            ORDER BY unidades DESC
             LIMIT ${len(params) - 1} OFFSET ${len(params)}
         """, *params)
 

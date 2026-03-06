@@ -4,8 +4,9 @@ Test suite for Reportes > Ventas module endpoints.
 Endpoints tested:
 1. GET /api/reportes/ventas/summary - Summary with KPIs and YoY comparison
 2. GET /api/reportes/ventas/by-day - Daily sales series (current vs previous year)
-3. GET /api/reportes/ventas/top - Top rankings (clientes, modelos, tiendas, items)
-4. GET /api/reportes/ventas/filter-options - Filter dropdown options
+3. GET /api/reportes/ventas/by-month - Multi-year monthly comparison (2019-2026)
+4. GET /api/reportes/ventas/top - Top rankings (ordered by unidades DESC)
+5. GET /api/reportes/ventas/filter-options - Filter dropdown options
 """
 import pytest
 import requests
@@ -171,11 +172,138 @@ class TestByDayEndpoint(TestReportesVentasAuth):
         print(f"Previous period days: {len(data['previous'])}")
 
 
-class TestTopEndpoint(TestReportesVentasAuth):
-    """Tests for GET /api/reportes/ventas/top"""
+class TestByMonthEndpoint(TestReportesVentasAuth):
+    """Tests for GET /api/reportes/ventas/by-month - Multi-year monthly comparison"""
     
-    def test_top_clientes_returns_ranked_rows(self, auth_headers):
-        """Top clientes returns ranked client rows with ventas_soles, unidades, ordenes"""
+    def test_by_month_returns_months_array(self, auth_headers):
+        """by-month returns months array with data for years 2019-2026"""
+        response = requests.get(
+            f"{BASE_URL}/api/reportes/ventas/by-month",
+            headers=auth_headers
+        )
+        assert response.status_code == 200, f"by-month failed: {response.text}"
+        data = response.json()
+        
+        # Check required fields
+        assert "months" in data, "Missing months array"
+        assert "years" in data, "Missing years array"
+        assert "ytd_totals" in data, "Missing ytd_totals"
+        assert "cut_date" in data, "Missing cut_date"
+        
+        assert isinstance(data["months"], list)
+        assert isinstance(data["years"], list)
+        assert len(data["years"]) > 0, "Should have at least one year"
+        
+        # Check cut_date format (e.g., "Mar 6")
+        assert data["cut_date"], "cut_date should not be empty"
+        print(f"Cut date: {data['cut_date']}")
+        
+        # Check years span from 2019 to current year
+        years = [int(y) for y in data["years"]]
+        assert min(years) >= 2019, "Years should start from 2019 or later"
+        assert max(years) <= date.today().year, f"Max year should be <= {date.today().year}"
+        print(f"Years in response: {data['years']}")
+    
+    def test_by_month_structure_per_month_entry(self, auth_headers):
+        """Each month entry has month, month_name, and year data objects"""
+        response = requests.get(
+            f"{BASE_URL}/api/reportes/ventas/by-month",
+            headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        if len(data["months"]) > 0:
+            entry = data["months"][0]
+            assert "month" in entry, "Missing month number"
+            assert "month_name" in entry, "Missing month_name"
+            
+            # Check year data structure
+            for yr in data["years"]:
+                assert yr in entry, f"Missing data for year {yr}"
+                yr_data = entry[yr]
+                assert "unidades" in yr_data, f"Missing unidades for {yr}"
+                assert "ventas_soles" in yr_data, f"Missing ventas_soles for {yr}"
+                assert "ordenes" in yr_data, f"Missing ordenes for {yr}"
+                assert "clientes" in yr_data, f"Missing clientes for {yr}"
+        
+        print(f"Months returned: {len(data['months'])}")
+    
+    def test_by_month_cut_logic_partial_month(self, auth_headers):
+        """Current month data should be partial (only up to today's day)"""
+        today = date.today()
+        cur_month = today.month
+        
+        response = requests.get(
+            f"{BASE_URL}/api/reportes/ventas/by-month",
+            headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Check that we have data up to current month
+        months = data["months"]
+        assert len(months) == cur_month, f"Should have {cur_month} months, got {len(months)}"
+        
+        # Last month in array should be current month
+        last_month = months[-1]
+        assert last_month["month"] == cur_month, f"Last month should be {cur_month}"
+        
+        # cut_date should show current day
+        assert str(today.day) in data["cut_date"], f"cut_date should include day {today.day}"
+        print(f"Cut date verification: {data['cut_date']} (today is {today})")
+    
+    def test_by_month_ytd_totals_structure(self, auth_headers):
+        """ytd_totals should have per-year totals with unidades, ventas_soles, ordenes"""
+        response = requests.get(
+            f"{BASE_URL}/api/reportes/ventas/by-month",
+            headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        ytd_totals = data["ytd_totals"]
+        for yr in data["years"]:
+            assert yr in ytd_totals, f"Missing ytd_total for year {yr}"
+            tot = ytd_totals[yr]
+            assert "unidades" in tot
+            assert "ventas_soles" in tot
+            assert "ordenes" in tot
+            print(f"YTD {yr}: unidades={tot['unidades']}, ventas_soles={tot['ventas_soles']}")
+    
+    def test_by_month_filter_by_tienda(self, auth_headers):
+        """by-month filter by tienda works"""
+        # Get unfiltered
+        response_all = requests.get(
+            f"{BASE_URL}/api/reportes/ventas/by-month",
+            headers=auth_headers
+        )
+        assert response_all.status_code == 200
+        all_data = response_all.json()
+        
+        # Get filtered by BOOSH
+        response_filtered = requests.get(
+            f"{BASE_URL}/api/reportes/ventas/by-month",
+            params={"tienda": "BOOSH"},
+            headers=auth_headers
+        )
+        assert response_filtered.status_code == 200
+        filtered_data = response_filtered.json()
+        
+        # Filtered totals should be <= all totals
+        cur_year = str(date.today().year)
+        if cur_year in all_data["ytd_totals"] and cur_year in filtered_data["ytd_totals"]:
+            all_total = all_data["ytd_totals"][cur_year]["unidades"]
+            filtered_total = filtered_data["ytd_totals"][cur_year]["unidades"]
+            assert filtered_total <= all_total, "Filtered unidades should be <= total"
+            print(f"Total {cur_year} unidades: {all_total}, BOOSH: {filtered_total}")
+
+
+class TestTopEndpoint(TestReportesVentasAuth):
+    """Tests for GET /api/reportes/ventas/top - ordered by unidades DESC"""
+    
+    def test_top_clientes_ordered_by_unidades_desc(self, auth_headers):
+        """Top clientes returns rows ordered by unidades DESC (not by ventas_soles)"""
         response = requests.get(
             f"{BASE_URL}/api/reportes/ventas/top",
             params={"group_by": "clientes", "top_n": 5, "range": "YTD"},
@@ -185,22 +313,25 @@ class TestTopEndpoint(TestReportesVentasAuth):
         data = response.json()
         
         assert "rows" in data
-        assert "group_by" in data
         assert data["group_by"] == "clientes"
         assert isinstance(data["rows"], list)
         
-        if len(data["rows"]) > 0:
-            row = data["rows"][0]
-            assert "nombre" in row
-            assert "ventas_soles" in row
-            assert "unidades" in row
-            assert "ordenes" in row
-            assert isinstance(row["ventas_soles"], (int, float))
+        if len(data["rows"]) > 1:
+            # Verify ordering: first row should have >= unidades than second
+            rows = data["rows"]
+            for i in range(len(rows) - 1):
+                assert rows[i]["unidades"] >= rows[i+1]["unidades"], \
+                    f"Row {i} unidades ({rows[i]['unidades']}) should be >= row {i+1} ({rows[i+1]['unidades']})"
             
-        print(f"Top {len(data['rows'])} clientes returned")
+            # Check that first column of interest is unidades (priority over soles)
+            first_row = rows[0]
+            assert "unidades" in first_row
+            print(f"Top client: {first_row.get('nombre', 'N/A')} - unidades={first_row['unidades']}, soles={first_row['ventas_soles']}")
+        
+        print(f"Top {len(data['rows'])} clientes returned (ordered by unidades DESC)")
     
-    def test_top_modelos_returns_ranked_rows(self, auth_headers):
-        """Top modelos returns ranked model rows"""
+    def test_top_modelos_ordered_by_unidades_desc(self, auth_headers):
+        """Top modelos returns model rows ordered by unidades DESC"""
         response = requests.get(
             f"{BASE_URL}/api/reportes/ventas/top",
             params={"group_by": "modelos", "range": "YTD"},
@@ -212,10 +343,16 @@ class TestTopEndpoint(TestReportesVentasAuth):
         assert data["group_by"] == "modelos"
         assert isinstance(data["rows"], list)
         
-        print(f"Top {len(data['rows'])} modelos returned")
+        if len(data["rows"]) > 1:
+            rows = data["rows"]
+            for i in range(len(rows) - 1):
+                assert rows[i]["unidades"] >= rows[i+1]["unidades"], \
+                    f"Modelos row {i} unidades should be >= row {i+1}"
+        
+        print(f"Top {len(data['rows'])} modelos returned (ordered by unidades DESC)")
     
-    def test_top_tiendas_returns_ranked_rows(self, auth_headers):
-        """Top tiendas returns tienda rankings"""
+    def test_top_tiendas_ordered_by_unidades_desc(self, auth_headers):
+        """Top tiendas returns tienda rankings ordered by unidades DESC"""
         response = requests.get(
             f"{BASE_URL}/api/reportes/ventas/top",
             params={"group_by": "tiendas", "range": "YTD"},
@@ -227,15 +364,21 @@ class TestTopEndpoint(TestReportesVentasAuth):
         assert data["group_by"] == "tiendas"
         assert isinstance(data["rows"], list)
         
+        if len(data["rows"]) > 1:
+            rows = data["rows"]
+            for i in range(len(rows) - 1):
+                assert rows[i]["unidades"] >= rows[i+1]["unidades"], \
+                    f"Tiendas row {i} unidades should be >= row {i+1}"
+        
         if len(data["rows"]) > 0:
             row = data["rows"][0]
             assert "nombre" in row  # tienda name
             assert "ventas_soles" in row
             
-        print(f"Top {len(data['rows'])} tiendas returned")
+        print(f"Top {len(data['rows'])} tiendas returned (ordered by unidades DESC)")
     
-    def test_top_items_returns_marca_tipo_entalle_tela(self, auth_headers):
-        """Top items returns marca/tipo/entalle/tela rows"""
+    def test_top_items_ordered_by_unidades_desc(self, auth_headers):
+        """Top items returns marca/tipo/entalle/tela rows ordered by unidades DESC"""
         response = requests.get(
             f"{BASE_URL}/api/reportes/ventas/top",
             params={"group_by": "items", "range": "YTD"},
@@ -254,8 +397,15 @@ class TestTopEndpoint(TestReportesVentasAuth):
             assert "entalle" in row
             assert "tela" in row
             assert "ventas_soles" in row
+            assert "unidades" in row
+        
+        if len(data["rows"]) > 1:
+            rows = data["rows"]
+            for i in range(len(rows) - 1):
+                assert rows[i]["unidades"] >= rows[i+1]["unidades"], \
+                    f"Items row {i} unidades should be >= row {i+1}"
             
-        print(f"Top {len(data['rows'])} items returned")
+        print(f"Top {len(data['rows'])} items returned (ordered by unidades DESC)")
 
 
 class TestFilterOptionsEndpoint(TestReportesVentasAuth):

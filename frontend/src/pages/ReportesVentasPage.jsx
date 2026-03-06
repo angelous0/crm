@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, TrendingDown, Minus, Download, BarChart3, Users, Package, ShoppingCart, DollarSign } from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from "recharts";
+import { TrendingUp, TrendingDown, Minus, Download, BarChart3, Users, Package, ShoppingCart, DollarSign, CalendarRange } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -8,6 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import api from "@/lib/api";
+
+const YEAR_COLORS = {
+  "2019": "#94a3b8", "2020": "#a3a3a3", "2021": "#d97706",
+  "2022": "#0891b2", "2023": "#7c3aed", "2024": "#059669",
+  "2025": "#e11d48", "2026": "#2563eb",
+};
 
 function fmtSoles(n) {
   if (n == null) return "S/ 0";
@@ -26,18 +35,18 @@ function useAuth() {
   return !!localStorage.getItem("crm_token");
 }
 
-function KpiCard({ title, value, prevValue, pctChange, icon: Icon, format = "soles" }) {
+function KpiCard({ title, value, prevValue, pctChange, icon: Icon, format = "number", highlight }) {
   const fmt = format === "soles" ? fmtSoles : fmtNum;
   const isUp = pctChange != null && pctChange > 0;
   const isDown = pctChange != null && pctChange < 0;
   return (
-    <Card data-testid={`kpi-${title.toLowerCase().replace(/\s/g, "-")}`}>
+    <Card data-testid={`kpi-${title.toLowerCase().replace(/\s/g, "-")}`} className={highlight ? "ring-2 ring-blue-200 bg-blue-50/30" : ""}>
       <CardContent className="pt-5 pb-4 px-5">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{title}</span>
           <Icon className="h-4 w-4 text-slate-400" />
         </div>
-        <div className="text-2xl font-bold text-slate-900 mb-1">{fmt(value)}</div>
+        <div className={`font-bold text-slate-900 mb-1 ${highlight ? "text-3xl" : "text-2xl"}`}>{fmt(value)}</div>
         <div className="flex items-center gap-1.5 text-xs">
           {pctChange != null ? (
             <>
@@ -56,7 +65,7 @@ function KpiCard({ title, value, prevValue, pctChange, icon: Icon, format = "sol
   );
 }
 
-function FilterBar({ filters, setFilters, options, loading }) {
+function FilterBar({ filters, setFilters, options }) {
   const selectFilters = [
     { key: "tienda", label: "Tienda", opts: options.tiendas },
     { key: "marca", label: "Marca", opts: options.marcas },
@@ -69,7 +78,6 @@ function FilterBar({ filters, setFilters, options, loading }) {
   ];
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="filter-bar">
-      {/* Range selector */}
       <Select value={filters.range} onValueChange={(v) => setFilters((f) => ({ ...f, range: v }))}>
         <SelectTrigger className="w-[120px] h-8 text-xs" data-testid="filter-range">
           <SelectValue placeholder="Rango" />
@@ -80,25 +88,12 @@ function FilterBar({ filters, setFilters, options, loading }) {
           <SelectItem value="CUSTOM">Custom</SelectItem>
         </SelectContent>
       </Select>
-
       {filters.range === "CUSTOM" && (
         <>
-          <Input
-            type="date" className="h-8 w-[130px] text-xs"
-            value={filters.date_from}
-            onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
-            data-testid="filter-date-from"
-          />
-          <Input
-            type="date" className="h-8 w-[130px] text-xs"
-            value={filters.date_to}
-            onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
-            data-testid="filter-date-to"
-          />
+          <Input type="date" className="h-8 w-[130px] text-xs" value={filters.date_from} onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))} data-testid="filter-date-from" />
+          <Input type="date" className="h-8 w-[130px] text-xs" value={filters.date_to} onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))} data-testid="filter-date-to" />
         </>
       )}
-
-      {/* Vendedor */}
       {options.vendedores?.length > 0 && (
         <Select value={filters.vendedor || "__all__"} onValueChange={(v) => setFilters((f) => ({ ...f, vendedor: v === "__all__" ? "" : v }))}>
           <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="filter-vendedor">
@@ -107,13 +102,10 @@ function FilterBar({ filters, setFilters, options, loading }) {
           <SelectContent>
             <SelectItem value="__all__">Todos</SelectItem>
             <SelectItem value="Sin asignar">Sin asignar</SelectItem>
-            {options.vendedores.map((v) => (
-              <SelectItem key={v.id} value={v.id}>{v.nombre}</SelectItem>
-            ))}
+            {options.vendedores.map((v) => (<SelectItem key={v.id} value={v.id}>{v.nombre}</SelectItem>))}
           </SelectContent>
         </Select>
       )}
-
       {selectFilters.map(({ key, label, opts }) =>
         opts && opts.length > 0 ? (
           <Select key={key} value={filters[key] || "__all__"} onValueChange={(v) => setFilters((f) => ({ ...f, [key]: v === "__all__" ? "" : v }))}>
@@ -122,20 +114,13 @@ function FilterBar({ filters, setFilters, options, loading }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todos</SelectItem>
-              {opts.map((o) => (
-                <SelectItem key={o} value={o}>{o}</SelectItem>
-              ))}
+              {opts.map((o) => (<SelectItem key={o} value={o}>{o}</SelectItem>))}
             </SelectContent>
           </Select>
         ) : null
       )}
-
       {Object.values(filters).some((v) => v && v !== "YTD") && (
-        <Button
-          variant="ghost" size="sm" className="h-8 text-xs"
-          onClick={() => setFilters({ range: "YTD", tienda: "", vendedor: "", marca: "", tipo: "", entalle: "", tela: "", hilo: "", modelo: "", talla: "", color: "", date_from: "", date_to: "" })}
-          data-testid="filter-clear"
-        >
+        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setFilters({ range: "YTD", tienda: "", vendedor: "", marca: "", tipo: "", entalle: "", tela: "", hilo: "", modelo: "", talla: "", color: "", date_from: "", date_to: "" })} data-testid="filter-clear">
           Limpiar filtros
         </Button>
       )}
@@ -144,7 +129,6 @@ function FilterBar({ filters, setFilters, options, loading }) {
 }
 
 function DailyChart({ data }) {
-  // Align current + previous by day-of-range index
   const chartData = useMemo(() => {
     if (!data) return [];
     const cur = data.current || [];
@@ -154,41 +138,167 @@ function DailyChart({ data }) {
     for (let i = 0; i < maxLen; i++) {
       result.push({
         label: cur[i]?.date || `Día ${i + 1}`,
-        actual: cur[i]?.ventas_soles || 0,
-        anterior: prev[i]?.ventas_soles || 0,
+        actual: cur[i]?.unidades || 0,
+        anterior: prev[i]?.unidades || 0,
       });
     }
     return result;
   }, [data]);
 
-  if (!chartData.length) return <div className="h-64 flex items-center justify-center text-slate-400 text-sm">Sin datos para el período</div>;
+  if (!chartData.length) return <div className="h-64 flex items-center justify-center text-slate-400 text-sm">Sin datos</div>;
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ResponsiveContainer width="100%" height={240}>
       <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
         <defs>
           <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
           </linearGradient>
-          <linearGradient id="gradAnterior" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
-          </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-        <XAxis dataKey="label" tick={{ fontSize: 10 }} tickFormatter={(v) => v?.slice(5) || v} />
-        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `S/${(v / 1000).toFixed(0)}k`} />
-        <Tooltip
-          formatter={(val, name) => [fmtSoles(val), name === "actual" ? "Actual" : "Año ant."]}
-          labelFormatter={(l) => l}
-          contentStyle={{ fontSize: 12 }}
-        />
-        <Legend formatter={(v) => (v === "actual" ? "Actual" : "Año anterior")} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-        <Area type="monotone" dataKey="anterior" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" fill="url(#gradAnterior)" />
+        <XAxis dataKey="label" tick={{ fontSize: 9 }} tickFormatter={(v) => v?.slice(5) || v} />
+        <YAxis tick={{ fontSize: 9 }} />
+        <Tooltip formatter={(val, name) => [fmtNum(val) + " uds", name === "actual" ? "Actual" : "Año ant."]} contentStyle={{ fontSize: 11 }} />
+        <Legend formatter={(v) => (v === "actual" ? "Actual" : "Año anterior")} iconSize={10} wrapperStyle={{ fontSize: 10 }} />
+        <Area type="monotone" dataKey="anterior" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" fillOpacity={0.1} fill="#94a3b8" />
         <Area type="monotone" dataKey="actual" stroke="#3b82f6" strokeWidth={2} fill="url(#gradActual)" />
       </AreaChart>
     </ResponsiveContainer>
+  );
+}
+
+function MonthlyLineChart({ data }) {
+  const { chartData, years } = useMemo(() => {
+    if (!data?.months) return { chartData: [], years: [] };
+    const yrs = data.years || [];
+    const cd = data.months.map((m) => {
+      const entry = { month: m.month_name };
+      for (const yr of yrs) {
+        entry[yr] = m[yr]?.unidades || 0;
+      }
+      return entry;
+    });
+    return { chartData: cd, years: yrs };
+  }, [data]);
+
+  if (!chartData.length) return null;
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => fmtNum(v)} />
+        <Tooltip formatter={(val, name) => [fmtNum(val) + " uds", name]} contentStyle={{ fontSize: 11 }} />
+        <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+        {years.map((yr) => (
+          <Line key={yr} type="monotone" dataKey={yr} stroke={YEAR_COLORS[yr] || "#666"}
+            strokeWidth={yr === years[years.length - 1] ? 3 : 1.5}
+            dot={yr === years[years.length - 1] ? { r: 3 } : false}
+            strokeDasharray={yr === years[years.length - 1] ? undefined : "4 4"} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function MonthlyBarChart({ data }) {
+  const { chartData, years } = useMemo(() => {
+    if (!data?.months) return { chartData: [], years: [] };
+    const yrs = data.years || [];
+    const cd = data.months.map((m) => {
+      const entry = { month: m.month_name };
+      for (const yr of yrs) {
+        entry[yr] = m[yr]?.unidades || 0;
+      }
+      return entry;
+    });
+    return { chartData: cd, years: yrs };
+  }, [data]);
+
+  if (!chartData.length) return null;
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => fmtNum(v)} />
+        <Tooltip formatter={(val, name) => [fmtNum(val) + " uds", name]} contentStyle={{ fontSize: 11 }} />
+        <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+        {years.map((yr) => (
+          <Bar key={yr} dataKey={yr} fill={YEAR_COLORS[yr] || "#666"}
+            opacity={yr === years[years.length - 1] ? 1 : 0.6}
+            radius={[2, 2, 0, 0]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function MonthlyTable({ data }) {
+  if (!data?.months) return null;
+  const years = data.years || [];
+  const months = data.months || [];
+  const totals = data.ytd_totals || {};
+
+  return (
+    <div className="border rounded-md overflow-auto max-h-[400px]">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50/80">
+            <TableHead className="text-xs font-semibold sticky left-0 bg-slate-50/80 z-10">Mes</TableHead>
+            {years.map((yr) => (
+              <TableHead key={yr} className="text-xs text-right font-semibold" style={{ color: YEAR_COLORS[yr] }}>{yr}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {months.map((m, i) => (
+            <TableRow key={i}>
+              <TableCell className="text-xs font-medium sticky left-0 bg-white z-10">{m.month_name}</TableCell>
+              {years.map((yr) => {
+                const val = m[yr]?.unidades || 0;
+                const prevYrIdx = years.indexOf(yr) - 1;
+                const prevVal = prevYrIdx >= 0 ? (m[years[prevYrIdx]]?.unidades || 0) : null;
+                const pctDiff = prevVal && prevVal > 0 ? ((val / prevVal) - 1) : null;
+                return (
+                  <TableCell key={yr} className="text-xs text-right font-mono">
+                    <span className="font-medium">{fmtNum(val)}</span>
+                    {pctDiff != null && (
+                      <span className={`ml-1 text-[10px] ${pctDiff >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                        {fmtPct(pctDiff)}
+                      </span>
+                    )}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+          {/* YTD Total row */}
+          <TableRow className="bg-slate-100 font-bold border-t-2">
+            <TableCell className="text-xs font-bold sticky left-0 bg-slate-100 z-10">TOTAL YTD</TableCell>
+            {years.map((yr) => {
+              const val = totals[yr]?.unidades || 0;
+              const prevYrIdx = years.indexOf(yr) - 1;
+              const prevVal = prevYrIdx >= 0 ? (totals[years[prevYrIdx]]?.unidades || 0) : null;
+              const pctDiff = prevVal && prevVal > 0 ? ((val / prevVal) - 1) : null;
+              return (
+                <TableCell key={yr} className="text-xs text-right font-mono font-bold">
+                  {fmtNum(val)}
+                  {pctDiff != null && (
+                    <span className={`ml-1 text-[10px] ${pctDiff >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                      {fmtPct(pctDiff)}
+                    </span>
+                  )}
+                </TableCell>
+              );
+            })}
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -198,9 +308,7 @@ function TopTable({ rows, groupBy, onExport }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-slate-600">
-          {rows.length} resultado{rows.length !== 1 ? "s" : ""}
-        </span>
+        <span className="text-sm font-medium text-slate-600">{rows.length} resultado{rows.length !== 1 ? "s" : ""}</span>
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onExport} data-testid="top-export-csv">
           <Download className="h-3 w-3" /> CSV
         </Button>
@@ -211,41 +319,29 @@ function TopTable({ rows, groupBy, onExport }) {
             <TableRow className="bg-slate-50/50">
               <TableHead className="text-xs w-10">#</TableHead>
               {isItems ? (
-                <>
-                  <TableHead className="text-xs">Marca</TableHead>
-                  <TableHead className="text-xs">Tipo</TableHead>
-                  <TableHead className="text-xs">Entalle</TableHead>
-                  <TableHead className="text-xs">Tela</TableHead>
-                </>
+                <><TableHead className="text-xs">Marca</TableHead><TableHead className="text-xs">Tipo</TableHead><TableHead className="text-xs">Entalle</TableHead><TableHead className="text-xs">Tela</TableHead></>
               ) : (
                 <TableHead className="text-xs">{isClientes ? "Cliente" : groupBy === "modelos" ? "Modelo" : groupBy === "tallas" ? "Talla" : groupBy === "colores" ? "Color" : groupBy === "tiendas" ? "Tienda" : "Nombre"}</TableHead>
               )}
-              <TableHead className="text-xs text-right">Ventas S/</TableHead>
               <TableHead className="text-xs text-right">Unidades</TableHead>
-              <TableHead className="text-xs text-right">Órdenes</TableHead>
+              <TableHead className="text-xs text-right">Ventas S/</TableHead>
+              <TableHead className="text-xs text-right">Ordenes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isItems ? 8 : 5} className="h-20 text-center text-slate-500">Sin datos</TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={isItems ? 8 : 5} className="h-20 text-center text-slate-500">Sin datos</TableCell></TableRow>
             ) : (
               rows.map((r, i) => (
                 <TableRow key={i} data-testid={`top-row-${i}`}>
                   <TableCell className="text-xs text-slate-400 font-mono">{i + 1}</TableCell>
                   {isItems ? (
-                    <>
-                      <TableCell className="text-xs">{r.marca || "-"}</TableCell>
-                      <TableCell className="text-xs">{r.tipo || "-"}</TableCell>
-                      <TableCell className="text-xs">{r.entalle || "-"}</TableCell>
-                      <TableCell className="text-xs">{r.tela || "-"}</TableCell>
-                    </>
+                    <><TableCell className="text-xs">{r.marca || "-"}</TableCell><TableCell className="text-xs">{r.tipo || "-"}</TableCell><TableCell className="text-xs">{r.entalle || "-"}</TableCell><TableCell className="text-xs">{r.tela || "-"}</TableCell></>
                   ) : (
                     <TableCell className="text-xs font-medium max-w-[250px] truncate">{r.nombre || "-"}</TableCell>
                   )}
-                  <TableCell className="text-xs text-right font-mono">{fmtSoles(r.ventas_soles)}</TableCell>
-                  <TableCell className="text-xs text-right font-mono">{fmtNum(r.unidades)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(r.unidades)}</TableCell>
+                  <TableCell className="text-xs text-right font-mono text-slate-500">{fmtSoles(r.ventas_soles)}</TableCell>
                   <TableCell className="text-xs text-right font-mono">{fmtNum(r.ordenes)}</TableCell>
                 </TableRow>
               ))
@@ -269,11 +365,13 @@ export default function ReportesVentasPage() {
   const [filterOpts, setFilterOpts] = useState({});
   const [summary, setSummary] = useState(null);
   const [dailyData, setDailyData] = useState(null);
+  const [monthlyData, setMonthlyData] = useState(null);
   const [topRows, setTopRows] = useState([]);
   const [topGroupBy, setTopGroupBy] = useState("clientes");
   const [topN, setTopN] = useState(20);
-  const [loading, setLoading] = useState({ summary: false, daily: false, top: false });
+  const [loading, setLoading] = useState({ summary: false, daily: false, monthly: false, top: false });
   const [activeTab, setActiveTab] = useState("resumen");
+  const [monthChartMode, setMonthChartMode] = useState("linea");
 
   const buildQS = useCallback(() => {
     const p = {};
@@ -288,11 +386,16 @@ export default function ReportesVentasPage() {
     return p;
   }, [filters]);
 
-  // Load filter options once
+  const buildFilterQS = useCallback(() => {
+    const p = {};
+    for (const k of ["tienda", "vendedor", "marca", "tipo", "entalle", "tela", "hilo", "modelo", "talla", "color"]) {
+      if (filters[k]) p[k] = filters[k];
+    }
+    return p;
+  }, [filters]);
+
   useEffect(() => {
-    api.get("/reportes/ventas/filter-options")
-      .then((r) => setFilterOpts(r.data))
-      .catch(() => {});
+    api.get("/reportes/ventas/filter-options").then((r) => setFilterOpts(r.data)).catch(() => {});
   }, []);
 
   // Load summary + daily
@@ -300,51 +403,54 @@ export default function ReportesVentasPage() {
     if (!token) return;
     const params = buildQS();
     setLoading((l) => ({ ...l, summary: true, daily: true }));
-
-    api.get("/reportes/ventas/summary", { params })
-      .then((r) => setSummary(r.data))
-      .catch(() => {})
-      .finally(() => setLoading((l) => ({ ...l, summary: false })));
-
-    api.get("/reportes/ventas/by-day", { params })
-      .then((r) => setDailyData(r.data))
-      .catch(() => {})
-      .finally(() => setLoading((l) => ({ ...l, daily: false })));
+    api.get("/reportes/ventas/summary", { params }).then((r) => setSummary(r.data)).catch(() => {}).finally(() => setLoading((l) => ({ ...l, summary: false })));
+    api.get("/reportes/ventas/by-day", { params }).then((r) => setDailyData(r.data)).catch(() => {}).finally(() => setLoading((l) => ({ ...l, daily: false })));
   }, [token, buildQS]);
+
+  // Load monthly multi-year
+  useEffect(() => {
+    if (!token) return;
+    setLoading((l) => ({ ...l, monthly: true }));
+    api.get("/reportes/ventas/by-month", { params: buildFilterQS() }).then((r) => setMonthlyData(r.data)).catch(() => {}).finally(() => setLoading((l) => ({ ...l, monthly: false })));
+  }, [token, buildFilterQS]);
 
   // Load top
   useEffect(() => {
     if (!token) return;
     const params = { ...buildQS(), group_by: topGroupBy, top_n: topN };
     setLoading((l) => ({ ...l, top: true }));
-    api.get("/reportes/ventas/top", { params })
-      .then((r) => setTopRows(r.data.rows || []))
-      .catch(() => {})
-      .finally(() => setLoading((l) => ({ ...l, top: false })));
+    api.get("/reportes/ventas/top", { params }).then((r) => setTopRows(r.data.rows || [])).catch(() => {}).finally(() => setLoading((l) => ({ ...l, top: false })));
   }, [token, buildQS, topGroupBy, topN]);
 
   const exportCSV = useCallback(() => {
     if (!topRows.length) return;
     const isItems = topGroupBy === "items";
-    const hdr = isItems
-      ? ["#", "Marca", "Tipo", "Entalle", "Tela", "Ventas S/", "Unidades", "Órdenes"]
-      : ["#", "Nombre", "Ventas S/", "Unidades", "Órdenes"];
+    const hdr = isItems ? ["#", "Marca", "Tipo", "Entalle", "Tela", "Unidades", "Ventas S/", "Ordenes"] : ["#", "Nombre", "Unidades", "Ventas S/", "Ordenes"];
     const lines = [hdr.join(",")];
     topRows.forEach((r, i) => {
-      if (isItems) {
-        lines.push([i + 1, r.marca, r.tipo, r.entalle, r.tela, r.ventas_soles, r.unidades, r.ordenes].join(","));
-      } else {
-        lines.push([i + 1, `"${(r.nombre || "").replace(/"/g, '""')}"`, r.ventas_soles, r.unidades, r.ordenes].join(","));
-      }
+      if (isItems) lines.push([i + 1, r.marca, r.tipo, r.entalle, r.tela, r.unidades, r.ventas_soles, r.ordenes].join(","));
+      else lines.push([i + 1, `"${(r.nombre || "").replace(/"/g, '""')}"`, r.unidades, r.ventas_soles, r.ordenes].join(","));
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `top_${topGroupBy}_${filters.range}.csv`;
-    a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `top_${topGroupBy}_${filters.range}.csv`; a.click();
     URL.revokeObjectURL(url);
   }, [topRows, topGroupBy, filters.range]);
+
+  const exportMonthlyCSV = useCallback(() => {
+    if (!monthlyData?.months) return;
+    const years = monthlyData.years;
+    const hdr = ["Mes", ...years].join(",");
+    const lines = [hdr];
+    monthlyData.months.forEach((m) => {
+      lines.push([m.month_name, ...years.map((yr) => m[yr]?.unidades || 0)].join(","));
+    });
+    lines.push(["TOTAL YTD", ...years.map((yr) => monthlyData.ytd_totals[yr]?.unidades || 0)].join(","));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "comparacion_mensual_unidades.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }, [monthlyData]);
 
   const kpis = summary?.kpis;
   const yoy = summary?.yoy;
@@ -352,49 +458,90 @@ export default function ReportesVentasPage() {
 
   return (
     <div className="min-h-screen bg-slate-50" data-testid="reportes-ventas-page">
-      {/* Header */}
       <div className="border-b bg-white px-6 py-4">
         <h1 className="text-lg font-semibold text-slate-900">Reportes de Ventas</h1>
         <p className="text-xs text-slate-500 mt-0.5">
           {summary ? `${summary.date_from} — ${summary.date_to}` : "Cargando..."}
+          {monthlyData?.cut_date && <span className="ml-2 text-slate-400">| Corte multi-año: {monthlyData.cut_date}</span>}
         </p>
       </div>
 
       <div className="p-4 md:p-6 space-y-5 max-w-[1400px] mx-auto">
-        {/* Filters */}
-        <FilterBar filters={filters} setFilters={setFilters} options={filterOpts} loading={loading.summary} />
+        <FilterBar filters={filters} setFilters={setFilters} options={filterOpts} />
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-white border" data-testid="reportes-tabs">
             <TabsTrigger value="resumen" className="text-xs">Resumen</TabsTrigger>
+            <TabsTrigger value="comparacion" className="text-xs">Comparación Anual</TabsTrigger>
             <TabsTrigger value="top" className="text-xs">Top</TabsTrigger>
           </TabsList>
 
           {/* ─── Resumen ─── */}
           <TabsContent value="resumen" className="space-y-5 mt-4">
-            {/* KPI cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="kpi-grid">
-              <KpiCard title="Ventas" value={kpis?.ventas_soles} prevValue={yoy?.ventas_soles_prev} pctChange={yoyPct?.ventas_soles} icon={DollarSign} format="soles" />
-              <KpiCard title="Unidades" value={kpis?.unidades} prevValue={yoy?.unidades_prev} pctChange={yoyPct?.unidades} icon={Package} format="number" />
-              <KpiCard title="Órdenes" value={kpis?.ordenes} prevValue={yoy?.ordenes_prev} pctChange={yoyPct?.ordenes} icon={ShoppingCart} format="number" />
+              <KpiCard title="Unidades" value={kpis?.unidades} prevValue={yoy?.unidades_prev} pctChange={yoyPct?.unidades} icon={Package} format="number" highlight />
+              <KpiCard title="Ordenes" value={kpis?.ordenes} prevValue={yoy?.ordenes_prev} pctChange={yoyPct?.ordenes} icon={ShoppingCart} format="number" />
               <KpiCard title="Clientes" value={kpis?.clientes} prevValue={yoy?.clientes_prev} pctChange={yoyPct?.clientes} icon={Users} format="number" />
+              <KpiCard title="Ventas" value={kpis?.ventas_soles} prevValue={yoy?.ventas_soles_prev} pctChange={yoyPct?.ventas_soles} icon={DollarSign} format="soles" />
             </div>
 
-            {/* Daily chart */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-blue-500" /> Ventas diarias vs. año anterior
+                  <BarChart3 className="h-4 w-4 text-blue-500" /> Unidades diarias vs. año anterior
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {loading.daily ? (
-                  <div className="h-64 flex items-center justify-center text-slate-400 text-sm">Cargando gráfico...</div>
-                ) : (
-                  <DailyChart data={dailyData} />
-                )}
+                {loading.daily ? <div className="h-56 flex items-center justify-center text-slate-400 text-sm">Cargando...</div> : <DailyChart data={dailyData} />}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ─── Comparación Anual ─── */}
+          <TabsContent value="comparacion" className="space-y-5 mt-4">
+            {loading.monthly ? (
+              <div className="h-40 flex items-center justify-center text-slate-400 text-sm">Cargando comparación...</div>
+            ) : monthlyData ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarRange className="h-4 w-4 text-slate-500" />
+                    <span className="text-sm font-medium text-slate-700">
+                      Unidades por mes (2019–{new Date().getFullYear()}) — corte al {monthlyData.cut_date}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select value={monthChartMode} onValueChange={setMonthChartMode}>
+                      <SelectTrigger className="w-[110px] h-7 text-xs" data-testid="month-chart-mode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="linea">Líneas</SelectItem>
+                        <SelectItem value="barras">Barras</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={exportMonthlyCSV} data-testid="monthly-export-csv">
+                      <Download className="h-3 w-3" /> CSV
+                    </Button>
+                  </div>
+                </div>
+
+                <Card>
+                  <CardContent className="pt-4">
+                    {monthChartMode === "linea" ? <MonthlyLineChart data={monthlyData} /> : <MonthlyBarChart data={monthlyData} />}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Tabla de unidades por mes y año</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MonthlyTable data={monthlyData} />
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
           </TabsContent>
 
           {/* ─── Top ─── */}
@@ -414,9 +561,7 @@ export default function ReportesVentasPage() {
                 </SelectContent>
               </Select>
               <Select value={String(topN)} onValueChange={(v) => setTopN(Number(v))}>
-                <SelectTrigger className="w-[80px] h-8 text-xs" data-testid="top-n-select">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-[80px] h-8 text-xs" data-testid="top-n-select"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">Top 10</SelectItem>
                   <SelectItem value="20">Top 20</SelectItem>
@@ -425,11 +570,7 @@ export default function ReportesVentasPage() {
                 </SelectContent>
               </Select>
             </div>
-            {loading.top ? (
-              <div className="h-40 flex items-center justify-center text-slate-400 text-sm">Cargando...</div>
-            ) : (
-              <TopTable rows={topRows} groupBy={topGroupBy} onExport={exportCSV} />
-            )}
+            {loading.top ? <div className="h-40 flex items-center justify-center text-slate-400 text-sm">Cargando...</div> : <TopTable rows={topRows} groupBy={topGroupBy} onExport={exportCSV} />}
           </TabsContent>
         </Tabs>
       </div>
