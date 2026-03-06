@@ -73,44 +73,62 @@ def _date_range(range_type: str, date_from: str, date_to: str):
 
 def _build_filters(params, tienda="", vendedor="", marca="", tipo="",
                    entalle="", tela="", hilo="", modelo="", talla="", color=""):
-    """Build WHERE extras for optional filters. Returns SQL fragment."""
+    """Build WHERE extras for optional filters. Supports comma-separated multi-values."""
     extra = ""
-    if tienda:
-        if tienda == "Sin tienda":
-            extra += " AND r.tienda IS NULL"
+
+    def _add_multi(val, col):
+        nonlocal extra
+        if not val:
+            return
+        vals = [v.strip() for v in val.split(",") if v.strip()]
+        if not vals:
+            return
+        # Handle special "Sin tienda" / "Sin asignar" mixed with real values
+        has_null = False
+        real_vals = []
+        for v in vals:
+            if v in ("Sin tienda", "Sin asignar"):
+                has_null = True
+            else:
+                real_vals.append(v)
+        if real_vals and has_null:
+            params.append(real_vals)
+            extra += f" AND ({col} = ANY(${len(params)}) OR {col} IS NULL)"
+        elif has_null:
+            extra += f" AND {col} IS NULL"
+        elif len(real_vals) == 1:
+            params.append(real_vals[0])
+            extra += f" AND {col} = ${len(params)}"
         else:
-            params.append(tienda)
-            extra += f" AND r.tienda = ${len(params)}"
+            params.append(real_vals)
+            extra += f" AND {col} = ANY(${len(params)})"
+
+    _add_multi(tienda, "r.tienda")
     if vendedor:
-        if vendedor == "Sin asignar":
+        vals = [v.strip() for v in vendedor.split(",") if v.strip()]
+        has_unassigned = "Sin asignar" in vals
+        real = [v for v in vals if v != "Sin asignar"]
+        if real and has_unassigned:
+            params.append(real)
+            extra += f" AND (r.assigned_user_id::text = ANY(${len(params)}) OR r.assigned_user_id IS NULL)"
+        elif has_unassigned:
             extra += " AND r.assigned_user_id IS NULL"
-        else:
-            params.append(vendedor)
+        elif len(real) == 1:
+            params.append(real[0])
             extra += f" AND r.assigned_user_id::text = ${len(params)}"
-    if marca:
-        params.append(marca)
-        extra += f" AND r.marca = ${len(params)}"
-    if tipo:
-        params.append(tipo)
-        extra += f" AND r.tipo = ${len(params)}"
-    if entalle:
-        params.append(entalle)
-        extra += f" AND r.entalle = ${len(params)}"
-    if tela:
-        params.append(tela)
-        extra += f" AND r.tela = ${len(params)}"
-    if hilo:
-        params.append(hilo)
-        extra += f" AND r.hilo = ${len(params)}"
+        else:
+            params.append(real)
+            extra += f" AND r.assigned_user_id::text = ANY(${len(params)})"
+    _add_multi(marca, "r.marca::text")
+    _add_multi(tipo, "r.tipo::text")
+    _add_multi(entalle, "r.entalle::text")
+    _add_multi(tela, "r.tela::text")
+    _add_multi(hilo, "r.hilo::text")
     if modelo:
         params.append(f"%{modelo}%")
         extra += f" AND r.modelo_display ILIKE ${len(params)}"
-    if talla:
-        params.append(talla)
-        extra += f" AND r.talla = ${len(params)}"
-    if color:
-        params.append(color)
-        extra += f" AND r.color = ${len(params)}"
+    _add_multi(talla, "r.talla")
+    _add_multi(color, "r.color")
     return extra
 
 

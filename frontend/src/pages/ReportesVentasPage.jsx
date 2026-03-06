@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { MultiSelect } from "../components/ui/multi-select";
 import api from "@/lib/api";
 
 const YEAR_COLORS = {
@@ -66,16 +67,24 @@ function KpiCard({ title, value, prevValue, pctChange, icon: Icon, format = "num
 }
 
 function FilterBar({ filters, setFilters, options }) {
-  const selectFilters = [
-    { key: "tienda", label: "Tienda", opts: options.tiendas },
-    { key: "marca", label: "Marca", opts: options.marcas },
-    { key: "tipo", label: "Tipo", opts: options.tipos },
-    { key: "entalle", label: "Entalle", opts: options.entalles },
-    { key: "tela", label: "Tela", opts: options.telas },
-    { key: "hilo", label: "Hilo", opts: options.hilos },
-    { key: "talla", label: "Talla", opts: options.tallas },
-    { key: "color", label: "Color", opts: options.colores },
+  const multiFilters = [
+    { key: "vendedor", label: "Vendedor", opts: options.vendedores ? ["Sin asignar", ...options.vendedores.map((v) => v.nombre)] : [] },
+    { key: "tienda", label: "Tienda", opts: options.tiendas || [] },
+    { key: "marca", label: "Marca", opts: options.marcas || [] },
+    { key: "tipo", label: "Tipo", opts: options.tipos || [] },
+    { key: "entalle", label: "Entalle", opts: options.entalles || [] },
+    { key: "tela", label: "Tela", opts: options.telas || [] },
+    { key: "hilo", label: "Hilo", opts: options.hilos || [] },
+    { key: "talla", label: "Talla", opts: options.tallas || [] },
+    { key: "color", label: "Color", opts: options.colores || [] },
   ];
+
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) => {
+    if (k === "range") return v !== "YTD";
+    if (Array.isArray(v)) return v.length > 0;
+    return !!v;
+  });
+
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="filter-bar">
       <Select value={filters.range} onValueChange={(v) => setFilters((f) => ({ ...f, range: v }))}>
@@ -94,33 +103,19 @@ function FilterBar({ filters, setFilters, options }) {
           <Input type="date" className="h-8 w-[130px] text-xs" value={filters.date_to} onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))} data-testid="filter-date-to" />
         </>
       )}
-      {options.vendedores?.length > 0 && (
-        <Select value={filters.vendedor || "__all__"} onValueChange={(v) => setFilters((f) => ({ ...f, vendedor: v === "__all__" ? "" : v }))}>
-          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="filter-vendedor">
-            <SelectValue>{filters.vendedor ? options.vendedores.find((x) => x.id === filters.vendedor)?.nombre || filters.vendedor : "Vendedor: Todos"}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todos</SelectItem>
-            <SelectItem value="Sin asignar">Sin asignar</SelectItem>
-            {options.vendedores.map((v) => (<SelectItem key={v.id} value={v.id}>{v.nombre}</SelectItem>))}
-          </SelectContent>
-        </Select>
-      )}
-      {selectFilters.map(({ key, label, opts }) =>
-        opts && opts.length > 0 ? (
-          <Select key={key} value={filters[key] || "__all__"} onValueChange={(v) => setFilters((f) => ({ ...f, [key]: v === "__all__" ? "" : v }))}>
-            <SelectTrigger className="w-[120px] h-8 text-xs" data-testid={`filter-${key}`}>
-              <SelectValue>{filters[key] || `${label}: Todos`}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos</SelectItem>
-              {opts.map((o) => (<SelectItem key={o} value={o}>{o}</SelectItem>))}
-            </SelectContent>
-          </Select>
+      {multiFilters.map(({ key, label, opts }) =>
+        opts.length > 0 ? (
+          <MultiSelect
+            key={key}
+            label={label}
+            options={opts}
+            selected={filters[key] || []}
+            onChange={(vals) => setFilters((f) => ({ ...f, [key]: vals }))}
+          />
         ) : null
       )}
-      {Object.values(filters).some((v) => v && v !== "YTD") && (
-        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setFilters({ range: "YTD", tienda: "", vendedor: "", marca: "", tipo: "", entalle: "", tela: "", hilo: "", modelo: "", talla: "", color: "", date_from: "", date_to: "" })} data-testid="filter-clear">
+      {hasActiveFilters && (
+        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setFilters(defaultFilters)} data-testid="filter-clear">
           Limpiar filtros
         </Button>
       )}
@@ -355,8 +350,8 @@ function TopTable({ rows, groupBy, onExport }) {
 
 const defaultFilters = {
   range: "YTD", date_from: "", date_to: "",
-  tienda: "", vendedor: "", marca: "", tipo: "", entalle: "",
-  tela: "", hilo: "", modelo: "", talla: "", color: "",
+  tienda: [], vendedor: [], marca: [], tipo: [], entalle: [],
+  tela: [], hilo: [], modelo: "", talla: [], color: [],
 };
 
 export default function ReportesVentasPage() {
@@ -380,19 +375,42 @@ export default function ReportesVentasPage() {
       if (filters.date_from) p.date_from = filters.date_from;
       if (filters.date_to) p.date_to = filters.date_to;
     }
-    for (const k of ["tienda", "vendedor", "marca", "tipo", "entalle", "tela", "hilo", "modelo", "talla", "color"]) {
-      if (filters[k]) p[k] = filters[k];
+    for (const k of ["tienda", "marca", "tipo", "entalle", "tela", "hilo", "talla", "color"]) {
+      const v = filters[k];
+      if (Array.isArray(v) && v.length > 0) p[k] = v.join(",");
+      else if (typeof v === "string" && v) p[k] = v;
     }
+    // Vendedor: map display names back to IDs
+    if (filters.vendedor?.length > 0) {
+      const vendedorIds = filters.vendedor.map((name) => {
+        if (name === "Sin asignar") return "Sin asignar";
+        const found = (filterOpts.vendedores || []).find((v) => (v.nombre || v.usuario) === name);
+        return found ? found.id : name;
+      });
+      p.vendedor = vendedorIds.join(",");
+    }
+    if (filters.modelo) p.modelo = filters.modelo;
     return p;
-  }, [filters]);
+  }, [filters, filterOpts.vendedores]);
 
   const buildFilterQS = useCallback(() => {
     const p = {};
-    for (const k of ["tienda", "vendedor", "marca", "tipo", "entalle", "tela", "hilo", "modelo", "talla", "color"]) {
-      if (filters[k]) p[k] = filters[k];
+    for (const k of ["tienda", "marca", "tipo", "entalle", "tela", "hilo", "talla", "color"]) {
+      const v = filters[k];
+      if (Array.isArray(v) && v.length > 0) p[k] = v.join(",");
+      else if (typeof v === "string" && v) p[k] = v;
     }
+    if (filters.vendedor?.length > 0) {
+      const vendedorIds = filters.vendedor.map((name) => {
+        if (name === "Sin asignar") return "Sin asignar";
+        const found = (filterOpts.vendedores || []).find((v) => (v.nombre || v.usuario) === name);
+        return found ? found.id : name;
+      });
+      p.vendedor = vendedorIds.join(",");
+    }
+    if (filters.modelo) p.modelo = filters.modelo;
     return p;
-  }, [filters]);
+  }, [filters, filterOpts.vendedores]);
 
   useEffect(() => {
     api.get("/reportes/ventas/filter-options").then((r) => setFilterOpts(r.data)).catch(() => {});
