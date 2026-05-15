@@ -1,1307 +1,162 @@
+"""Pool de conexiones asyncpg con recovery agresivo.
+
+Lecciones aprendidas (bugs reales que tuvimos):
+  1. `pool.close()` es GRACIOSO: espera a que cada connection.reset() termine.
+     Si una conexión está muerta (red caída, DB lejos), reset() cuelga >60s
+     → el close() entra en estado "closing" del que NO sale → todas las
+     queries futuras fallan con "pool is closing".
+
+     Fix: usar `pool.terminate()` (force-kill) o envolver close() con
+     asyncio.wait_for() para no esperar más de N segundos.
+
+  2. asyncpg detecta connections muertas solo cuando intenta usarlas.
+     Si la laptop hace sleep o hay un blip de red, el pool tiene zombies
+     hasta el próximo acquire(). Mitigamos con tcp_keepalives agresivos.
+"""
+from __future__ import annotations
 import asyncpg
+import asyncio
 import os
 import logging
-import uuid
-from datetime import datetime
+from contextlib import asynccontextmanager
+from pathlib import Path
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-pool: asyncpg.Pool = None
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL no configurado en .env")
+
+pool: asyncpg.Pool | None = None
+_pool_lock = asyncio.Lock()
 
 
-def record_to_dict(record):
-    """Convert asyncpg Record to JSON-serializable dict"""
-    d = dict(record)
-    for k, v in d.items():
-        if isinstance(v, uuid.UUID):
-            d[k] = str(v)
-        elif isinstance(v, datetime):
-            d[k] = v.isoformat()
-    return d
+async def _force_kill_pool() -> None:
+    """Mata el pool actual SIN esperar grace period.
 
-
-def records_to_list(records):
-    return [record_to_dict(r) for r in records]
-
-
-async def get_pool():
+    Llama `terminate()` (cierra sockets de inmediato) en vez de `close()`
+    (que espera resets graciosos y se cuelga con conexiones muertas).
+    """
     global pool
     if pool is None:
-        dsn = os.environ.get('PG_URL', '')
-        if dsn.startswith('postgres://'):
-            dsn = dsn.replace('postgres://', 'postgresql://', 1)
-        pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10, command_timeout=120)
-    return pool
+        return
+    try:
+        pool.terminate()  # NO es coroutine — sync, force-kill instantáneo
+    except Exception as e:
+        logger.warning(f"terminate() falló (ignorado): {e}")
+    pool = None
+
+
+async def get_pool() -> asyncpg.Pool:
+    """Devuelve el pool, creándolo si no existe o está cerrado.
+
+    El _pool_lock evita stampede: si 50 requests piden pool al mismo tiempo
+    cuando recién se está creando, solo uno lo crea y los demás esperan.
+    """
+    global pool
+    if pool is not None and not pool._closed:
+        return pool
+
+    async with _pool_lock:
+        # Re-check después del lock (otro request pudo haberlo creado)
+        if pool is not None and not pool._closed:
+            return pool
+
+        try:
+            pool = await asyncio.wait_for(
+                asyncpg.create_pool(
+                    DATABASE_URL,
+                    min_size=2,
+                    max_size=10,
+                    # timeout para ADQUIRIR conexión nueva (handshake completo)
+                    timeout=10,
+                    # timeout para CADA query individual. 120s da margen
+                    # extra para queries con subqueries pesados (reservas con
+                    # anti-doble-conteo) sobre la DB remota. En producción
+                    # (backend en mismo VPS que DB) baja a <1s.
+                    command_timeout=120,
+                    # Conexiones idle mueren rápido — evita zombies tras sleep
+                    max_inactive_connection_lifetime=30,
+                    server_settings={
+                        "search_path": "public,odoo,crm,produccion",
+                        # TCP keepalive a nivel libpq — detecta conexión muerta
+                        # antes que la app intente usarla
+                        "tcp_keepalives_idle": "10",
+                        "tcp_keepalives_interval": "5",
+                        "tcp_keepalives_count": "3",
+                    },
+                ),
+                timeout=20,  # hard timeout para crear el pool completo
+            )
+            logger.info("Pool asyncpg creado (min=2 max=10)")
+            return pool
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.error(f"create_pool falló: {e}")
+            pool = None
+            raise
+
+
+@asynccontextmanager
+async def safe_acquire(max_retries: int = 2):
+    """Acquire defensivo: si la conexión está muerta, recrea el pool y reintenta.
+
+    Reintenta hasta 3 veces (intento inicial + 2 reintentos) con backoff
+    exponencial corto (0.5s, 1s).
+    """
+    global pool
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            p = await get_pool()
+            # acquire con timeout: si el pool está caliente pero no hay
+            # connections libres, esperar máximo 8s antes de fallar
+            async with p.acquire(timeout=8) as conn:
+                yield conn
+                return
+        except (asyncpg.exceptions.ConnectionDoesNotExistError,
+                asyncpg.exceptions.InterfaceError,
+                asyncpg.exceptions.ConnectionFailureError,
+                asyncpg.exceptions.PostgresConnectionError,
+                asyncio.TimeoutError,
+                OSError) as e:
+            last_error = e
+            logger.warning(
+                f"Conexión BD perdida (intento {attempt+1}/{max_retries+1}): "
+                f"{type(e).__name__}: {str(e)[:120]}"
+            )
+            # FORCE-KILL el pool en vez de close gracioso.
+            # close() se cuelga con conexiones muertas → terminate() es seguro.
+            await _force_kill_pool()
+            if attempt < max_retries:
+                await asyncio.sleep(0.5 * (attempt + 1))
+    if last_error:
+        raise last_error
+    raise RuntimeError("safe_acquire agotó reintentos sin error explícito")
 
 
 async def close_pool():
+    """Cierra el pool en shutdown del backend.
+
+    Usa terminate() con un fallback a wait_for(close()) para no colgar
+    el shutdown si las conexiones están bloqueadas.
+    """
     global pool
-    if pool:
-        await pool.close()
-        pool = None
-
-
-async def init_database():
-    """Initialize CRM schema, tables, and views"""
-    p = await get_pool()
-    async with p.acquire() as conn:
-        # 0) Extensions
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
-
-        # 1) Schema
-        await conn.execute("CREATE SCHEMA IF NOT EXISTS crm;")
-
-        # Auth table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.usuario (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                usuario TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                nombre TEXT,
-                rol TEXT DEFAULT 'vendedor',
-                created_at TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-
-        # 2.1) producto_aprobado
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.producto_aprobado (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                product_tmpl_odoo_id INT NOT NULL,
-                aprobado BOOLEAN NOT NULL DEFAULT TRUE,
-                motivo TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                updated_at TIMESTAMPTZ DEFAULT now(),
-                UNIQUE(product_tmpl_odoo_id)
-            );
-        """)
-
-        # 2.2) partner_principal_override
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.partner_principal_override (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                contacto_partner_odoo_id INT NOT NULL,
-                cuenta_partner_odoo_id INT NOT NULL,
-                nota TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                updated_at TIMESTAMPTZ DEFAULT now(),
-                UNIQUE(contacto_partner_odoo_id)
-            );
-        """)
-
-        # 2.3) cuenta
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.cuenta (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                cuenta_partner_odoo_id INT NOT NULL,
-                estado_comercial TEXT NOT NULL DEFAULT 'ACTIVO',
-                clasificacion TEXT NULL,
-                notas TEXT NULL,
-                asignado_a TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                updated_at TIMESTAMPTZ DEFAULT now(),
-                UNIQUE(cuenta_partner_odoo_id)
-            );
-        """)
-
-        # 2.4) contacto
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.contacto (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                contacto_partner_odoo_id INT NOT NULL,
-                cuenta_partner_odoo_id INT NOT NULL,
-                rol TEXT NULL,
-                whatsapp TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                updated_at TIMESTAMPTZ DEFAULT now(),
-                UNIQUE(contacto_partner_odoo_id)
-            );
-        """)
-
-        # 2.5) interaccion
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.interaccion (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                cuenta_id UUID NOT NULL REFERENCES crm.cuenta(id),
-                contacto_id UUID NULL REFERENCES crm.contacto(id),
-                tipo TEXT NOT NULL,
-                fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
-                resumen TEXT NOT NULL,
-                resultado TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_interaccion_cuenta_fecha 
-            ON crm.interaccion (cuenta_id, fecha DESC);
-        """)
-
-        # 2.6) tarea
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.tarea (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                cuenta_id UUID NOT NULL REFERENCES crm.cuenta(id),
-                contacto_id UUID NULL REFERENCES crm.contacto(id),
-                tipo TEXT NOT NULL,
-                due_at TIMESTAMPTZ NOT NULL,
-                status TEXT NOT NULL DEFAULT 'PENDIENTE',
-                prioridad INT DEFAULT 3,
-                descripcion TEXT NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                done_at TIMESTAMPTZ NULL
-            );
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tarea_status_due 
-            ON crm.tarea (status, due_at);
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_tarea_cuenta 
-            ON crm.tarea (cuenta_id);
-        """)
-
-        # 2.7) cuenta_vinculo – manual partner linking to accounts
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.cuenta_vinculo (
-                id BIGSERIAL PRIMARY KEY,
-                cuenta_id UUID NOT NULL REFERENCES crm.cuenta(id),
-                odoo_partner_id INT NOT NULL,
-                activo BOOLEAN DEFAULT true,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                UNIQUE(cuenta_id, odoo_partner_id)
-            );
-        """)
-
-        logger.info("CRM tables created successfully")
-
-        # 2.8) Add soft-disable columns to cuenta and contacto (idempotent)
-        for tbl in ['crm.cuenta', 'crm.contacto']:
-            for col_def in [
-                ("is_active", "BOOLEAN NOT NULL DEFAULT true"),
-                ("manual_inactive", "BOOLEAN NOT NULL DEFAULT false"),
-                ("inactive_reason", "TEXT NULL"),
-                ("inactive_at", "TIMESTAMPTZ NULL"),
-                ("inactive_by", "TEXT NULL"),
-            ]:
-                try:
-                    await conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_def[0]} {col_def[1]}")
-                except Exception:
-                    pass
-
-        logger.info("Soft-disable columns ensured")
-
-        # 2.8b) Add approval columns to cuenta and contacto (idempotent)
-        for tbl in ['crm.cuenta', 'crm.contacto']:
-            for col_def in [
-                ("approval_status", "TEXT NOT NULL DEFAULT 'APPROVED'"),
-                ("approved_at", "TIMESTAMPTZ NULL"),
-                ("approved_by", "TEXT NULL"),
-                ("approval_note", "TEXT NULL"),
-                ("last_seen_at", "TIMESTAMPTZ DEFAULT now()"),
-            ]:
-                try:
-                    await conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_def[0]} {col_def[1]}")
-                except Exception:
-                    pass
-        # Index for fast pending queries
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_cuenta_approval ON crm.cuenta (approval_status);
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_contacto_approval ON crm.contacto (approval_status);
-        """)
-        logger.info("Approval columns ensured")
-
-        # 2.9) pos_order_partner_override – manual order-level customer reassignment
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS crm.pos_order_partner_override (
-                id BIGSERIAL PRIMARY KEY,
-                order_id INT NOT NULL,
-                original_partner_id INT NULL,
-                new_owner_partner_id INT NOT NULL,
-                reason TEXT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                created_by TEXT NULL,
-                updated_at TIMESTAMPTZ DEFAULT now(),
-                updated_by TEXT NULL,
-                active BOOLEAN NOT NULL DEFAULT true
-            );
-        """)
-        # Idempotent columns for existing tables
-        for col_def in [
-            ("updated_at", "TIMESTAMPTZ DEFAULT now()"),
-            ("updated_by", "TEXT NULL"),
-            ("active", "BOOLEAN NOT NULL DEFAULT true"),
-        ]:
-            try:
-                await conn.execute(f"ALTER TABLE crm.pos_order_partner_override ADD COLUMN IF NOT EXISTS {col_def[0]} {col_def[1]}")
-            except Exception:
-                pass
-        # Drop old plain unique if exists, create partial unique index
-        await conn.execute("""
-            DO $$ BEGIN
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pos_order_partner_override_order_id_key') THEN
-                    ALTER TABLE crm.pos_order_partner_override DROP CONSTRAINT pos_order_partner_override_order_id_key;
-                END IF;
-            END $$;
-        """)
-        await conn.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_override_order_active
-            ON crm.pos_order_partner_override (order_id) WHERE active = true;
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_override_new_owner
-            ON crm.pos_order_partner_override (new_owner_partner_id);
-        """)
-        logger.info("pos_order_partner_override table ensured")
-
-        # 3) Views - these depend on odoo schema
-        await _create_views(conn)
-
-
-async def _create_views(conn):
-    """Create CRM views that read from odoo schema. Each view is wrapped in try/except."""
-
-    # First, check what exists in odoo schema
-    odoo_tables = []
-    try:
-        rows = await conn.fetch("""
-            SELECT table_name FROM information_schema.tables 
-            WHERE table_schema = 'odoo' AND table_type IN ('BASE TABLE', 'VIEW')
-        """)
-        odoo_tables = [r['table_name'] for r in rows]
-        logger.info(f"Odoo tables/views found: {len(odoo_tables)}")
-        logger.info(f"Odoo objects: {odoo_tables[:30]}...")
-    except Exception as e:
-        logger.warning(f"Could not query odoo schema: {e}")
+    if pool is None:
         return
-
-    # 3.1) v_partner_account_final - MUST cover ALL odoo partners
     try:
-        if 'v_partner_account_map' in odoo_tables:
-            await conn.execute("""
-                CREATE OR REPLACE VIEW crm.v_partner_account_final AS
-                SELECT 
-                    p.odoo_id as contacto_partner_odoo_id,
-                    COALESCE(
-                        ov.cuenta_partner_odoo_id,
-                        mp.cuenta_partner_id,
-                        p.odoo_id
-                    ) as cuenta_partner_odoo_id
-                FROM odoo.res_partner p
-                LEFT JOIN crm.partner_principal_override ov 
-                    ON ov.contacto_partner_odoo_id = p.odoo_id
-                LEFT JOIN odoo.v_partner_account_map mp 
-                    ON mp.contacto_partner_id = p.odoo_id
-                WHERE p.company_key = 'GLOBAL'
-                  AND COALESCE(p.active, true) = true;
-            """)
-            logger.info("View crm.v_partner_account_final created (ALL odoo partners)")
-        else:
-            await conn.execute("""
-                CREATE OR REPLACE VIEW crm.v_partner_account_final AS
-                SELECT 
-                    p.odoo_id as contacto_partner_odoo_id,
-                    COALESCE(
-                        ov.cuenta_partner_odoo_id,
-                        p.odoo_id
-                    ) as cuenta_partner_odoo_id
-                FROM odoo.res_partner p
-                LEFT JOIN crm.partner_principal_override ov 
-                    ON ov.contacto_partner_odoo_id = p.odoo_id
-                WHERE p.company_key = 'GLOBAL'
-                  AND COALESCE(p.active, true) = true;
-            """)
-            logger.info("View crm.v_partner_account_final created (no odoo map)")
+        # Intento gracioso 5s; si no termina, force-kill
+        await asyncio.wait_for(pool.close(), timeout=5)
+        logger.info("Pool cerrado graciosamente")
+    except asyncio.TimeoutError:
+        logger.warning("Pool.close() timeout 5s — terminate() force-kill")
+        try:
+            pool.terminate()
+        except Exception:
+            pass
     except Exception as e:
-        logger.warning(f"Could not create v_partner_account_final: {e}")
-
-    # 3.1a) v_cuenta_partners – all partner_ids belonging to a cuenta (robust match)
-    try:
-        await conn.execute("""
-            CREATE OR REPLACE VIEW crm.v_cuenta_partners AS
-            -- Main partner
-            SELECT c.id AS cuenta_id, c.cuenta_partner_odoo_id AS partner_id
-            FROM crm.cuenta c
-            WHERE c.cuenta_partner_odoo_id IS NOT NULL
-            UNION
-            -- Manual links
-            SELECT cv.cuenta_id, cv.odoo_partner_id AS partner_id
-            FROM crm.cuenta_vinculo cv
-            WHERE cv.activo = true
-            UNION
-            -- Odoo auto-linked (from v_partner_account_final)
-            SELECT c.id AS cuenta_id, paf.contacto_partner_odoo_id AS partner_id
-            FROM crm.cuenta c
-            JOIN crm.v_partner_account_final paf
-                ON paf.cuenta_partner_odoo_id = c.cuenta_partner_odoo_id
-            WHERE c.cuenta_partner_odoo_id IS NOT NULL
-            UNION
-            -- Children: partners whose commercial_partner_id matches the account
-            SELECT c.id AS cuenta_id, rp.odoo_id AS partner_id
-            FROM crm.cuenta c
-            JOIN odoo.res_partner rp
-                ON rp.company_key = 'GLOBAL'
-                AND rp.commercial_partner_id = c.cuenta_partner_odoo_id
-            WHERE c.cuenta_partner_odoo_id IS NOT NULL
-            UNION
-            -- Children: partners whose parent_id matches the account
-            SELECT c.id AS cuenta_id, rp.odoo_id AS partner_id
-            FROM crm.cuenta c
-            JOIN odoo.res_partner rp
-                ON rp.company_key = 'GLOBAL'
-                AND rp.parent_id = c.cuenta_partner_odoo_id
-            WHERE c.cuenta_partner_odoo_id IS NOT NULL;
-        """)
-        logger.info("View crm.v_cuenta_partners created (with commercial/parent rollup)")
-    except Exception as e:
-        logger.warning(f"Could not create v_cuenta_partners: {e}")
-
-    # 3.1b) v_cuentas_libres - partners whose principal IS themselves
-    try:
-        await conn.execute("""
-            CREATE OR REPLACE VIEW crm.v_cuentas_libres AS
-            SELECT
-                p.odoo_id AS cuenta_partner_odoo_id
-            FROM odoo.res_partner p
-            JOIN crm.v_partner_account_final m
-                ON m.contacto_partner_odoo_id = p.odoo_id
-            WHERE p.company_key = 'GLOBAL'
-                AND COALESCE(p.active, true) = true
-                AND m.cuenta_partner_odoo_id = p.odoo_id;
-        """)
-        logger.info("View crm.v_cuentas_libres created")
-    except Exception as e:
-        logger.warning(f"Could not create v_cuentas_libres: {e}")
-
-    # 3.1c) v_contactos_vinculados - partners whose principal is NOT themselves
-    try:
-        await conn.execute("""
-            CREATE OR REPLACE VIEW crm.v_contactos_vinculados AS
-            SELECT
-                p.odoo_id AS contacto_partner_odoo_id,
-                m.cuenta_partner_odoo_id
-            FROM odoo.res_partner p
-            JOIN crm.v_partner_account_final m
-                ON m.contacto_partner_odoo_id = p.odoo_id
-            WHERE p.company_key = 'GLOBAL'
-                AND COALESCE(p.active, true) = true
-                AND m.cuenta_partner_odoo_id <> p.odoo_id;
-        """)
-        logger.info("View crm.v_contactos_vinculados created")
-    except Exception as e:
-        logger.warning(f"Could not create v_contactos_vinculados: {e}")
-
-    # 3.1d) v_catalogo_con_stock - eligible products with stock, grouped by template (tiendas only)
-    try:
-        has_stock_loc_d = 'v_stock_by_product_location' in odoo_tables
-        has_stock_loc_sl = 'stock_location' in odoo_tables
-        if has_stock_loc_d and has_stock_loc_sl and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
-            await conn.execute("""
-                CREATE OR REPLACE VIEW crm.v_catalogo_con_stock AS
-                SELECT
-                    pt.odoo_id as product_tmpl_id,
-                    pt.name as nombre,
-                    pt.marca,
-                    pt.tipo,
-                    pt.tela,
-                    pt.entalle,
-                    pt.tel,
-                    pt.hilo,
-                    pt.list_price,
-                    SUM(s.available_qty) as stock_total_disponible,
-                    COUNT(DISTINCT vv.product_product_id) as variantes_con_stock
-                FROM odoo.v_stock_by_product_location s
-                JOIN odoo.stock_location sl
-                    ON sl.odoo_id = s.location_id
-                    AND sl.usage = 'internal'
-                    AND COALESCE(sl.active, true) = true
-                    AND sl.x_nombre IS NOT NULL
-                    AND btrim(sl.x_nombre) <> ''
-                JOIN odoo.v_product_variant_flat vv
-                    ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
-                JOIN odoo.product_template pt
-                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
-                WHERE s.available_qty > 0
-                    AND pt.sale_ok = true
-                    AND pt.purchase_ok = false
-                    AND pt.name NOT ILIKE '%correa%'
-                    AND pt.name NOT ILIKE '%saco%'
-                    AND pt.name NOT ILIKE '%bolsa%'
-                GROUP BY pt.odoo_id, pt.name, pt.marca, pt.tipo, pt.tela,
-                         pt.entalle, pt.tel, pt.hilo, pt.list_price;
-            """)
-            logger.info("View crm.v_catalogo_con_stock created (tiendas only)")
-        else:
-            logger.warning("Missing tables for v_catalogo_con_stock")
-    except Exception as e:
-        logger.warning(f"Could not create v_catalogo_con_stock: {e}")
-
-    # 3.1e) v_catalogo_con_stock_variantes - variant-level stock detail (tiendas only, aggregated)
-    try:
-        has_stock_loc_e = 'v_stock_by_product_location' in odoo_tables
-        has_stock_loc_sl_e = 'stock_location' in odoo_tables
-        if has_stock_loc_e and has_stock_loc_sl_e and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
-            await conn.execute("""
-                CREATE OR REPLACE VIEW crm.v_catalogo_con_stock_variantes AS
-                SELECT
-                    vv.product_tmpl_id,
-                    vv.product_product_id,
-                    vv.barcode,
-                    vv.talla,
-                    vv.color,
-                    SUM(s.available_qty) as available_qty,
-                    SUM(s.qty) as stock_total,
-                    SUM(s.reserved_qty) as reserved_qty
-                FROM odoo.v_stock_by_product_location s
-                JOIN odoo.stock_location sl
-                    ON sl.odoo_id = s.location_id
-                    AND sl.usage = 'internal'
-                    AND COALESCE(sl.active, true) = true
-                    AND sl.x_nombre IS NOT NULL
-                    AND btrim(sl.x_nombre) <> ''
-                JOIN odoo.v_product_variant_flat vv
-                    ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
-                JOIN odoo.product_template pt
-                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
-                WHERE s.available_qty > 0
-                    AND pt.sale_ok = true
-                    AND pt.purchase_ok = false
-                    AND pt.name NOT ILIKE '%correa%'
-                    AND pt.name NOT ILIKE '%saco%'
-                    AND pt.name NOT ILIKE '%bolsa%'
-                GROUP BY vv.product_tmpl_id, vv.product_product_id, vv.barcode, vv.talla, vv.color;
-            """)
-            logger.info("View crm.v_catalogo_con_stock_variantes created (tiendas only)")
-        else:
-            logger.warning("Missing tables for v_catalogo_con_stock_variantes")
-    except Exception as e:
-        logger.warning(f"Could not create v_catalogo_con_stock_variantes: {e}")
-
-    # 3.1f) v_catalogo_con_stock_variantes_loc - variant stock by location (tiendas only)
-    try:
-        has_stock_loc = 'v_stock_by_product_location' in odoo_tables
-        has_stock_loc_sl_f = 'stock_location' in odoo_tables
-        if has_stock_loc and has_stock_loc_sl_f and 'v_product_variant_flat' in odoo_tables and 'product_template' in odoo_tables:
-            await conn.execute("DROP VIEW IF EXISTS crm.v_catalogo_con_stock_variantes_loc;")
-            await conn.execute("""
-                CREATE VIEW crm.v_catalogo_con_stock_variantes_loc AS
-                SELECT
-                    vv.product_tmpl_id,
-                    vv.product_product_id,
-                    vv.barcode,
-                    vv.talla,
-                    vv.color,
-                    s.location_id,
-                    sl.x_nombre as tienda,
-                    s.available_qty,
-                    s.qty as stock_total,
-                    s.reserved_qty
-                FROM odoo.v_stock_by_product_location s
-                JOIN odoo.stock_location sl
-                    ON sl.odoo_id = s.location_id
-                    AND sl.usage = 'internal'
-                    AND COALESCE(sl.active, true) = true
-                    AND sl.x_nombre IS NOT NULL
-                    AND btrim(sl.x_nombre) <> ''
-                JOIN odoo.v_product_variant_flat vv
-                    ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
-                JOIN odoo.product_template pt
-                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
-                WHERE s.available_qty > 0
-                    AND pt.sale_ok = true
-                    AND pt.purchase_ok = false
-                    AND pt.name NOT ILIKE '%correa%'
-                    AND pt.name NOT ILIKE '%saco%'
-                    AND pt.name NOT ILIKE '%bolsa%';
-            """)
-            logger.info("View crm.v_catalogo_con_stock_variantes_loc created (tiendas only)")
-        else:
-            logger.warning("Missing tables for v_catalogo_con_stock_variantes_loc")
-    except Exception as e:
-        logger.warning(f"Could not create v_catalogo_con_stock_variantes_loc: {e}")
-
-    # 3.1f2) v_stock_balance_flat - flat view for Balance de Tallas report
-    try:
-        has_sloc2 = 'v_stock_by_product_location' in odoo_tables
-        has_sl2 = 'stock_location' in odoo_tables
-        has_vf2 = 'v_product_variant_flat' in odoo_tables
-        has_pt2 = 'product_template' in odoo_tables
-        if has_sloc2 and has_sl2 and has_vf2 and has_pt2:
-            await conn.execute("DROP VIEW IF EXISTS crm.v_stock_balance_flat CASCADE;")
-            await conn.execute("""
-                CREATE VIEW crm.v_stock_balance_flat AS
-                SELECT
-                    sl.odoo_id AS location_id,
-                    sl.x_nombre AS tienda,
-                    pt.marca,
-                    pt.tipo,
-                    pt.entalle,
-                    pt.tela,
-                    COALESCE(pt.hilo::text,'SIN_HILO') AS hilo,
-                    pt.name AS modelo,
-                    vv.product_tmpl_id,
-                    vv.product_product_id,
-                    vv.talla,
-                    vv.color,
-                    s.available_qty
-                FROM odoo.v_stock_by_product_location s
-                JOIN odoo.stock_location sl
-                    ON sl.company_key='GLOBAL' AND sl.odoo_id = s.location_id
-                JOIN odoo.v_product_variant_flat vv
-                    ON vv.company_key='GLOBAL' AND vv.product_product_id = s.product_id
-                JOIN odoo.product_template pt
-                    ON pt.company_key='GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
-                WHERE sl.usage='internal'
-                    AND COALESCE(sl.active,true)=true
-                    AND sl.x_nombre IS NOT NULL
-                    AND pt.sale_ok=true
-                    AND pt.purchase_ok=false
-                    AND pt.name NOT ILIKE '%correa%'
-                    AND pt.name NOT ILIKE '%saco%'
-                    AND pt.name NOT ILIKE '%bolsa%'
-                    AND pt.name NOT ILIKE '%probador%'
-                    AND COALESCE(s.available_qty,0) >= 0;
-            """)
-            logger.info("View crm.v_stock_balance_flat created")
-        else:
-            logger.warning("Missing tables for v_stock_balance_flat")
-    except Exception as e:
-        logger.warning(f"Could not create v_stock_balance_flat: {e}")
-
-    # 3.1g) v_catalogo_stock_flat - flat view for Stock Dashboard
-    try:
-        has_sloc = 'v_stock_by_product_location' in odoo_tables
-        has_sl = 'stock_location' in odoo_tables
-        has_vf = 'v_product_variant_flat' in odoo_tables
-        has_pt = 'product_template' in odoo_tables
-        if has_sloc and has_sl and has_vf and has_pt:
-            await conn.execute("DROP VIEW IF EXISTS crm.v_catalogo_stock_flat;")
-            await conn.execute("""
-                CREATE VIEW crm.v_catalogo_stock_flat AS
-                SELECT
-                    sl.odoo_id as location_id,
-                    sl.x_nombre as tienda,
-                    vv.product_tmpl_id,
-                    pt.name as modelo,
-                    pt.marca,
-                    pt.tipo,
-                    pt.entalle,
-                    pt.tela,
-                    pt.hilo,
-                    vv.product_product_id,
-                    vv.barcode,
-                    vv.talla,
-                    vv.color,
-                    s.available_qty,
-                    (pt.name ILIKE '%LQ%') as es_lq,
-                    (
-                        (pt.hilo ILIKE '%negro%')
-                        OR (vv.color ILIKE '%negro%')
-                        OR (vv.color ILIKE '%plomo%')
-                        OR (vv.color ILIKE '%carbon%')
-                        OR (vv.color ILIKE '%carbón%')
-                        OR (vv.color ILIKE '%grafito%')
-                    ) as es_negro
-                FROM odoo.v_stock_by_product_location s
-                JOIN odoo.stock_location sl
-                    ON sl.odoo_id = s.location_id
-                    AND sl.usage = 'internal'
-                    AND COALESCE(sl.active, true) = true
-                    AND sl.x_nombre IS NOT NULL
-                    AND btrim(sl.x_nombre) <> ''
-                JOIN odoo.v_product_variant_flat vv
-                    ON vv.company_key = 'GLOBAL' AND vv.product_product_id = s.product_id
-                JOIN odoo.product_template pt
-                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vv.product_tmpl_id
-                WHERE s.available_qty > 0
-                    AND pt.sale_ok = true
-                    AND pt.purchase_ok = false
-                    AND pt.name NOT ILIKE '%correa%'
-                    AND pt.name NOT ILIKE '%saco%'
-                    AND pt.name NOT ILIKE '%bolsa%';
-            """)
-            logger.info("View crm.v_catalogo_stock_flat created")
-        else:
-            logger.warning("Missing tables for v_catalogo_stock_flat")
-    except Exception as e:
-        logger.warning(f"Could not create v_catalogo_stock_flat: {e}")
-
-    # 3.1h) v_stock_dashboard_base - dashboard base with tienda_canonica mapping
-    try:
-        await conn.execute("DROP VIEW IF EXISTS crm.v_stock_dashboard_base;")
-        await conn.execute("""
-            CREATE VIEW crm.v_stock_dashboard_base AS
-            SELECT
-                CASE
-                    WHEN tienda ILIKE 'TALLER' THEN 'ALMACEN'
-                    WHEN replace(tienda,' ','') ILIKE 'GM209' THEN 'GAMARRA 209'
-                    WHEN replace(tienda,' ','') ILIKE 'GM207' THEN 'GAMARRA 207'
-                    WHEN tienda ILIKE 'GR238' OR tienda ILIKE 'GR55' THEN 'GRAU 238 / GRAU 55'
-                    WHEN tienda ILIKE 'GM218' THEN 'GM218'
-                    WHEN tienda ILIKE 'BOOSH' THEN 'BOOSH'
-                    ELSE NULL
-                END AS tienda_canonica,
-                modelo,
-                CASE
-                    WHEN modelo ~* '\mLQ\d*\M' THEN
-                        btrim(upper(regexp_replace(modelo, '[\s\-\(]*\mLQ\d*\M[\)\s]*.*$', '', 'i')))
-                    ELSE btrim(upper(modelo))
-                END AS modelo_base,
-                (modelo ~* '\mLQ\d*\M') AS flag_lq,
-                marca, tipo, entalle, tela, hilo,
-                talla, color, barcode, available_qty,
-                es_lq, es_negro,
-                product_tmpl_id, product_product_id
-            FROM crm.v_catalogo_stock_flat
-            WHERE modelo NOT ILIKE '%probador%';
-        """)
-        logger.info("View crm.v_stock_dashboard_base created")
-    except Exception as e:
-        logger.warning(f"Could not create v_stock_dashboard_base: {e}")
-
-
-
-    # 3.2) v_productos_elegibles
-    try:
-        if 'product_template' in odoo_tables:
-            # Check available columns
-            cols = await conn.fetch("""
-                SELECT column_name FROM information_schema.columns 
-                WHERE table_schema = 'odoo' AND table_name = 'product_template'
-            """)
-            col_names = [c['column_name'] for c in cols]
-            logger.info(f"product_template columns: {col_names}")
-
-            has_marca = 'x_marca' in col_names or 'marca' in col_names
-            has_tipo = 'x_tipo' in col_names or 'tipo' in col_names
-            has_tela = 'x_tela' in col_names or 'tela' in col_names
-            has_entalle = 'x_entalle' in col_names or 'entalle' in col_names
-            has_tel = 'x_tel' in col_names or 'tel' in col_names
-            has_hilo = 'x_hilo' in col_names or 'hilo' in col_names
-            has_company_key = 'company_key' in col_names
-
-            marca_col = 'x_marca' if 'x_marca' in col_names else ('marca' if 'marca' in col_names else "NULL")
-            tipo_col = 'x_tipo' if 'x_tipo' in col_names else ('tipo' if 'tipo' in col_names else "NULL")
-            tela_col = 'x_tela' if 'x_tela' in col_names else ('tela' if 'tela' in col_names else "NULL")
-            entalle_col = 'x_entalle' if 'x_entalle' in col_names else ('entalle' if 'entalle' in col_names else "NULL")
-            tel_col = 'x_tel' if 'x_tel' in col_names else ('tel' if 'tel' in col_names else "NULL")
-            hilo_col = 'x_hilo' if 'x_hilo' in col_names else ('hilo' if 'hilo' in col_names else "NULL")
-
-            sale_ok_filter = "AND sale_ok = true" if 'sale_ok' in col_names else ""
-            purchase_ok_filter = "AND purchase_ok = false" if 'purchase_ok' in col_names else ""
-            active_filter = "AND COALESCE(active, true) = true" if 'active' in col_names else ""
-            company_filter = "AND company_key = 'GLOBAL'" if has_company_key else ""
-            write_date_col = 'write_date' if 'write_date' in col_names else 'NULL'
-
-            view_sql = f"""
-                CREATE OR REPLACE VIEW crm.v_productos_elegibles AS
-                SELECT 
-                    odoo_id,
-                    name,
-                    {marca_col} as marca,
-                    {tipo_col} as tipo,
-                    {tela_col} as tela,
-                    {entalle_col} as entalle,
-                    {tel_col} as tel,
-                    {hilo_col} as hilo,
-                    list_price,
-                    {write_date_col} as odoo_write_date
-                FROM odoo.product_template
-                WHERE 1=1
-                    {company_filter}
-                    {sale_ok_filter}
-                    {purchase_ok_filter}
-                    {active_filter}
-                    AND name NOT ILIKE '%correa%'
-                    AND name NOT ILIKE '%bolsa%'
-                    AND name NOT ILIKE '%saco%';
-            """
-            await conn.execute(view_sql)
-            logger.info("View crm.v_productos_elegibles created")
-        else:
-            logger.warning("odoo.product_template not found, skipping v_productos_elegibles")
-    except Exception as e:
-        logger.warning(f"Could not create v_productos_elegibles: {e}")
-
-    # 3.3) v_productos_crm (only approved)
-    try:
-        await conn.execute("""
-            CREATE OR REPLACE VIEW crm.v_productos_crm AS
-            SELECT e.*
-            FROM crm.v_productos_elegibles e
-            INNER JOIN crm.producto_aprobado p 
-                ON p.product_tmpl_odoo_id = e.odoo_id AND p.aprobado = true;
-        """)
-        logger.info("View crm.v_productos_crm created")
-    except Exception as e:
-        logger.warning(f"Could not create v_productos_crm: {e}")
-
-    # 3.4) v_ventas_pos_filtradas - complex view
-    try:
-        has_v_pos_line_full = 'v_pos_line_full' in odoo_tables
-        has_pos_order_line = 'pos_order_line' in odoo_tables
-        has_pos_order = 'pos_order' in odoo_tables
-        has_variant_flat = 'v_product_variant_flat' in odoo_tables
-
-        if has_v_pos_line_full:
-            # Use the existing view
-            vpl_cols = await conn.fetch("""
-                SELECT column_name FROM information_schema.columns 
-                WHERE table_schema = 'odoo' AND table_name = 'v_pos_line_full'
-            """)
-            vpl_col_names = [c['column_name'] for c in vpl_cols]
-            logger.info(f"v_pos_line_full columns: {vpl_col_names[:20]}")
-
-            # Build the view using v_pos_line_full
-            # Detect actual column names
-            partner_col = next((c for c in ['contacto_partner_id', 'partner_id'] if c in vpl_col_names), None)
-            tmpl_col = next((c for c in ['product_tmpl_id'] if c in vpl_col_names), None)
-            cuenta_col = next((c for c in ['cuenta_partner_id'] if c in vpl_col_names), None)
-
-            if not partner_col or not tmpl_col:
-                logger.warning(f"v_pos_line_full missing required columns. partner={partner_col}, tmpl={tmpl_col}")
-            else:
-                # Use COALESCE for cuenta: override > existing cuenta_partner_id > self
-                cuenta_expr = f"COALESCE(f.cuenta_partner_odoo_id, vpl.{cuenta_col})" if cuenta_col else "f.cuenta_partner_odoo_id"
-                await conn.execute(f"""
-                    CREATE OR REPLACE VIEW crm.v_ventas_pos_filtradas AS
-                    SELECT 
-                        vpl.*,
-                        {cuenta_expr} as cuenta_partner_id_final
-                    FROM odoo.v_pos_line_full vpl
-                    LEFT JOIN crm.v_partner_account_final f 
-                        ON f.contacto_partner_odoo_id = vpl.{partner_col}
-                    WHERE vpl.{tmpl_col} IN (
-                        SELECT product_tmpl_odoo_id FROM crm.producto_aprobado WHERE aprobado = true
-                    );
-                """)
-                logger.info("View crm.v_ventas_pos_filtradas created (from v_pos_line_full)")
-
-        elif has_pos_order_line and has_pos_order:
-            # Build from base tables
-            pol_cols = await conn.fetch("""
-                SELECT column_name FROM information_schema.columns 
-                WHERE table_schema = 'odoo' AND table_name = 'pos_order_line'
-            """)
-            pol_col_names = [c['column_name'] for c in pol_cols]
-
-            po_cols = await conn.fetch("""
-                SELECT column_name FROM information_schema.columns 
-                WHERE table_schema = 'odoo' AND table_name = 'pos_order'
-            """)
-            po_col_names = [c['column_name'] for c in po_cols]
-
-            logger.info(f"pos_order_line cols: {pol_col_names[:20]}")
-            logger.info(f"pos_order cols: {po_col_names[:20]}")
-
-            has_company_key_pol = 'company_key' in pol_col_names
-            has_company_key_po = 'company_key' in po_col_names
-            has_is_cancel = 'is_cancel' in po_col_names
-            has_order_cancel = 'order_cancel' in po_col_names
-
-            company_join = "o.company_key = l.company_key AND" if has_company_key_pol and has_company_key_po else ""
-            company_select = "l.company_key," if has_company_key_pol else "'UNKNOWN' as company_key,"
-            is_cancelled_expr = f"(COALESCE(o.is_cancel, false) OR COALESCE(o.order_cancel, false))" if has_is_cancel or has_order_cancel else "false"
-
-            order_id_col = 'order_id' if 'order_id' in pol_col_names else 'odoo_id'
-            partner_id_col = 'partner_id' if 'partner_id' in po_col_names else 'NULL'
-            x_cliente_principal_col = 'x_cliente_principal' if 'x_cliente_principal' in po_col_names else 'NULL'
-
-            variant_join = ""
-            variant_select = ""
-            template_join = ""
-            template_select = ""
-            tmpl_filter = ""
-
-            if has_variant_flat:
-                vv_cols = await conn.fetch("""
-                    SELECT column_name FROM information_schema.columns 
-                    WHERE table_schema = 'odoo' AND table_name = 'v_product_variant_flat'
-                """)
-                vv_col_names = [c['column_name'] for c in vv_cols]
-
-                pp_id = 'product_product_id' if 'product_product_id' in vv_col_names else 'odoo_id'
-                tmpl_id = 'product_tmpl_id' if 'product_tmpl_id' in vv_col_names else 'NULL'
-                barcode_col = 'barcode' if 'barcode' in vv_col_names else 'NULL'
-                talla_col = 'talla' if 'talla' in vv_col_names else ('x_talla' if 'x_talla' in vv_col_names else 'NULL')
-                color_col = 'color' if 'color' in vv_col_names else ('x_color' if 'x_color' in vv_col_names else 'NULL')
-
-                vv_ck = "vv.company_key = 'GLOBAL' AND" if 'company_key' in vv_col_names else ""
-                variant_join = f"LEFT JOIN odoo.v_product_variant_flat vv ON {vv_ck} vv.{pp_id} = l.product_id"
-                variant_select = f"vv.{tmpl_id} as product_tmpl_id, vv.{barcode_col} as barcode, vv.{talla_col} as talla, vv.{color_col} as color,"
-                tmpl_filter = f"AND vv.{tmpl_id} IN (SELECT product_tmpl_odoo_id FROM crm.producto_aprobado WHERE aprobado = true)"
-            
-            if 'product_template' in odoo_tables and has_variant_flat:
-                pt_cols = await conn.fetch("""
-                    SELECT column_name FROM information_schema.columns 
-                    WHERE table_schema = 'odoo' AND table_name = 'product_template'
-                """)
-                pt_col_names = [c['column_name'] for c in pt_cols]
-                pt_ck = "pt.company_key = 'GLOBAL' AND" if 'company_key' in pt_col_names else ""
-                marca_col = 'x_marca' if 'x_marca' in pt_col_names else ('marca' if 'marca' in pt_col_names else 'NULL')
-                tipo_col = 'x_tipo' if 'x_tipo' in pt_col_names else ('tipo' if 'tipo' in pt_col_names else 'NULL')
-                tela_col = 'x_tela' if 'x_tela' in pt_col_names else ('tela' if 'tela' in pt_col_names else 'NULL')
-                entalle_col = 'x_entalle' if 'x_entalle' in pt_col_names else ('entalle' if 'entalle' in pt_col_names else 'NULL')
-
-                template_join = f"LEFT JOIN odoo.product_template pt ON {pt_ck} pt.odoo_id = vv.product_tmpl_id"
-                template_select = f"pt.{marca_col} as marca, pt.{tipo_col} as tipo, pt.{tela_col} as tela, pt.{entalle_col} as entalle,"
-
-            qty_col = 'qty' if 'qty' in pol_col_names else '0'
-            price_unit_col = 'price_unit' if 'price_unit' in pol_col_names else '0'
-            discount_col = 'discount' if 'discount' in pol_col_names else '0'
-            price_subtotal_col = 'price_subtotal' if 'price_subtotal' in pol_col_names else '0'
-            date_order_col = 'date_order' if 'date_order' in po_col_names else 'NULL'
-            state_col = 'state' if 'state' in po_col_names else "'unknown'"
-            user_id_col = 'user_id' if 'user_id' in po_col_names else 'NULL'
-
-            view_sql = f"""
-                CREATE OR REPLACE VIEW crm.v_ventas_pos_filtradas AS
-                SELECT 
-                    {company_select}
-                    o.{date_order_col} as date_order,
-                    o.odoo_id as pos_order_id,
-                    l.odoo_id as pos_order_line_id,
-                    o.{partner_id_col} as contacto_partner_id,
-                    COALESCE(f.cuenta_partner_odoo_id, o.{partner_id_col}) as cuenta_partner_id,
-                    o.{user_id_col} as user_id,
-                    o.{state_col} as state,
-                    {is_cancelled_expr} as is_cancelled,
-                    l.product_id,
-                    {variant_select}
-                    l.{qty_col} as qty,
-                    l.{price_unit_col} as price_unit,
-                    l.{discount_col} as discount,
-                    l.{price_subtotal_col} as price_subtotal
-                    {(',' + template_select.rstrip(',')) if template_select else ''}
-                FROM odoo.pos_order_line l
-                JOIN odoo.pos_order o ON {company_join} o.odoo_id = l.{order_id_col}
-                {variant_join}
-                {template_join}
-                LEFT JOIN crm.v_partner_account_final f ON f.contacto_partner_odoo_id = o.{partner_id_col}
-                WHERE 1=1 {tmpl_filter};
-            """
-            await conn.execute(view_sql)
-            logger.info("View crm.v_ventas_pos_filtradas created (from base tables)")
-        else:
-            logger.warning("Required POS tables not found, skipping v_ventas_pos_filtradas")
-    except Exception as e:
-        logger.warning(f"Could not create v_ventas_pos_filtradas: {e}")
-
-
-    # 3.5) v_comercial_mov_flat – unified SALE + RESERVA view with owner mapping + override
-    try:
-        has_vpl = 'v_pos_line_full' in odoo_tables
-        has_rp = 'res_partner' in odoo_tables
-        has_pt_cm = 'product_template' in odoo_tables
-        if has_vpl and has_rp and has_pt_cm:
-            await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_mov_flat CASCADE;")
-            await conn.execute("""
-                CREATE VIEW crm.v_comercial_mov_flat AS
-                SELECT
-                    CASE
-                        WHEN COALESCE(vpl.reserva, false) = true
-                             AND COALESCE(vpl.reserva_use_id, 0) = 0
-                        THEN 'RESERVA'
-                        ELSE 'SALE'
-                    END AS doc_tipo,
-                    vpl.order_id,
-                    vpl.pos_order_line_id AS line_id,
-                    vpl.date_order AS fecha,
-                    vpl.contacto_partner_id AS partner_id,
-                    COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, vpl.contacto_partner_id) AS owner_partner_id,
-                    rp_owner.name           AS owner_partner_name,
-                    (ov_po.order_id IS NOT NULL) AS has_override,
-                    CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
-                    vpl.product_id          AS product_product_id,
-                    vpl.product_tmpl_id,
-                    pt.name                 AS modelo,
-                    CASE
-                        WHEN NULLIF(TRIM(pt.name), '') IS NOT NULL THEN pt.name
-                        ELSE CONCAT('[TMPL ', vpl.product_tmpl_id, ' | VAR ', vpl.product_id, ']')
-                    END AS modelo_display,
-                    vpl.marca,
-                    vpl.tipo,
-                    vpl.entalle,
-                    vpl.tela,
-                    COALESCE(pt.hilo::text, '') AS hilo,
-                    vpl.talla,
-                    vpl.color,
-                    vpl.barcode,
-                    vpl.qty,
-                    vpl.price_unit,
-                    vpl.price_subtotal      AS subtotal
-                FROM odoo.v_pos_line_full vpl
-                LEFT JOIN crm.pos_order_partner_override ov_po
-                    ON ov_po.order_id = vpl.order_id AND ov_po.active = true
-                LEFT JOIN crm.v_partner_account_final paf
-                    ON paf.contacto_partner_odoo_id = vpl.contacto_partner_id
-                LEFT JOIN odoo.res_partner rp_owner
-                    ON rp_owner.company_key = 'GLOBAL'
-                    AND rp_owner.odoo_id = COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, vpl.contacto_partner_id)
-                LEFT JOIN odoo.res_partner rp_orig
-                    ON ov_po.order_id IS NOT NULL AND rp_orig.company_key = 'GLOBAL' AND rp_orig.odoo_id = vpl.contacto_partner_id
-                LEFT JOIN odoo.product_template pt
-                    ON pt.company_key = 'GLOBAL' AND pt.odoo_id = vpl.product_tmpl_id
-                WHERE vpl.is_cancelled = false
-                  AND vpl.product_id IS NOT NULL
-                  AND vpl.product_tmpl_id IS NOT NULL
-                  AND pt.sale_ok = true
-                  AND pt.purchase_ok = false
-                  AND pt.name NOT ILIKE '%correa%'
-                  AND pt.name NOT ILIKE '%saco%'
-                  AND pt.name NOT ILIKE '%bolsa%'
-                  AND pt.name NOT ILIKE '%probador%'
-                  AND pt.name NOT ILIKE '%paneton%'
-                  AND pt.name NOT ILIKE '%publicitario%'
-                  AND (
-                      COALESCE(vpl.reserva, false) = false
-                      OR
-                      (COALESCE(vpl.reserva, false) = true AND COALESCE(vpl.reserva_use_id, 0) = 0)
-                  );
-            """)
-            logger.info("View crm.v_comercial_mov_flat created")
-        else:
-            logger.warning("Missing tables for v_comercial_mov_flat")
-    except Exception as e:
-        logger.warning(f"Could not create v_comercial_mov_flat: {e}")
-
-
-    # 3.6) v_credito_flat – credit invoices joined with cuenta partners + products
-    try:
-        has_ic = await conn.fetchval(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='account_invoice_credit')")
-        has_il = await conn.fetchval(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='odoo' AND table_name='account_invoice_credit_line')")
-        if has_ic and has_il:
-            await conn.execute("DROP VIEW IF EXISTS crm.v_credito_flat CASCADE;")
-            await conn.execute("""
-                CREATE VIEW crm.v_credito_flat AS
-                SELECT
-                    ic.odoo_id       AS invoice_id,
-                    ic.number        AS invoice_number,
-                    ic.date_invoice,
-                    ic.state,
-                    ic.partner_id,
-                    rp.name          AS partner_name,
-                    vcp.cuenta_id,
-                    ic.amount_total,
-                    ic.amount_residual,
-                    il.odoo_id       AS line_id,
-                    il.product_id,
-                    il.name          AS line_description,
-                    il.quantity       AS qty,
-                    il.price_unit,
-                    il.price_subtotal,
-                    CASE
-                        WHEN pt.name IS NOT NULL AND TRIM(pt.name) <> ''
-                            THEN pt.name
-                        ELSE CONCAT('[VAR ', il.product_id, ' | LINE ', il.odoo_id, ']')
-                    END AS modelo_display,
-                    vv.product_tmpl_id,
-                    vv.barcode,
-                    vv.talla,
-                    vv.color,
-                    pt.marca,
-                    pt.tipo,
-                    pt.entalle,
-                    pt.tela,
-                    pt.hilo
-                FROM odoo.account_invoice_credit ic
-                JOIN odoo.account_invoice_credit_line il
-                    ON il.invoice_id = ic.odoo_id
-                LEFT JOIN (
-                    SELECT DISTINCT ON (partner_id) partner_id, cuenta_id
-                    FROM crm.v_cuenta_partners ORDER BY partner_id
-                ) vcp ON ic.partner_id = vcp.partner_id
-                LEFT JOIN odoo.res_partner rp
-                    ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
-                LEFT JOIN odoo.v_product_variant_flat vv
-                    ON vv.product_product_id = il.product_id AND vv.company_key = 'GLOBAL'
-                LEFT JOIN odoo.product_template pt
-                    ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL';
-            """)
-            logger.info("View crm.v_credito_flat created")
-        else:
-            logger.warning("Missing tables for v_credito_flat")
-    except Exception as e:
-        logger.warning(f"Could not create v_credito_flat: {e}")
-
-
-    # 3.7) v_comercial_order_header – 1 row per POS order (SALE / RESERVA) + override
-    try:
-        await conn.execute("DROP VIEW IF EXISTS crm.v_comercial_order_header CASCADE;")
-        await conn.execute("""
-            CREATE VIEW crm.v_comercial_order_header AS
-            SELECT
-                CASE
-                    WHEN COALESCE(po.reserva, false) = true
-                         AND COALESCE(po.reserva_use_id, 0) = 0
-                    THEN 'RESERVA'
-                    ELSE 'SALE'
-                END AS doc_tipo,
-                po.odoo_id   AS order_id,
-                po.name      AS order_name,
-                po.date_order,
-                po.state,
-                po.amount_total,
-                po.partner_id,
-                COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, po.partner_id) AS owner_partner_id,
-                rp_owner.name AS owner_partner_name,
-                (ov_po.order_id IS NOT NULL) AS has_override,
-                CASE WHEN ov_po.order_id IS NOT NULL THEN rp_orig.name ELSE NULL END AS original_partner_name,
-                agg.qty_total,
-                agg.lines_count
-            FROM odoo.pos_order po
-            JOIN (
-                SELECT pol.order_id,
-                       COALESCE(SUM(pol.qty), 0) AS qty_total,
-                       COUNT(*)                  AS lines_count
-                FROM odoo.pos_order_line pol
-                JOIN odoo.v_product_variant_flat vv
-                    ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-                JOIN odoo.product_template pt
-                    ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-                WHERE pol.product_id IS NOT NULL
-                  AND pt.sale_ok = true
-                  AND pt.purchase_ok = false
-                  AND pt.name NOT ILIKE '%correa%'
-                  AND pt.name NOT ILIKE '%saco%'
-                  AND pt.name NOT ILIKE '%bolsa%'
-                  AND pt.name NOT ILIKE '%probador%'
-                  AND pt.name NOT ILIKE '%paneton%'
-                  AND pt.name NOT ILIKE '%publicitario%'
-                GROUP BY pol.order_id
-            ) agg ON agg.order_id = po.odoo_id
-            LEFT JOIN crm.pos_order_partner_override ov_po
-                ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-            LEFT JOIN crm.v_partner_account_final paf
-                ON po.partner_id = paf.contacto_partner_odoo_id
-            LEFT JOIN odoo.res_partner rp_owner
-                ON COALESCE(ov_po.new_owner_partner_id, paf.cuenta_partner_odoo_id, po.partner_id) = rp_owner.odoo_id
-                AND rp_owner.company_key = 'GLOBAL'
-            LEFT JOIN odoo.res_partner rp_orig
-                ON ov_po.order_id IS NOT NULL AND rp_orig.odoo_id = po.partner_id AND rp_orig.company_key = 'GLOBAL'
-            WHERE COALESCE(po.is_cancel, false) = false
-              AND COALESCE(po.order_cancel, false) = false;
-        """)
-        logger.info("View crm.v_comercial_order_header created")
-    except Exception as e:
-        logger.warning(f"Could not create v_comercial_order_header: {e}")
-
-    # 3.7b) mv_cuenta_sales_kpi – materialized KPIs for the directory listing
-    try:
-        await conn.execute("DROP MATERIALIZED VIEW IF EXISTS crm.mv_cuenta_sales_kpi CASCADE;")
-        await conn.execute("""
-            CREATE MATERIALIZED VIEW crm.mv_cuenta_sales_kpi AS
-            WITH all_orders AS (
-                SELECT
-                    COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
-                    MAX(po.date_order) AS last_purchase_date,
-                    COUNT(DISTINCT po.odoo_id) FILTER (WHERE po.date_order >= CURRENT_DATE - 365) AS orders_12m,
-                    COUNT(DISTINCT po.odoo_id) AS orders_total
-                FROM odoo.pos_order po
-                LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-                WHERE COALESCE(po.is_cancel, false) = false
-                  AND COALESCE(po.order_cancel, false) = false
-                GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
-            ),
-            top_store AS (
-                SELECT DISTINCT ON (sub.cuenta_id)
-                    sub.cuenta_id, sub.tienda
-                FROM (
-                    SELECT
-                        COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
-                        COALESCE(
-                            sl.x_nombre,
-                            CASE SPLIT_PART(po.name, '/', 1)
-                                WHEN 'BOSH GAMARRA' THEN 'BOOSH'
-                                WHEN 'G209' THEN 'GM209'
-                                WHEN 'GaleriaAzul' THEN 'AZUL'
-                                WHEN 'Gamarra207A' THEN 'GM207'
-                                WHEN 'Grau 238' THEN 'GR238'
-                                WHEN 'Grau238' THEN 'GR238'
-                                WHEN 'Grau 555-' THEN 'GR55'
-                                WHEN 'Sebastian Barranca 1556' THEN 'GM218'
-                                WHEN 'Venta Taller' THEN 'TALLER'
-                                WHEN 'Zapaton' THEN 'ZAP'
-                                ELSE NULL
-                            END
-                        ) AS tienda,
-                        COUNT(*) AS cnt
-                    FROM (
-                        SELECT po2.*, ROW_NUMBER() OVER (
-                            PARTITION BY COALESCE(ov2.new_owner_partner_id, po2.partner_id)
-                            ORDER BY po2.date_order DESC
-                        ) AS rn
-                        FROM odoo.pos_order po2
-                        LEFT JOIN crm.pos_order_partner_override ov2 ON ov2.order_id = po2.odoo_id AND ov2.active = true
-                        WHERE COALESCE(po2.is_cancel, false) = false
-                          AND COALESCE(po2.order_cancel, false) = false
-                    ) po
-                    LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-                    LEFT JOIN odoo.stock_location sl ON sl.odoo_id = po.location_id AND sl.company_key = 'GLOBAL'
-                        AND sl.x_nombre IS NOT NULL AND btrim(sl.x_nombre) <> ''
-                    WHERE po.rn <= 5
-                    GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id),
-                             COALESCE(
-                                 sl.x_nombre,
-                                 CASE SPLIT_PART(po.name, '/', 1)
-                                     WHEN 'BOSH GAMARRA' THEN 'BOOSH'
-                                     WHEN 'G209' THEN 'GM209'
-                                     WHEN 'GaleriaAzul' THEN 'AZUL'
-                                     WHEN 'Gamarra207A' THEN 'GM207'
-                                     WHEN 'Grau 238' THEN 'GR238'
-                                     WHEN 'Grau238' THEN 'GR238'
-                                     WHEN 'Grau 555-' THEN 'GR55'
-                                     WHEN 'Sebastian Barranca 1556' THEN 'GM218'
-                                     WHEN 'Venta Taller' THEN 'TALLER'
-                                     WHEN 'Zapaton' THEN 'ZAP'
-                                     ELSE NULL
-                                 END
-                             )
-                ) sub
-                WHERE sub.tienda IS NOT NULL
-                ORDER BY sub.cuenta_id, sub.cnt DESC
-            ),
-            filtered_qty AS (
-                SELECT
-                    COALESCE(ov_po.new_owner_partner_id, po.partner_id) AS cuenta_id,
-                    COALESCE(SUM(CASE WHEN po.date_order >= CURRENT_DATE - 365 THEN pol.qty ELSE 0 END), 0)::bigint AS qty_12m,
-                    COALESCE(SUM(pol.qty), 0)::bigint AS qty_total,
-                    COALESCE(SUM(CASE WHEN po.date_order >= date_trunc('year', CURRENT_DATE) THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_cur,
-                    COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '1 year')
-                                       AND po.date_order < (CURRENT_DATE - interval '1 year' + interval '1 day')
-                                       THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_p1,
-                    COALESCE(SUM(CASE WHEN po.date_order >= (date_trunc('year', CURRENT_DATE) - interval '2 years')
-                                       AND po.date_order < (CURRENT_DATE - interval '2 years' + interval '1 day')
-                                       THEN pol.qty ELSE 0 END), 0)::bigint AS qty_ytd_p2
-                FROM odoo.pos_order po
-                JOIN odoo.pos_order_line pol ON pol.order_id = po.odoo_id
-                LEFT JOIN crm.pos_order_partner_override ov_po ON ov_po.order_id = po.odoo_id AND ov_po.active = true
-                JOIN odoo.v_product_variant_flat vv ON vv.product_product_id = pol.product_id AND vv.company_key = 'GLOBAL'
-                JOIN odoo.product_template pt ON pt.odoo_id = vv.product_tmpl_id AND pt.company_key = 'GLOBAL'
-                WHERE COALESCE(po.is_cancel, false) = false
-                  AND COALESCE(po.order_cancel, false) = false
-                  AND pol.product_id IS NOT NULL
-                  AND pt.sale_ok = true AND pt.purchase_ok = false
-                  AND pt.name NOT ILIKE '%correa%' AND pt.name NOT ILIKE '%saco%'
-                  AND pt.name NOT ILIKE '%bolsa%' AND pt.name NOT ILIKE '%probador%'
-                  AND pt.name NOT ILIKE '%paneton%' AND pt.name NOT ILIKE '%publicitario%'
-                GROUP BY COALESCE(ov_po.new_owner_partner_id, po.partner_id)
-            )
-            SELECT
-                ao.cuenta_id,
-                ao.last_purchase_date,
-                ao.orders_12m::bigint,
-                ao.orders_total::bigint,
-                COALESCE(fq.qty_12m, 0) AS qty_12m,
-                COALESCE(fq.qty_total, 0) AS qty_total,
-                COALESCE(fq.qty_ytd_cur, 0) AS qty_ytd_cur,
-                COALESCE(fq.qty_ytd_p1, 0) AS qty_ytd_p1,
-                COALESCE(fq.qty_ytd_p2, 0) AS qty_ytd_p2,
-                ts.tienda
-            FROM all_orders ao
-            LEFT JOIN filtered_qty fq ON fq.cuenta_id = ao.cuenta_id
-            LEFT JOIN top_store ts ON ts.cuenta_id = ao.cuenta_id;
-        """)
-        await conn.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_cuenta_kpi_pk ON crm.mv_cuenta_sales_kpi (cuenta_id);
-        """)
-        logger.info("Materialized view crm.mv_cuenta_sales_kpi created")
-    except Exception as e:
-        logger.warning(f"Could not create mv_cuenta_sales_kpi: {e}")
-
-    # 3.7c) mv_ventas_reporte – flat materialized view optimized for sales reporting
-    try:
-        await conn.execute("DROP MATERIALIZED VIEW IF EXISTS crm.mv_ventas_reporte CASCADE;")
-        await conn.execute("""
-            CREATE MATERIALIZED VIEW crm.mv_ventas_reporte AS
-            SELECT
-                (v.fecha AT TIME ZONE 'America/Lima')::date AS dia,
-                v.order_id,
-                v.owner_partner_id,
-                v.owner_partner_name,
-                v.product_tmpl_id,
-                v.modelo_display,
-                v.marca,
-                v.tipo,
-                v.entalle,
-                v.tela,
-                v.hilo,
-                v.talla,
-                v.color,
-                v.qty,
-                v.subtotal,
-                COALESCE(sl.x_nombre,
-                    CASE SPLIT_PART(po.name, '/', 1)
-                        WHEN 'BOSH GAMARRA' THEN 'BOOSH'
-                        WHEN 'G209' THEN 'GM209'
-                        WHEN 'GaleriaAzul' THEN 'AZUL'
-                        WHEN 'Gamarra207A' THEN 'GM207'
-                        WHEN 'Grau 238' THEN 'GR238'
-                        WHEN 'Grau238' THEN 'GR238'
-                        WHEN 'Grau 555-' THEN 'GR55'
-                        WHEN 'Sebastian Barranca 1556' THEN 'GM218'
-                        WHEN 'Venta Taller' THEN 'TALLER'
-                        WHEN 'Zapaton' THEN 'ZAP'
-                        ELSE NULL
-                    END
-                ) AS tienda,
-                cu.assigned_user_id
-            FROM crm.v_comercial_mov_flat v
-            LEFT JOIN odoo.pos_order po ON po.odoo_id = v.order_id
-            LEFT JOIN odoo.stock_location sl
-                ON sl.odoo_id = po.location_id AND sl.company_key = 'GLOBAL'
-                AND sl.x_nombre IS NOT NULL AND btrim(sl.x_nombre) <> ''
-            LEFT JOIN crm.cuenta cu ON cu.cuenta_partner_odoo_id = v.owner_partner_id
-            WHERE v.doc_tipo = 'SALE';
-        """)
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_dia ON crm.mv_ventas_reporte (dia);
-            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_partner ON crm.mv_ventas_reporte (owner_partner_id);
-            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_tienda ON crm.mv_ventas_reporte (tienda);
-            CREATE INDEX IF NOT EXISTS idx_mv_ventas_rep_marca ON crm.mv_ventas_reporte (marca);
-        """)
-        logger.info("Materialized view crm.mv_ventas_reporte created")
-    except Exception as e:
-        logger.warning(f"Could not create mv_ventas_reporte: {e}")
-
-
-    # 3.8) v_credito_invoice_header – 1 row per credit invoice
-    try:
-        await conn.execute("DROP VIEW IF EXISTS crm.v_credito_invoice_header CASCADE;")
-        await conn.execute("""
-            CREATE VIEW crm.v_credito_invoice_header AS
-            SELECT
-                ic.odoo_id          AS invoice_id,
-                ic.number           AS invoice_number,
-                ic.date_invoice,
-                ic.state,
-                ic.partner_id,
-                rp.name             AS partner_name,
-                COALESCE(paf.cuenta_partner_odoo_id, ic.partner_id) AS owner_partner_id,
-                rp_owner.name       AS owner_partner_name,
-                ic.amount_total,
-                ic.amount_residual,
-                agg.qty_total,
-                agg.lines_count
-            FROM odoo.account_invoice_credit ic
-            JOIN (
-                SELECT invoice_id,
-                       COALESCE(SUM(quantity), 0) AS qty_total,
-                       COUNT(*)                   AS lines_count
-                FROM odoo.account_invoice_credit_line
-                GROUP BY invoice_id
-            ) agg ON agg.invoice_id = ic.odoo_id
-            LEFT JOIN crm.v_partner_account_final paf
-                ON ic.partner_id = paf.contacto_partner_odoo_id
-            LEFT JOIN odoo.res_partner rp
-                ON rp.odoo_id = ic.partner_id AND rp.company_key = 'GLOBAL'
-            LEFT JOIN odoo.res_partner rp_owner
-                ON COALESCE(paf.cuenta_partner_odoo_id, ic.partner_id) = rp_owner.odoo_id
-                AND rp_owner.company_key = 'GLOBAL';
-        """)
-        logger.info("View crm.v_credito_invoice_header created")
-    except Exception as e:
-        logger.warning(f"Could not create v_credito_invoice_header: {e}")
+        logger.warning(f"close_pool error (ignorado): {e}")
+    pool = None

@@ -8,38 +8,63 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Hard timeout: si por cualquier motivo no se resuelve en 10s, liberamos
+    // el spinner y dejamos que el usuario vea login/contenido.
+    const timeoutId = setTimeout(() => {
+      console.warn("[AuthProvider] hard timeout 10s — forzando loading=false");
+      setLoading(false);
+    }, 10000);
+
     const token = localStorage.getItem("crm_token");
-    const savedUser = localStorage.getItem("crm_user");
+    const savedUserRaw = localStorage.getItem("crm_user");
+
+    // Parse defensivo: si el JSON está corrupto, limpiamos y vamos a login
+    let savedUser = null;
+    if (savedUserRaw && savedUserRaw !== "undefined" && savedUserRaw !== "null") {
+      try {
+        savedUser = JSON.parse(savedUserRaw);
+      } catch (e) {
+        console.warn("[AuthProvider] crm_user corrupto, limpiando localStorage");
+        localStorage.removeItem("crm_token");
+        localStorage.removeItem("crm_user");
+      }
+    }
+
     if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
+      setUser(savedUser);
       // Verify token
       api.get("/auth/me").then(res => {
         setUser(res.data);
-        localStorage.setItem("crm_user", JSON.stringify(res.data));
+        try { localStorage.setItem("crm_user", JSON.stringify(res.data)); } catch {}
       }).catch(() => {
         localStorage.removeItem("crm_token");
         localStorage.removeItem("crm_user");
         setUser(null);
-      }).finally(() => setLoading(false));
+      }).finally(() => {
+        clearTimeout(timeoutId);
+        setLoading(false);
+      });
     } else {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   const login = async (usuario, password) => {
-    const res = await api.post("/auth/login", { usuario, password });
-    localStorage.setItem("crm_token", res.data.token);
+    // Backend espera `username` y devuelve `access_token` (compatible con ventas)
+    const res = await api.post("/auth/login", { username: usuario, password });
+    localStorage.setItem("crm_token", res.data.access_token);
     localStorage.setItem("crm_user", JSON.stringify(res.data.user));
     setUser(res.data.user);
     return res.data;
   };
 
   const register = async (usuario, password, nombre) => {
-    const res = await api.post("/auth/register", { usuario, password, nombre });
-    localStorage.setItem("crm_token", res.data.token);
-    localStorage.setItem("crm_user", JSON.stringify(res.data.user));
-    setUser(res.data.user);
-    return res.data;
+    // Endpoint /auth/register aún no existe en el backend nuevo (los usuarios se
+    // gestionan desde produccion). Mantenemos la firma para no romper Login.jsx.
+    throw new Error("Registro deshabilitado. Pide un usuario al admin.");
   };
 
   const logout = () => {

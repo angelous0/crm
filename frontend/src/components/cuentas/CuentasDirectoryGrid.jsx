@@ -1,9 +1,13 @@
 import React, { useState, useCallback, useRef } from "react";
-import { Loader2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Power, MessageCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Loader2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Power, MessageCircle, MessageSquarePlus, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { normalizeDepartamento, isCanonicalDepartamento } from "@/components/cuentas/perfil-options";
+import { NuevaInteraccionModal } from "@/components/cuentas/modals/NuevaInteraccionModal";
+import { NuevaTareaModal } from "@/components/cuentas/modals/NuevaTareaModal";
 
 const fmtDate = (d) => {
   if (!d) return "-";
@@ -46,19 +50,199 @@ function pctColor(v) {
 }
 
 /* ─── Column definitions ─── */
+// Sprint D3: añadidas columnas Estado y Tier (después de Cuenta)
 const COLUMNS = [
   { key: "name", label: "Cuenta", sortKey: "name", defaultW: 180, minW: 100 },
+  { key: "estado_auto", label: "Estado", sortKey: "estado_auto", defaultW: 95, minW: 70 },
+  { key: "tier", label: "Clasif.", sortKey: "tier", defaultW: 90, minW: 70 },
   { key: "depto", label: "Depto", sortKey: "depto", defaultW: 90, minW: 50 },
   { key: "tienda", label: "Tienda", sortKey: "tienda", defaultW: 100, minW: 60 },
   { key: "last_purchase", label: "Ult. compra", sortKey: "last_purchase", defaultW: 100, minW: 70 },
   { key: "hace", label: "Hace", sortKey: "last_purchase", defaultW: 55, minW: 40, align: "right" },
+  { key: "ltv_12m", label: "LTV 12m", sortKey: "ltv_12m", defaultW: 85, minW: 55, align: "right" },
   { key: "qty_12m", label: "Cant. 12m", sortKey: "qty_12m", defaultW: 65, minW: 45, align: "right" },
-  { key: "orders_12m", label: "#Comp. 12m", sortKey: "orders_12m", defaultW: 70, minW: 45, align: "right" },
   { key: "qty_total", label: "Cant. Total", sortKey: "qty_total", defaultW: 70, minW: 45, align: "right" },
-  { key: "orders_total", label: "#Comp. Total", sortKey: "orders_total", defaultW: 75, minW: 50, align: "right" },
   { key: "tel", label: "Tel", defaultW: 110, minW: 60 },
   { key: "pct_ytd", label: "%YTD", sortKey: "pct_ytd", defaultW: 65, minW: 45, align: "right" },
+  // CRM-D8: próxima tarea pendiente. Default sort del directorio. Click navega a
+  // /cuentas/{id}?tab=tareas para verla en contexto.
+  { key: "proxima_tarea", label: "Próx. tarea", sortKey: "proxima_tarea", defaultW: 210, minW: 140 },
+  // Acciones rápidas — siempre visibles, no navegan al detalle.
+  { key: "acciones", label: "", defaultW: 120, minW: 120 },
 ];
+
+// Estilos de los badges de estado_auto (5 estados simplificados)
+const ESTADO_BADGE = {
+  nuevo:    { bg: "rgba(42,111,219,.12)", fg: "#1E54B0", label: "Nuevo" },
+  activo:   { bg: "rgba(22,163,74,.12)",  fg: "#15803D", label: "Activo" },
+  alerta:   { bg: "rgba(249,115,22,.14)", fg: "#C2410C", label: "Alerta" },
+  olvidado: { bg: "rgba(180,83,9,.14)",   fg: "#92400E", label: "Olvidado" },
+  perdido:  { bg: "rgba(220,38,38,.10)",  fg: "#991B1B", label: "Perdido" },
+  sin_data: { bg: "rgba(0,0,0,.04)",      fg: "#6B7280", label: "—" },
+};
+
+// Clasificación por percentil dentro del depto (estrella/alto/medio/bajo)
+const TIER_CHIP = {
+  estrella: { bg: "rgba(212,168,90,.18)",   border: "rgba(212,168,90,.45)",  fg: "#8B6A1F" },
+  alto:     { bg: "rgba(42,111,219,.12)",   border: "rgba(42,111,219,.32)",  fg: "#1E54B0" },
+  medio:    { bg: "rgba(135,122,102,.14)",  border: "rgba(135,122,102,.32)", fg: "#4A4136" },
+  bajo:     { bg: "rgba(181,70,42,.08)",    border: "rgba(181,70,42,.22)",   fg: "#8A2F18" },
+};
+
+function EstadoBadge({ estado }) {
+  if (!estado) return <span className="text-slate-300 text-[10px]">—</span>;
+  const s = ESTADO_BADGE[estado] || ESTADO_BADGE.sin_data;
+  return (
+    <span
+      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+      style={{ background: s.bg, color: s.fg, letterSpacing: "0.04em" }}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+function TierChip({ tier }) {
+  if (!tier) return <span className="text-slate-300 text-[10px]">—</span>;
+  const s = TIER_CHIP[tier] || TIER_CHIP.bajo;
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase"
+      style={{
+        background: s.bg, color: s.fg,
+        border: `1px solid ${s.border}`,
+        letterSpacing: "0.06em",
+      }}
+    >
+      {tier === "estrella" && "★ "}{tier}
+    </span>
+  );
+}
+
+function fmtMoneyShort(n) {
+  if (!n) return "—";
+  const v = Number(n);
+  if (v >= 1000000) return `S/ ${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000)    return `S/ ${(v / 1000).toFixed(0)}k`;
+  return `S/ ${v.toFixed(0)}`;
+}
+
+/* ─── Próx. tarea (CRM-D8 + D9 motivo) ────────────────────────────────
+   Renderiza la próxima tarea pendiente de la cuenta. 4 estados temporales
+   × 2 ejes de motivo (COBRAR vs. resto):
+
+   · null            → "—" gris muy sutil (sin tarea pendiente)
+   · vencida         → 🔴 -Nd · descripción (rojo)
+   · hoy             → 🟡 HOY · descripción (amber)
+   · futura (>= 1d)  → ⏰ +Nd · descripción (slate)
+
+   Si motivo === 'COBRAR':
+   · ícono cambia a 💵
+   · texto en ámbar (futura/hoy) o rojo intenso (vencida + doble énfasis)
+   · tooltip incluye línea "Motivo: Cobrar" arriba de la descripción
+
+   Click navega a /cuentas/{partnerOdooId}?tab=tareas (no a Resumen).
+   El stopPropagation evita que se dispare el onSelectRow del <tr>.
+   Texto truncado a 30 chars; tooltip muestra contexto completo.
+*/
+
+// Etiquetas humanas para cada motivo (para tooltip)
+const MOTIVO_LABEL = {
+  COBRAR:           "Cobrar",
+  POST_VENTA:       "Post-venta",
+  SEGUIMIENTO:      "Seguimiento",
+  VENDER:           "Vender",
+  RECUPERAR:        "Recuperar",
+  DEVOLVER_LLAMADA: "Devolver llamada",
+};
+
+function ProximaTareaCell({ proxima, partnerOdooId, maxWidth }) {
+  const navigate = useNavigate();
+  if (!proxima || !proxima.due_at) {
+    return (
+      <td className="px-2 py-1" data-testid={`prox-tarea-${partnerOdooId}`}>
+        <span className="text-slate-300 text-[11px]">—</span>
+      </td>
+    );
+  }
+
+  const due = new Date(proxima.due_at);
+  const now = new Date();
+  // Comparar contra "inicio del día" para que "HOY" cubra cualquier hora del día actual.
+  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0);
+  const startTomorrow = new Date(startToday); startTomorrow.setDate(startTomorrow.getDate() + 1);
+
+  // Días relativos contra el inicio del día actual: vencida usa el día calendario.
+  const diasRelativos = Math.floor((due - startToday) / 86400000);
+  const esCobrar = proxima.motivo === "COBRAR";
+
+  let icon, etiqueta, claseColor, tipo, claseFila;
+  if (due < startToday) {
+    // Vencida — COBRAR vencida usa rojo intenso (doble énfasis) y bg rosado.
+    tipo = "vencida";
+    icon = esCobrar ? "💵" : "🔴";
+    etiqueta = `${diasRelativos}d`; // ya negativo
+    claseColor = esCobrar
+      ? "text-red-800 font-bold"
+      : "text-red-700 font-semibold";
+    claseFila = esCobrar ? "bg-red-50/60" : "";
+  } else if (due < startTomorrow) {
+    // Hoy — COBRAR hoy mantiene ícono 💵 + texto ámbar fuerte.
+    tipo = "hoy";
+    icon = esCobrar ? "💵" : "🟡";
+    etiqueta = "HOY";
+    claseColor = esCobrar
+      ? "text-amber-800 font-bold"
+      : "text-amber-700 font-semibold";
+    claseFila = "";
+  } else {
+    // Futura — COBRAR futura: ámbar destacado.
+    tipo = "futura";
+    icon = esCobrar ? "💵" : "⏰";
+    etiqueta = `+${diasRelativos}d`;
+    claseColor = esCobrar
+      ? "text-amber-800 font-semibold"
+      : "text-slate-600";
+    claseFila = "";
+  }
+
+  const desc = proxima.descripcion || "(sin descripción)";
+  const descCorto = desc.length > 30 ? desc.slice(0, 30).trim() + "…" : desc;
+  const fechaCompleta = due.toLocaleString("es-PE", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+  // Tooltip: motivo arriba (si existe), después descripción, después fecha.
+  const motivoLabel = proxima.motivo ? MOTIVO_LABEL[proxima.motivo] || proxima.motivo : null;
+  const tooltip = (motivoLabel ? `Motivo: ${motivoLabel}\n` : "")
+                + `${desc}\n${fechaCompleta}`;
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    navigate(`/cuentas/${partnerOdooId}?tab=tareas`);
+  };
+
+  return (
+    <td
+      className={`px-2 py-1 cursor-pointer hover:bg-slate-100/60 ${claseFila}`}
+      style={{ maxWidth }}
+      onClick={handleClick}
+      data-testid={`prox-tarea-${partnerOdooId}`}
+      data-prox-tipo={tipo}
+      data-prox-motivo={proxima.motivo || ""}
+      title={tooltip}
+    >
+      <div className={`flex items-center gap-1.5 text-[11px] truncate ${claseColor}`}>
+        <span className="shrink-0" aria-hidden>{icon}</span>
+        <span className="shrink-0 font-mono text-[10px] tabular-nums">{etiqueta}</span>
+        <span className="text-slate-300 shrink-0">·</span>
+        <span className={`truncate font-normal ${esCobrar ? "text-amber-900" : "text-slate-700"}`}>
+          {descCorto}
+        </span>
+      </div>
+    </td>
+  );
+}
 
 /* ─── Resize Handle ─── */
 function ResizeHandle({ onResize }) {
@@ -121,6 +305,12 @@ const COL_COUNT = COLUMNS.length + 1; // +1 for checkbox
 export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, sort, dir, onSort, page, totalPages, onPageChange, onRefresh }) {
   const [selected, setSelected] = useState(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
+
+  // Modales de acción rápida — guardamos {id, nombre} de la fila que los abrió.
+  // null = cerrado. NO recargamos contactos: los modales aceptan contactos=[].
+  const [interaccionFor, setInteraccionFor] = useState(null); // { id, nombre } | null
+  const [tareaFor,       setTareaFor]       = useState(null); // { id, nombre } | null
+  const [tareaDefaults,  setTareaDefaults]  = useState(null); // precarga desde "Guardar+crear tarea"
 
   // Column widths state
   const [colWidths, setColWidths] = useState(() => {
@@ -245,10 +435,41 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                     {r.nombre || `ID: ${r.id}`}
                     {inactive && <span className="inline-block ml-1 px-1 py-0.5 rounded text-[7px] font-bold bg-red-600 text-white leading-none align-middle">INACT</span>}
                   </td>
-                  {/* Depto */}
-                  <td className="px-2 py-1 text-slate-500 truncate"
+                  {/* D3: Estado auto */}
+                  <td className="px-2 py-1" data-testid={`estado-auto-${r.id}`}>
+                    <EstadoBadge estado={r.estado_auto} />
+                  </td>
+                  {/* D3: Tier */}
+                  <td className="px-2 py-1" data-testid={`tier-${r.id}`}>
+                    <TierChip tier={r.tier} />
+                  </td>
+                  {/* Depto — normaliza ("UCAYALI" → "Ucayali"). Si el valor
+                       crudo NO matchea ningún departamento canónico, muestra
+                       el raw en ámbar con título tooltip → indica typo o
+                       depto raro a corregir en Odoo o agregar al alias. */}
+                  <td className="px-2 py-1 truncate"
                     style={{ maxWidth: colWidths.depto || 90 }}
-                    data-testid={`depto-${r.id}`}>{r.depto_name || "-"}</td>
+                    data-testid={`depto-${r.id}`}>
+                    {(() => {
+                      const pais = r.pais || "PE";
+                      const canon = normalizeDepartamento(r.depto_name, pais);
+                      if (canon) {
+                        return <span className="text-slate-500">{canon}</span>;
+                      }
+                      if (r.depto_name) {
+                        return (
+                          <span
+                            className="text-amber-700 inline-flex items-center gap-1"
+                            title={`"${r.depto_name}" no matchea ningún departamento canónico — revisa typo o agrega al diccionario`}
+                            data-testid={`depto-noncanonical-${r.id}`}
+                          >
+                            ⚠ {r.depto_name}
+                          </span>
+                        );
+                      }
+                      return <span className="text-slate-300">-</span>;
+                    })()}
+                  </td>
                   {/* Tienda */}
                   <td className="px-2 py-1 text-slate-600 truncate text-[10px] font-medium"
                     style={{ maxWidth: colWidths.tienda || 100 }}
@@ -259,18 +480,15 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                   {/* Hace (días) */}
                   <td className={`px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap ${daysColor(r.last_purchase_date)}`}
                     data-testid={`days-since-${r.id}`}>{fmtDays(r.last_purchase_date)}</td>
+                  {/* D3: LTV 12m */}
+                  <td className="px-2 py-1 text-right font-mono text-[10px] text-slate-700 font-semibold whitespace-nowrap"
+                    data-testid={`ltv-${r.id}`}>{fmtMoneyShort(r.ltv_12m)}</td>
                   {/* Cant. 12m */}
                   <td className="px-2 py-1 text-right font-mono text-slate-700"
                     data-testid={`qty-${r.id}`}>{fmtNum(r.qty_12m)}</td>
-                  {/* #Comp. 12m */}
-                  <td className="px-2 py-1 text-right font-mono text-slate-500"
-                    data-testid={`orders-${r.id}`}>{fmtNum(r.orders_12m)}</td>
                   {/* Cant. Total */}
                   <td className="px-2 py-1 text-right font-mono text-slate-500"
                     data-testid={`qty-total-${r.id}`}>{fmtNum(r.qty_total)}</td>
-                  {/* #Comp. Total */}
-                  <td className="px-2 py-1 text-right font-mono text-slate-500"
-                    data-testid={`orders-total-${r.id}`}>{fmtNum(r.orders_total)}</td>
                   {/* Tel */}
                   <td className="px-2 py-1 whitespace-nowrap" data-testid={`phone-${r.id}`}>
                     {r.phone_display ? (
@@ -292,6 +510,54 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                     data-testid={`pct-${r.id}`}>
                     {fmtPct(pctVal) ?? <span className="text-slate-300">&mdash;</span>}
                   </td>
+                  {/* CRM-D8: Próx. tarea pendiente (sort default ASC). Click → ficha tab Tareas. */}
+                  <ProximaTareaCell
+                    proxima={r.proxima_tarea}
+                    partnerOdooId={r.id}
+                    maxWidth={colWidths.proxima_tarea || 210}
+                  />
+                  {/* Acciones rápidas: Interacción · Tarea · WhatsApp */}
+                  <td className="px-2 py-1 whitespace-nowrap"
+                      data-testid={`acciones-${r.id}`}
+                      onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        title="Nueva interacción"
+                        onClick={() => setInteraccionFor({ id: r.id, nombre: r.nombre })}
+                        className="group/btn inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 hover:bg-blue-600 hover:text-white hover:ring-blue-600 hover:shadow-sm active:scale-95 transition-all duration-150"
+                        data-testid={`btn-interaccion-${r.id}`}>
+                        <MessageSquarePlus size={14} strokeWidth={2.25} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Nueva tarea"
+                        onClick={() => setTareaFor({ id: r.id, nombre: r.nombre })}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-50 text-amber-600 ring-1 ring-amber-100 hover:bg-amber-500 hover:text-white hover:ring-amber-500 hover:shadow-sm active:scale-95 transition-all duration-150"
+                        data-testid={`btn-tarea-${r.id}`}>
+                        <CheckSquare size={14} strokeWidth={2.25} />
+                      </button>
+                      {r.phone_whatsapp ? (
+                        <a
+                          href={`https://wa.me/${r.phone_whatsapp}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Abrir WhatsApp · ${r.phone_display || ""}`}
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 hover:bg-emerald-500 hover:text-white hover:ring-emerald-500 hover:shadow-sm active:scale-95 transition-all duration-150"
+                          data-testid={`btn-whatsapp-${r.id}`}>
+                          <MessageCircle size={14} strokeWidth={2.25} />
+                        </a>
+                      ) : (
+                        <span
+                          title="Sin WhatsApp registrado"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-50 text-slate-300 ring-1 ring-slate-100 cursor-not-allowed"
+                          data-testid={`btn-whatsapp-${r.id}-disabled`}>
+                          <MessageCircle size={14} strokeWidth={2} />
+                        </span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -312,6 +578,40 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
           </div>
         </div>
       )}
+
+      {/* Modales de acción rápida — montados aquí (NO en cada fila) para que
+          haya UNA sola instancia. partnerOdooId cambia según qué fila abrió.
+          Renderizan encima de /cuentas: al cerrar, no se navega ni se pierde
+          el estado de filtros/scroll de la tabla. */}
+      <NuevaInteraccionModal
+        open={interaccionFor != null}
+        onClose={() => setInteraccionFor(null)}
+        partnerOdooId={interaccionFor?.id}
+        cuentaName={interaccionFor?.nombre}
+        onSuccess={() => {
+          // No cerramos aquí si vamos a abrir Tarea — el callback maneja eso.
+          // El cierre/limpieza se hace en onClose o en onSaveAndCreateTask.
+          toast.success("Interacción guardada");
+        }}
+        onSaveAndCreateTask={(defaults) => {
+          // Cerrar Interacción → abrir Tarea con defaults precargados,
+          // manteniendo el contexto de la fila clickeada.
+          const ctx = interaccionFor;
+          setInteraccionFor(null);
+          setTareaDefaults(defaults);
+          setTareaFor(ctx);
+        }}
+      />
+      <NuevaTareaModal
+        open={tareaFor != null}
+        onClose={() => { setTareaFor(null); setTareaDefaults(null); }}
+        partnerOdooId={tareaFor?.id}
+        cuentaName={tareaFor?.nombre}
+        defaults={tareaDefaults}
+        onSuccess={() => {
+          toast.success("Tarea creada");
+        }}
+      />
     </div>
   );
 }

@@ -1,92 +1,302 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import api from "@/lib/api";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Plus } from "lucide-react";
+import {
+  Plus, Loader2, AlertCircle, Check, Edit3, Trash2, Clock,
+} from "lucide-react";
 import { toast } from "sonner";
+import { useTabData } from "@/hooks/useTabData";
+import { useAuth } from "@/lib/auth";
+import { NuevaTareaModal } from "@/components/cuentas/modals/NuevaTareaModal";
+import { TareaDetalleModal } from "@/components/cuentas/TareaDetalleModal";
 
-const TIPO_TAREA = ["LLAMAR", "WHATSAPP", "VISITAR", "COBRANZA", "POSTVENTA"];
+// Sub-tabs internos. Mapeo a status del backend: PENDIENTE/HECHO/CANCELADO.
+// "En progreso" no tiene status real aún → siempre 0 hasta que el backend lo soporte.
+const SUBTABS = [
+  { key: "PENDIENTE",   label: "Pendientes",    statuses: ["PENDIENTE"]   },
+  { key: "EN_PROGRESO", label: "En progreso",   statuses: ["EN_PROGRESO"] },
+  { key: "HECHO",       label: "Completadas",   statuses: ["HECHO"]       },
+  { key: "CANCELADO",   label: "Canceladas",    statuses: ["CANCELADO"]   },
+];
 
-export function TareasTab({ cuentaId }) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showDialog, setShowDialog] = useState(false);
-  const [form, setForm] = useState({ tipo: "LLAMAR", due_at: "", prioridad: 3, descripcion: "" });
+const PRIO_BORDER = {
+  1: "before:bg-red-500",
+  2: "before:bg-orange-400",
+  3: "before:bg-yellow-400",
+  4: "before:bg-blue-400",
+  5: "before:bg-slate-300",
+};
 
-  useEffect(() => {
-    setLoading(true);
-    api.get(`/cuentas/${cuentaId}/tareas`).then(r => setItems(r.data || [])).catch(() => {}).finally(() => setLoading(false));
-  }, [cuentaId]);
+const PRIO_LABEL = {
+  1: "P1 Crítica", 2: "P2 Alta", 3: "P3 Media", 4: "P4 Baja", 5: "P5 Info",
+};
 
-  const handleCreate = async () => {
-    try {
-      await api.post(`/cuentas/${cuentaId}/tareas`, form);
-      const r = await api.get(`/cuentas/${cuentaId}/tareas`);
-      setItems(r.data || []);
-      setShowDialog(false);
-      setForm({ tipo: "LLAMAR", due_at: "", prioridad: 3, descripcion: "" });
-      toast.success("Tarea creada");
-    } catch { toast.error("Error"); }
+const fmtDueRelative = (iso) => {
+  if (!iso) return { label: "—", cls: "text-slate-400" };
+  const ms = new Date(iso).getTime() - Date.now();
+  const past = ms < 0;
+  const absMin = Math.round(Math.abs(ms) / 60000);
+  let label;
+  if (absMin < 60)         label = `${absMin}m`;
+  else if (absMin < 60*24) label = `${Math.floor(absMin/60)}h`;
+  else                     label = `${Math.floor(absMin/60/24)}d`;
+  if (past) {
+    return { label: `Hace ${label}`, cls: "text-red-600 font-medium" };
+  }
+  // Hoy si < 24h
+  if (absMin < 60*24) {
+    return { label: `Vence en ${label}`, cls: "text-orange-600 font-medium" };
+  }
+  return { label: `En ${label}`, cls: "text-slate-500" };
+};
+
+const Skeleton = () => (
+  <div className="space-y-1.5">
+    {[0,1,2,3].map(i => <div key={i} className="h-14 bg-slate-100 rounded animate-pulse" />)}
+  </div>
+);
+
+export function TareasTab({ partnerOdooId, contactos = [], active, staleKey, onMutate }) {
+  const { user } = useAuth();
+  const fetchTareas = useCallback(async () => {
+    const r = await api.get(`/cuentas/${partnerOdooId}/tareas`);
+    return Array.isArray(r.data) ? r.data : (r.data?.items || []);
+  }, [partnerOdooId]);
+
+  const { data: items, loading, error, reload } = useTabData(fetchTareas, {
+    enabled: active, staleKey,
+  });
+
+  const [subtab, setSubtab] = useState("PENDIENTE");
+  const [openCreate, setOpenCreate] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [busyIds, setBusyIds] = useState(new Set());
+
+  const itemsList = items || [];
+  const counts = useMemo(() => {
+    const c = { PENDIENTE: 0, EN_PROGRESO: 0, HECHO: 0, CANCELADO: 0 };
+    itemsList.forEach(t => {
+      if (c[t.status] != null) c[t.status]++;
+    });
+    return c;
+  }, [itemsList]);
+
+  const filtered = useMemo(() => {
+    const cfg = SUBTABS.find(s => s.key === subtab);
+    return itemsList.filter(t => cfg.statuses.includes(t.status));
+  }, [itemsList, subtab]);
+
+  const refresh = async () => {
+    await reload();
+    onMutate?.();
   };
 
-  const handleCompletar = async (id) => {
+  const completarInline = async (e, tarea) => {
+    e.stopPropagation();
+    setBusyIds(s => new Set(s).add(tarea.id));
     try {
-      await api.put(`/tareas/${id}/completar`);
-      const r = await api.get(`/cuentas/${cuentaId}/tareas`);
-      setItems(r.data || []);
+      await api.patch(`/tareas/${tarea.id}/completar`);
       toast.success("Tarea completada");
-    } catch { toast.error("Error"); }
+      await refresh();
+    } catch (err) {
+      toast.error("No se pudo completar: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setBusyIds(s => { const n = new Set(s); n.delete(tarea.id); return n; });
+    }
   };
 
-  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>;
+  const borrarInline = async (e, tarea) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Borrar "${(tarea.descripcion || "").slice(0,50)}"?`)) return;
+    setBusyIds(s => new Set(s).add(tarea.id));
+    try {
+      await api.delete(`/tareas/${tarea.id}`);
+      toast.success("Tarea borrada");
+      await refresh();
+    } catch (err) {
+      toast.error("No se pudo borrar: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setBusyIds(s => { const n = new Set(s); n.delete(tarea.id); return n; });
+    }
+  };
+
+  if (loading && !items) return <Skeleton />;
+  if (error) {
+    return (
+      <div className="border rounded p-3 flex items-center gap-2 text-sm">
+        <AlertCircle className="h-4 w-4 text-red-500" />
+        <span className="text-slate-600 flex-1">{error}</span>
+        <Button size="sm" variant="outline" onClick={reload}>Reintentar</Button>
+      </div>
+    );
+  }
+
+  const emptyMsg = {
+    PENDIENTE:   "Sin tareas pendientes 🎉",
+    EN_PROGRESO: "Sin tareas en progreso",
+    HECHO:       "Aún no hay tareas completadas",
+    CANCELADO:   "Sin tareas canceladas",
+  }[subtab];
 
   return (
-    <div data-testid="section-tareas">
-      <div className="mb-3">
-        <Button size="sm" onClick={() => setShowDialog(true)} data-testid="add-tarea-btn"><Plus size={14} className="mr-1" />Nueva tarea</Button>
+    <div className="space-y-3">
+      {/* Header del tab */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-[11px] font-semibold tracking-wider uppercase text-slate-500">
+          Tareas <span className="text-slate-400 font-normal ml-1">· {itemsList.length}</span>
+        </div>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+          onClick={() => setOpenCreate(true)}>
+          <Plus className="h-3 w-3" /> Nueva tarea
+        </Button>
       </div>
-      <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader><TableRow className="bg-slate-50/50">
-            <TableHead className="text-xs">Tipo</TableHead>
-            <TableHead className="text-xs">Descripcion</TableHead>
-            <TableHead className="text-xs">Vence</TableHead>
-            <TableHead className="text-xs">Status</TableHead>
-            <TableHead className="text-xs">Accion</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {items.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="h-16 text-center text-slate-500 text-xs">Sin tareas</TableCell></TableRow>
-            ) : items.map(t => (
-              <TableRow key={t.id}>
-                <TableCell><Badge variant="outline" className="text-[10px]">{t.tipo}</Badge></TableCell>
-                <TableCell className="max-w-[200px] truncate text-xs">{t.descripcion}</TableCell>
-                <TableCell className="text-xs">{new Date(t.due_at).toLocaleDateString('es')}</TableCell>
-                <TableCell><Badge variant={t.status === "HECHO" ? "default" : t.status === "PENDIENTE" ? "secondary" : "destructive"} className="text-[10px]">{t.status}</Badge></TableCell>
-                <TableCell>{t.status === "PENDIENTE" && <Button size="sm" variant="outline" className="text-[10px] h-6" onClick={() => handleCompletar(t.id)}>Completar</Button>}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-1 flex-wrap border-b">
+        {SUBTABS.map(s => {
+          const isActive = subtab === s.key;
+          const c = counts[s.key] || 0;
+          return (
+            <button
+              key={s.key}
+              onClick={() => setSubtab(s.key)}
+              className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                isActive
+                  ? "border-slate-900 text-slate-900"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {s.label}
+              {c > 0 && (
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${
+                  isActive ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                }`}>
+                  {c}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Tipo</Label><Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TIPO_TAREA.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label>Vencimiento</Label><Input type="datetime-local" value={form.due_at} onChange={e => setForm(f => ({ ...f, due_at: e.target.value }))} /></div>
-            <div><Label>Prioridad (1-5)</Label><Input type="number" min={1} max={5} value={form.prioridad} onChange={e => setForm(f => ({ ...f, prioridad: parseInt(e.target.value) || 3 }))} /></div>
-            <div><Label>Descripcion</Label><Textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Descripcion..." /></div>
-          </div>
-          <DialogFooter><Button onClick={handleCreate} data-testid="save-tarea-btn">Crear tarea</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+      {/* Lista */}
+      {filtered.length === 0 ? (
+        <div className="px-3 py-8 text-center text-sm text-slate-400 italic">
+          {emptyMsg}
+        </div>
+      ) : (
+        <div className="border-t">
+          {filtered.map((t) => {
+            const due = fmtDueRelative(t.due_at);
+            const isAdmin   = user?.rol === "admin";
+            const isCreator = t.created_by === user?.username;
+            const isAssigned = t.asignado_a === user?.username;
+            const canEdit   = isCreator || isAssigned || isAdmin;
+            const canDelete = isCreator || isAdmin;
+            const canComplete = canEdit && t.status === "PENDIENTE";
+            const busy = busyIds.has(t.id);
+
+            return (
+              <div
+                key={t.id}
+                onClick={() => setSelected(t)}
+                className={[
+                  "group relative grid items-start gap-3 px-3 py-2 border-b cursor-pointer text-sm",
+                  "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px]",
+                  PRIO_BORDER[t.prioridad] || PRIO_BORDER[3],
+                  "hover:bg-slate-50 transition-colors",
+                ].join(" ")}
+                style={{ gridTemplateColumns: "minmax(0,1fr) 110px 130px" }}
+              >
+                {/* Descripción + meta */}
+                <div className="min-w-0 pl-1">
+                  <div className="text-slate-900 font-medium truncate">{t.descripcion}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2">
+                    <span>{t.tipo}</span>
+                    <span>·</span>
+                    <span className="font-medium text-slate-600">{PRIO_LABEL[t.prioridad] || `P${t.prioridad}`}</span>
+                    <span>·</span>
+                    <span>Asignado a <span className="font-medium text-slate-600">{t.asignado_a || "—"}</span></span>
+                    {t.created_by !== t.asignado_a && (
+                      <>
+                        <span>·</span>
+                        <span>Creó {t.created_by}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Vence */}
+                <div className={`text-xs flex items-center gap-1 tabular-nums ${due.cls}`}>
+                  <Clock className="h-3 w-3" />
+                  {due.label}
+                </div>
+
+                {/* Acciones (hover-only) */}
+                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {canComplete && (
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={(e) => completarInline(e, t)}
+                      disabled={busy}
+                      title="Completar"
+                    >
+                      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={(e) => { e.stopPropagation(); setSelected(t); setOpenEdit(true); }}
+                      title="Editar"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={(e) => borrarInline(e, t)}
+                      disabled={busy}
+                      title="Borrar"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modales */}
+      <NuevaTareaModal
+        open={openCreate}
+        onClose={() => setOpenCreate(false)}
+        partnerOdooId={partnerOdooId}
+        contactos={contactos}
+        onSuccess={refresh}
+      />
+      <NuevaTareaModal
+        open={openEdit}
+        onClose={() => { setOpenEdit(false); setSelected(null); }}
+        partnerOdooId={partnerOdooId}
+        contactos={contactos}
+        initialData={openEdit ? selected : null}
+        onSuccess={refresh}
+      />
+      <TareaDetalleModal
+        open={!!selected && !openEdit}
+        onClose={() => setSelected(null)}
+        tarea={selected}
+        onEdit={(t) => { setSelected(t); setOpenEdit(true); }}
+        onChanged={refresh}
+      />
     </div>
   );
 }

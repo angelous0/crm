@@ -1,0 +1,48 @@
+# Docker Compose para probar local antes de deploy a EasyPanel.
+# En EasyPanel cada servicio se crea como "App" separada y el networking
+# interno se maneja por el panel.
+#
+# Uso local:
+#   docker compose up --build
+#   → Frontend en http://localhost (puerto 80)
+#   → Backend  en http://localhost:8004
+#
+# El frontend resuelve /api/* internamente hacia el backend (nginx proxy).
+version: "3.9"
+
+services:
+  crm-backend:
+    build: ./backend
+    container_name: crm-backend
+    restart: unless-stopped
+    environment:
+      # Override desde .env o EasyPanel
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://crm.ambissionindustries.cloud}
+      ODOO_BACKEND_URL: ${ODOO_BACKEND_URL:-http://odoo-backend:8002}
+      VENTAS_VIVO_INTERVAL: "30"
+      VENTAS_VIVO_TIMEOUT: "50"
+    ports:
+      - "8004:8004"
+    networks:
+      - crm-net
+
+  crm-frontend:
+    build:
+      context: ./frontend
+      args:
+        # Build-time: queda embebido en el bundle JS
+        REACT_APP_BACKEND_URL: ${PUBLIC_BACKEND_URL:-https://crm.ambissionindustries.cloud}
+    container_name: crm-frontend
+    restart: unless-stopped
+    depends_on:
+      - crm-backend
+    ports:
+      - "80:80"
+    networks:
+      - crm-net
+
+networks:
+  crm-net:
+    driver: bridge

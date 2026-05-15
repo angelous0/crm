@@ -119,3 +119,29 @@ credentials.json
 *.key
 .credentials
 frontend/node_modules/.cache/default-development/9.pack
+
+# === Agregado para deploy CRM ===
+# Python
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+
+# Node / React
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+
+# Secretos
+backend/.env
+.env
+
+# Logs y temporales
+*.log
+/tmp/
+
+# Backups
+*.dump
+*.zip
+
+# macOS
+.DS_Store

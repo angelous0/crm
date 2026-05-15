@@ -1,148 +1,235 @@
-import React, { useState, useEffect, useCallback } from "react";
+/**
+ * VentasTab — refactor visual Hilo (Sprint CRM-D4 v3).
+ *
+ * Layout:
+ *   ┌──────┬──────┬──────┬──────┐
+ *   │ KPI1 │ KPI2 │ KPI3 │ KPI4 │   números grandes Fraunces + mono labels
+ *   └──────┴──────┴──────┴──────┘
+ *
+ *   ┌─ Período ── [yyyy-mm-dd] ── [yyyy-mm-dd] ─ [Reset] ──── [⊟⊟⊟] ─┐
+ *
+ *   <Vista activa: Por orden / Por clasificación / YoY>
+ */
+import React, { useCallback, useState } from "react";
 import api from "@/lib/api";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Loader2, ChevronLeft, ChevronRight, List, ArrowRightLeft } from "lucide-react";
-import { toast } from "sonner";
-import { OrderLinesDrawer } from "@/components/DetailDrawers";
-import { CustomerOverrideModal } from "../CustomerOverrideModal";
+import { useTabData } from "@/hooks/useTabData";
+import { AlertCircle, RefreshCw } from "lucide-react";
+import { VistaPorOrden } from "@/components/cuentas/tabs/ventas/VistaPorOrden";
+import { VistaClasificacion } from "@/components/cuentas/tabs/ventas/VistaClasificacion";
+import { VistaYoY } from "@/components/cuentas/tabs/ventas/VistaYoY";
 
-const fmtMoney = (n) => "S/ " + Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtNum = (n) => Number(n || 0).toLocaleString("es-PE");
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "-";
+const fmtDateShort = (d) =>
+  d ? new Date(d).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "2-digit" }) : "—";
 
-export function VentasTab({ cuentaId }) {
-  const [data, setData] = useState({ rows: [], has_next: false });
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [detailMode, setDetailMode] = useState(false);
-  const [linesData, setLinesData] = useState({ rows: [], has_next: false });
-  const [linesPage, setLinesPage] = useState(1);
-  const [linesLoading, setLinesLoading] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [overrideOrder, setOverrideOrder] = useState(null);
+const VISTAS = [
+  { key: "orden",         label: "Por orden" },
+  { key: "clasificacion", label: "Por clasificación" },
+  { key: "yoy",           label: "YoY" },
+];
 
-  const fetchOrders = useCallback(async (pg = 1) => {
-    setLoading(true);
-    try {
-      const r = await api.get(`/cuentas/${cuentaId}/ventas/orders`, { params: { doc_tipo: "SALE", page: pg, limit: 50 } });
-      setData(r.data || { rows: [], has_next: false });
-      setPage(pg);
-    } catch { toast.error("Error cargando ventas"); }
-    finally { setLoading(false); }
-  }, [cuentaId]);
-
-  const fetchLines = useCallback(async (pg = 1) => {
-    setLinesLoading(true);
-    try {
-      const r = await api.get(`/cuentas/${cuentaId}/ventas/lines`, { params: { doc_tipo: "SALE", page: pg, limit: 50 } });
-      setLinesData(r.data || { rows: [], has_next: false });
-      setLinesPage(pg);
-    } catch { toast.error("Error cargando lineas"); }
-    finally { setLinesLoading(false); }
-  }, [cuentaId]);
-
-  useEffect(() => { fetchOrders(1); }, [fetchOrders]);
-
-  const rows = detailMode ? linesData.rows || [] : data.rows || [];
-  const hasNext = detailMode ? linesData.has_next : data.has_next;
-  const curPage = detailMode ? linesPage : page;
-  const curLoading = detailMode ? linesLoading : loading;
-
-  const handleOverrideSaved = () => {
-    if (detailMode) fetchLines(linesPage);
-    else fetchOrders(page);
-  };
-
+// ── KPI estilo Hilo: número grande Fraunces + label mono uppercase ──
+function HiloKpi({ label, value, sub, accent }) {
   return (
-    <div data-testid="section-ventas">
-      <div className="flex items-center gap-3 mb-3 bg-white border border-slate-200 rounded-lg px-4 py-2 shadow-sm">
-        <Switch checked={detailMode} onCheckedChange={(v) => { setDetailMode(v); if (v) fetchLines(1); }} className="data-[state=checked]:bg-cyan-500" />
-        <span className="text-xs text-slate-600"><List size={13} className="inline mr-1" />Modo detalle</span>
+    <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 min-w-[140px]">
+      <div
+        className="text-2xl leading-none font-semibold tracking-tight tabular-nums"
+        style={{ fontFamily: "var(--font-display)", color: accent || "var(--ink)" }}
+        data-testid={`kpi-${label.toLowerCase().replace(/\s/g, "-")}`}
+      >
+        {value}
       </div>
-      {curLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-      ) : (
-        <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead className="text-xs">Fecha</TableHead>
-                  <TableHead className="text-xs">Orden</TableHead>
-                  {detailMode && <TableHead className="text-xs">Modelo</TableHead>}
-                  {detailMode && <TableHead className="text-xs">Talla</TableHead>}
-                  {detailMode && <TableHead className="text-xs">Color</TableHead>}
-                  <TableHead className="text-xs">Tienda</TableHead>
-                  {!detailMode && <TableHead className="text-xs">Estado</TableHead>}
-                  <TableHead className="text-xs text-right">Qty</TableHead>
-                  <TableHead className="text-xs text-right">{detailMode ? "P.Unit" : "Total"}</TableHead>
-                  <TableHead className="text-xs text-right">{detailMode ? "Subtotal" : "Lineas"}</TableHead>
-                  <TableHead className="text-xs w-8"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={detailMode ? 10 : 8} className="h-20 text-center text-slate-500">Sin datos</TableCell></TableRow>
-                ) : rows.map((r, i) => (
-                  <TableRow key={detailMode ? `${r.order_id}-${r.line_id}` : r.order_id}
-                    className={`${!detailMode ? "cursor-pointer" : ""} ${i % 2 ? "bg-slate-50/30" : ""} hover:bg-blue-50`}
-                    onClick={() => !detailMode && !overrideOrder && setSelectedOrder(r)}>
-                    <TableCell className="text-xs whitespace-nowrap">{fmtDate(detailMode ? r.fecha : r.date_order)}</TableCell>
-                    <TableCell className="text-xs font-mono text-slate-500">
-                      <span className="flex items-center gap-1">
-                        {r.order_name || r.order_id}
-                        {r.has_override && (
-                          <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700 leading-none"
-                            title={r.original_partner_name ? `Cliente original: ${r.original_partner_name}` : undefined}
-                            data-testid="override-badge">REASIGNADO</span>
-                        )}
-                      </span>
-                      {r.has_override && r.original_partner_name && (
-                        <span className="block text-[9px] text-slate-400 mt-0.5">orig: {r.original_partner_name}</span>
-                      )}
-                    </TableCell>
-                    {detailMode && <TableCell className="text-xs truncate max-w-[140px]">{r.modelo_display || "-"}</TableCell>}
-                    {detailMode && <TableCell className="text-xs">{r.talla || "-"}</TableCell>}
-                    {detailMode && <TableCell className="text-xs">{r.color || "-"}</TableCell>}
-                    <TableCell className="text-xs whitespace-nowrap">{r.tienda || <span className="text-slate-400">-</span>}</TableCell>
-                    {!detailMode && (
-                      <TableCell className="text-xs">
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${r.state === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{r.state}</span>
-                      </TableCell>
-                    )}
-                    <TableCell className="text-xs text-right font-mono font-semibold">{fmtNum(detailMode ? r.qty : r.qty_total)}</TableCell>
-                    <TableCell className="text-xs text-right font-mono">{fmtMoney(detailMode ? r.price_unit : r.amount_total)}</TableCell>
-                    <TableCell className="text-xs text-right font-mono">{detailMode ? fmtMoney(r.subtotal) : r.lines_count}</TableCell>
-                    <TableCell className="text-xs text-center px-1">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600"
-                        data-testid={`override-btn-${r.order_id}`}
-                        title="Reasignar cliente"
-                        onClick={(e) => { e.stopPropagation(); setOverrideOrder(r); }}>
-                        <ArrowRightLeft size={13} />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {(curPage > 1 || hasNext) && (
-            <div className="flex items-center justify-between px-3 py-2 border-t text-xs text-slate-500">
-              <span>Pag {curPage}</span>
-              <div className="flex gap-1">
-                <Button variant="outline" size="sm" disabled={curPage <= 1} onClick={() => detailMode ? fetchLines(curPage - 1) : fetchOrders(curPage - 1)}><ChevronLeft size={14} /></Button>
-                <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => detailMode ? fetchLines(curPage + 1) : fetchOrders(curPage + 1)}><ChevronRight size={14} /></Button>
-              </div>
-            </div>
-          )}
+      <div
+        className="text-[10px] mt-2 font-mono font-medium uppercase"
+        style={{ color: "var(--ink-3)", letterSpacing: "0.14em" }}
+      >
+        {label}
+      </div>
+      {sub && (
+        <div className="text-[11px] mt-0.5" style={{ color: "var(--ink-3)" }}>
+          {sub}
         </div>
       )}
-      {!detailMode && selectedOrder && <OrderLinesDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
-      {overrideOrder && (
-        <CustomerOverrideModal order={overrideOrder} onClose={() => setOverrideOrder(null)} onSaved={handleOverrideSaved} />
-      )}
+    </div>
+  );
+}
+
+// ── Segmented toggle minimal (Por orden / Por clasificación / YoY) ──
+function SegmentedToggle({ value, options, onChange }) {
+  return (
+    <div
+      className="inline-flex p-0.5 rounded-lg bg-slate-100 border border-slate-200"
+      role="tablist"
+    >
+      {options.map((opt) => {
+        const on = value === opt.key;
+        return (
+          <button
+            key={opt.key}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(opt.key)}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+              on
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            data-testid={`vista-${opt.key}`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Default: desde enero 2024 hasta hoy
+const today = () => new Date().toISOString().slice(0, 10);
+const monthsAgo = (n) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return d.toISOString().slice(0, 10);
+};
+const DEFAULT_DESDE = "2024-01-01";
+
+const dateInputCls = "h-8 px-2.5 rounded-md border border-slate-200 text-xs bg-white outline-none focus:border-slate-400 transition-colors";
+
+export function VentasTab({ partnerOdooId, active, staleKey }) {
+  const [vista, setVista]      = useState("orden");
+  const [fechaDesde, setDesde] = useState(DEFAULT_DESDE);
+  const [fechaHasta, setHasta] = useState(today());
+
+  // Sub-KPIs combinan /metrics + /analitica/frecuencia
+  const fetchHeader = useCallback(async () => {
+    const [m, f] = await Promise.all([
+      api.get(`/cuentas/${partnerOdooId}/ventas/metrics`).catch(() => ({ data: null })),
+      api.get(`/cuentas/${partnerOdooId}/ventas/analitica/frecuencia`).catch(() => ({ data: null })),
+    ]);
+    return { metrics: m.data, frecuencia: f.data };
+  }, [partnerOdooId]);
+
+  const { data: header, loading: loadingHeader, error: errHeader } = useTabData(
+    fetchHeader, { enabled: active, staleKey }
+  );
+
+  const limpiarFiltros = () => {
+    setDesde(DEFAULT_DESDE);
+    setHasta(today());
+  };
+
+  const metrics    = header?.metrics    || {};
+  const frecuencia = header?.frecuencia || {};
+
+  const totalOrdenes  = metrics.orders_count ?? 0;
+  const totalUnidades = metrics.qty_total    ?? 0;
+  const frecuenciaDias = frecuencia.frecuencia_promedio
+    ? `cada ${Math.round(frecuencia.frecuencia_promedio)}d`
+    : "—";
+  const diasSinComprar = frecuencia.dias_sin_comprar;
+  const ultimaCompra = diasSinComprar != null
+    ? (diasSinComprar === 0 ? "hoy" : `hace ${diasSinComprar}d`)
+    : "—";
+  const ultimaCompraSub = frecuencia.ultima_compra ? fmtDateShort(frecuencia.ultima_compra) : null;
+
+  if (errHeader) {
+    return (
+      <div className="border rounded-lg p-3 flex items-center gap-2 text-sm">
+        <AlertCircle className="h-4 w-4 text-red-500" />
+        <span className="text-slate-600 flex-1">{errHeader}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* ─── 4 KPIs estilo Hilo ─── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="ventas-kpis">
+        {loadingHeader && !header ? (
+          [0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-[88px] bg-slate-100 rounded-lg animate-pulse" />
+          ))
+        ) : (
+          <>
+            <HiloKpi label="Total órdenes"  value={fmtNum(totalOrdenes)} />
+            <HiloKpi label="Total unidades" value={fmtNum(totalUnidades)} />
+            <HiloKpi label="Frecuencia"     value={frecuenciaDias} />
+            <HiloKpi
+              label="Última compra"
+              value={ultimaCompra}
+              sub={ultimaCompraSub}
+              accent={
+                diasSinComprar > 90 ? "var(--crit)" :
+                diasSinComprar > 30 ? "var(--warn)" : null
+              }
+            />
+          </>
+        )}
+      </div>
+
+      {/* ─── Toolbar: período + segmented vista ─── */}
+      <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-slate-200">
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] font-mono uppercase font-medium"
+            style={{ color: "var(--ink-3)", letterSpacing: "0.14em" }}
+          >
+            Desde
+          </span>
+          <input
+            type="date"
+            value={fechaDesde}
+            onChange={(e) => setDesde(e.target.value)}
+            className={dateInputCls}
+            data-testid="ventas-fecha-desde"
+          />
+          <span
+            className="text-[10px] font-mono uppercase font-medium ml-1"
+            style={{ color: "var(--ink-3)", letterSpacing: "0.14em" }}
+          >
+            Hasta
+          </span>
+          <input
+            type="date"
+            value={fechaHasta}
+            onChange={(e) => setHasta(e.target.value)}
+            className={dateInputCls}
+            data-testid="ventas-fecha-hasta"
+          />
+          <button
+            onClick={limpiarFiltros}
+            className="h-8 px-2 rounded-md text-xs text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center gap-1 transition-colors"
+            data-testid="ventas-reset"
+          >
+            <RefreshCw className="h-3 w-3" /> Reset
+          </button>
+        </div>
+
+        <div className="ml-auto">
+          <SegmentedToggle value={vista} options={VISTAS} onChange={setVista} />
+        </div>
+      </div>
+
+      {/* ─── Vista activa ─── */}
+      <div className="min-h-[300px]">
+        {vista === "orden" && (
+          <VistaPorOrden
+            partnerOdooId={partnerOdooId}
+            fechaDesde={fechaDesde}
+            fechaHasta={fechaHasta}
+          />
+        )}
+        {vista === "clasificacion" && (
+          <VistaClasificacion
+            partnerOdooId={partnerOdooId}
+            fechaDesde={fechaDesde}
+            fechaHasta={fechaHasta}
+          />
+        )}
+        {vista === "yoy" && (
+          <VistaYoY partnerOdooId={partnerOdooId} />
+        )}
+      </div>
     </div>
   );
 }

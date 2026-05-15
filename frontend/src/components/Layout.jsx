@@ -1,238 +1,283 @@
-import React, { useState, useEffect } from "react";
-import { NavLink, useNavigate, useLocation } from "react-router-dom";
+/**
+ * Layout — shell del CRM Hilo Andino.
+ *
+ * Estructura:
+ *   ┌──────────┬──────────────────────────┐
+ *   │ Sidebar  │  Topbar                   │
+ *   │ 240px    ├──────────────────────────┤
+ *   │ tema     │  Page                     │
+ *   │ tierra   │                           │
+ *   └──────────┴──────────────────────────┘
+ *
+ * Roles:
+ *   - admin:      ve todo
+ *   - supervisor: ve casi todo (no /admin/*)
+ *   - vendedora:  no ve /equipo ni /admin/*
+ *
+ * El TweaksPanel permite a admin/supervisor previsualizar la vista de
+ * vendedora sin loguearse (el rol real viene del JWT y no cambia).
+ */
+import React, { useEffect, useMemo, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import {
-  LayoutDashboard, Package, Users, UserCircle,
-  CalendarClock, LogOut, ChevronRight, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Grid3X3, ShoppingBag, FileText, ClipboardCheck, Sun,
-  ChevronDown, TrendingUp
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import api from "@/lib/api";
+import HiloIcon from "@/components/HiloIcons";
+import TweaksPanel, { useTweaks } from "@/components/TweaksPanel";
+import SyncStatusPill from "@/components/SyncStatusPill";
 
-const navItems = [
-  { to: "/mi-dia", icon: Sun, label: "Mi Dia" },
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/stock-dashboard", icon: BarChart3, label: "Stock Dashboard" },
-  { to: "/balance-tallas", icon: Grid3X3, label: "Balance de Tallas" },
-  { to: "/comercial", icon: ShoppingBag, label: "Ventas y Reservas" },
-  { to: "/creditos", icon: FileText, label: "Creditos" },
-  { to: "/catalogo", icon: Package, label: "Catalogo" },
-  { to: "/cuentas", icon: Users, label: "Cuentas" },
-  { to: "/pendientes", icon: ClipboardCheck, label: "Pendientes", badge: true },
-  { to: "/contactos", icon: UserCircle, label: "Contactos" },
-  { to: "/agenda", icon: CalendarClock, label: "Agenda" },
+const QUOTES = [
+  {
+    text: "El cliente que no llamas hoy, llama a la competencia mañana.",
+    author: "Sabiduría comercial",
+  },
+  {
+    text: "Una venta sin seguimiento es solo una conversación.",
+    author: "Manual del vendedor",
+  },
+  {
+    text: "Conoce a tu cliente y vende menos. Sigue al cliente y vende siempre.",
+    author: "Filosofía Hilo",
+  },
 ];
 
-const reportesGroup = {
-  icon: TrendingUp,
-  label: "Reportes",
-  children: [
-    { to: "/reportes/ventas", label: "Ventas" },
-  ],
-};
+// Sección de navegación. Cada item tiene un `roles` opcional con los
+// roles que pueden VER el item; si no se especifica, todos lo ven.
+const NAV_SECTIONS = [
+  {
+    label: "Principal",
+    items: [
+      { to: "/ventas-en-vivo", icon: "bolt", label: "Ventas en vivo", live: true },
+      { to: "/cola",         icon: "today",   label: "Cola de llamadas" },
+      { to: "/pipeline",     icon: "bolt",    label: "Pipeline comercial" },
+      { to: "/oportunidades",icon: "sparkle", label: "Oportunidades" },
+      { to: "/cuentas",            icon: "users",   label: "Cuentas" },
+      { to: "/cuentas-vinculadas", icon: "users",   label: "Cuentas vinculadas" },
+      { to: "/mapa",         icon: "map",     label: "Mapa del Perú" },
+      { to: "/cobranzas",    icon: "chart",   label: "Cobranzas" },
+      { to: "/calendario",   icon: "today",   label: "Calendario comercial" },
+    ],
+  },
+  {
+    label: "Análisis",
+    items: [
+      { to: "/indicadores",     icon: "chart",  label: "Indicadores" },
+      { to: "/productos",       icon: "cart",   label: "Productos" },
+      { to: "/equipo",          icon: "family", label: "Equipo de ventas",
+        roles: ["admin", "supervisor"] },
+      { to: "/automatizaciones",icon: "bolt",   label: "Automatizaciones" },
+    ],
+  },
+  {
+    label: "Herramientas",
+    items: [
+      { to: "/campanias",  icon: "wa",     label: "Campañas WhatsApp" },
+      { to: "/plantillas", icon: "wa",     label: "Plantillas" },
+      { to: "/importar",   icon: "upload", label: "Importar clientes" },
+      { to: "/cuentas/calidad-datos", icon: "bolt", label: "Calidad de datos",
+        roles: ["admin", "supervisor"] },
+      { to: "/admin/reparto-cartera", icon: "family", label: "Reparto de cartera",
+        roles: ["admin", "supervisor"] },
+    ],
+  },
+];
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem("sidebar_collapsed") === "true"; } catch { return false; }
-  });
-  const [pendingCount, setPendingCount] = useState(0);
-  const [reportesOpen, setReportesOpen] = useState(() => location.pathname.startsWith("/reportes"));
+  const realRole = user?.rol || "vendedora";
+  const [tweaks, setTweak] = useTweaks(user?.username);
 
-  useEffect(() => {
-    try { localStorage.setItem("sidebar_collapsed", collapsed); } catch {}
-  }, [collapsed]);
+  // Rol efectivo (preview o real). Solo admin/supervisor pueden simular vendedora.
+  const effectiveRole = useMemo(() => {
+    if (!tweaks.rolePreview) return realRole;
+    if (realRole === "admin" || realRole === "supervisor") return tweaks.rolePreview;
+    return realRole;
+  }, [realRole, tweaks.rolePreview]);
 
-  useEffect(() => {
-    api.get("/approval/pending/count").then(r => setPendingCount(r.data?.total || 0)).catch(() => {});
-    const interval = setInterval(() => {
-      api.get("/approval/pending/count").then(r => setPendingCount(r.data?.total || 0)).catch(() => {});
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  const canSee = (item) => {
+    if (!item.roles) return true;
+    return item.roles.includes(effectiveRole);
+  };
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
-  return (
-    <TooltipProvider delayDuration={200}>
-      <div className="flex h-screen overflow-hidden bg-slate-50/50">
-        {/* Sidebar */}
-        <aside
-          className={`flex-shrink-0 bg-white border-r border-border flex flex-col transition-all duration-200 ${collapsed ? "w-[60px]" : "w-[220px]"}`}
-          data-testid="sidebar"
-        >
-          {/* Logo + Toggle */}
-          <div className="h-14 flex items-center justify-between px-3 border-b border-border">
-            {!collapsed && (
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-slate-900 rounded-md flex items-center justify-center">
-                  <span className="text-white font-heading font-bold text-xs">C</span>
-                </div>
-                <span className="font-heading font-semibold text-sm tracking-tight text-slate-900">CRM B2B</span>
-              </div>
-            )}
-            <Button
-              variant="ghost" size="sm"
-              className={`h-7 w-7 p-0 text-slate-400 hover:text-slate-700 ${collapsed ? "mx-auto" : ""}`}
-              onClick={() => setCollapsed(c => !c)}
-              data-testid="sidebar-toggle"
-            >
-              {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-            </Button>
-          </div>
+  // Contador de alertas de "Ventas en vivo" — poll cada 30s.
+  // (antes era 10s pero la query toma ~3s y saturaba el backend; 30s alcanza
+  // de sobra para un badge informativo).
+  const [alertCount, setAlertCount] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const r = await api.get("/cuentas/ventas-en-vivo", { params: { horas: 2 } });
+        if (!cancelled) setAlertCount(r.data?.con_alerta || 0);
+      } catch {}
+    };
+    fetchCount();
+    const id = setInterval(fetchCount, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [user]);
 
-          {/* Navigation */}
-          <nav className="flex-1 py-3 px-2 space-y-0.5" data-testid="sidebar-nav">
-            {navItems.map(({ to, icon: Icon, label, badge }) => {
-              const badgeNum = badge ? pendingCount : 0;
-              const link = (
+  // Quote rotativa por día del año (estable durante el día)
+  const quote = useMemo(() => {
+    const day = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    return QUOTES[day % QUOTES.length];
+  }, []);
+
+  const initials = user?.iniciales
+    || (user?.nombre_completo
+        ? user.nombre_completo.split(/\s+/).slice(0, 2).map((s) => s[0]).join("").toUpperCase()
+        : (user?.username || "U").slice(0, 2).toUpperCase());
+
+  const displayName = user?.nombre_completo || user?.nombre || user?.username || "Usuario";
+  const displayRole =
+    effectiveRole === "admin" ? "Administrador"
+    : effectiveRole === "supervisor" ? "Supervisor"
+    : "Vendedora";
+
+  // Búsqueda global (Cmd+K). Por ahora abrir el campo enfoca, sin overlay.
+  // El overlay lo entregamos en CRM-D2.
+  const onSearchClick = () => {
+    // placeholder
+  };
+
+  return (
+    <div className="hilo-app-shell">
+      {/* ─── SIDEBAR ─── */}
+      <aside className="hilo-sidebar" data-testid="sidebar">
+        <div className="hilo-brand">
+          <div className="hilo-brand-mark">
+            Hilo<em>·</em>
+          </div>
+          <span className="hilo-brand-tag">CRM B2B</span>
+        </div>
+
+        {/* Switch de rol (preview, solo admin/supervisor) */}
+        {(realRole === "admin" || realRole === "supervisor") && (
+          <div className="hilo-role-switch">
+            {[
+              { value: null, label: "Real" },
+              { value: "vendedora", label: "Vendedora" },
+            ].map((r) => (
+              <button
+                key={String(r.value)}
+                className={`hilo-role-btn ${tweaks.rolePreview === r.value ? "active" : ""}`}
+                onClick={() => setTweak("rolePreview", r.value)}
+                data-testid={`role-preview-${r.value || "real"}`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {NAV_SECTIONS.map((section) => {
+          const visibleItems = section.items.filter(canSee);
+          if (visibleItems.length === 0) return null;
+          return (
+            <div key={section.label} className="hilo-nav-section">
+              <div className="hilo-nav-label">{section.label}</div>
+              {visibleItems.map((item) => (
                 <NavLink
-                  key={to}
-                  to={to}
-                  end={to === "/"}
+                  key={item.to}
+                  to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 group ${
-                      isActive
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    } ${collapsed ? "justify-center px-0" : ""}`
+                    `hilo-nav-item ${isActive ? "active" : ""}`
                   }
-                  data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
+                  data-testid={`nav-${item.to.replace(/[^a-z0-9]/gi, "-")}`}
                 >
-                  <span className="relative">
-                    <Icon size={17} strokeWidth={1.5} />
-                    {collapsed && badgeNum > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 h-3.5 min-w-[14px] flex items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold px-0.5">
-                        {badgeNum > 99 ? "99+" : badgeNum}
-                      </span>
+                  <HiloIcon name={item.icon} />
+                  <span>
+                    {item.label}
+                    {item.live && (
+                      <span
+                        className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 align-middle animate-pulse"
+                        title="Tiempo real"
+                      />
                     )}
                   </span>
-                  {!collapsed && <span className="truncate">{label}</span>}
-                  {!collapsed && badgeNum > 0 && (
-                    <span className="ml-auto inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold"
-                      data-testid="sidebar-pending-badge">
-                      {badgeNum > 99 ? "99+" : badgeNum}
+                  {/* Badge dinámico para Ventas en vivo */}
+                  {item.live && alertCount > 0 && (
+                    <span
+                      className="hilo-nav-badge"
+                      style={{ background: "#DC2626", color: "white" }}
+                    >
+                      {alertCount}
                     </span>
                   )}
-                  {!collapsed && !badge && <ChevronRight size={13} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />}
+                  {item.badge && <span className="hilo-nav-badge">{item.badge}</span>}
                 </NavLink>
-              );
+              ))}
+            </div>
+          );
+        })}
 
-              if (collapsed) {
-                return (
-                  <Tooltip key={to}>
-                    <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right" className="text-xs">{label}</TooltipContent>
-                  </Tooltip>
-                );
-              }
-              return link;
-            })}
+        <div style={{ flex: 1 }} />
 
-            {/* Reportes Group */}
-            {(() => {
-              const isReportesActive = location.pathname.startsWith("/reportes");
-              const GroupIcon = reportesGroup.icon;
+        <div className="hilo-quote">
+          <div className="hilo-quote-text">"{quote.text}"</div>
+          <div className="hilo-quote-author">— {quote.author}</div>
+        </div>
 
-              if (collapsed) {
-                return reportesGroup.children.map(child => (
-                  <Tooltip key={child.to}>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to={child.to}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 justify-center px-0 ${
-                            isActive ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                          }`
-                        }
-                        data-testid={`nav-reportes-${child.label.toLowerCase()}`}
-                      >
-                        <GroupIcon size={17} strokeWidth={1.5} />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="text-xs">{reportesGroup.label} &gt; {child.label}</TooltipContent>
-                  </Tooltip>
-                ));
-              }
-
-              return (
-                <div key="reportes-group">
-                  <button
-                    onClick={() => setReportesOpen(o => !o)}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors duration-150 ${
-                      isReportesActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                    data-testid="nav-reportes-toggle"
-                  >
-                    <GroupIcon size={17} strokeWidth={1.5} />
-                    <span className="truncate">{reportesGroup.label}</span>
-                    <ChevronDown size={13} className={`ml-auto transition-transform ${reportesOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {reportesOpen && (
-                    <div className="ml-6 mt-0.5 space-y-0.5">
-                      {reportesGroup.children.map(child => (
-                        <NavLink
-                          key={child.to}
-                          to={child.to}
-                          className={({ isActive }) =>
-                            `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors duration-150 ${
-                              isActive ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                            }`
-                          }
-                          data-testid={`nav-reportes-${child.label.toLowerCase()}`}
-                        >
-                          <span className="w-1 h-1 rounded-full bg-current opacity-60"></span>
-                          {child.label}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </nav>
-
-          {/* User section */}
-          <div className={`p-3 border-t border-border ${collapsed ? "flex flex-col items-center" : ""}`}>
-            {!collapsed && (
-              <div className="flex items-center gap-2.5 mb-2">
-                <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center">
-                  <span className="text-[10px] font-semibold text-slate-600">
-                    {user?.nombre?.[0]?.toUpperCase() || user?.usuario?.[0]?.toUpperCase() || "U"}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-900 truncate">{user?.nombre || user?.usuario}</p>
-                  <p className="text-[10px] text-slate-500 truncate">{user?.rol || "vendedor"}</p>
-                </div>
-              </div>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost" size="sm"
-                  className={`text-slate-500 hover:text-slate-900 ${collapsed ? "h-8 w-8 p-0" : "w-full justify-start text-xs h-8"}`}
-                  onClick={handleLogout}
-                  data-testid="logout-btn"
-                >
-                  <LogOut size={15} className={collapsed ? "" : "mr-2"} />
-                  {!collapsed && "Cerrar sesion"}
-                </Button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right" className="text-xs">Cerrar sesion</TooltipContent>}
-            </Tooltip>
+        <div className="hilo-user-card">
+          <div className="hilo-avatar">{initials}</div>
+          <div className="hilo-user-meta">
+            <div className="hilo-user-name">{displayName}</div>
+            <div className="hilo-user-role">{displayRole}</div>
           </div>
-        </aside>
+          <button
+            className="hilo-icon-btn"
+            style={{ width: 28, height: 28, color: "var(--sidebar-fg-mute)" }}
+            onClick={handleLogout}
+            data-testid="logout-btn"
+            title="Cerrar sesión"
+            aria-label="Cerrar sesión"
+          >
+            <HiloIcon name="logout" size={14} />
+          </button>
+        </div>
+      </aside>
 
-        {/* Main content */}
-        <main className="flex-1 overflow-auto min-w-0">
-          {children}
-        </main>
-      </div>
-    </TooltipProvider>
+      {/* ─── MAIN ─── */}
+      <main className="hilo-main">
+        <header className="hilo-topbar">
+          <button
+            className="hilo-search"
+            onClick={onSearchClick}
+            data-testid="topbar-search"
+            type="button"
+          >
+            <HiloIcon name="search" size={16} />
+            <span className="hilo-search-placeholder">
+              Buscar cliente, RUC, teléfono, grupo…
+            </span>
+            <kbd className="hilo-search-kbd">⌘K</kbd>
+          </button>
+
+          <div className="hilo-topbar-actions">
+            <SyncStatusPill />
+
+            <button className="hilo-icon-btn" title="Notificaciones" aria-label="Notificaciones">
+              <HiloIcon name="bell" />
+              <span className="dot" />
+            </button>
+
+            <button className="hilo-btn hilo-btn-ghost" title="Asistente IA (próximamente)">
+              <HiloIcon name="sparkle" size={14} /> Asistente
+            </button>
+          </div>
+        </header>
+
+        <div className="hilo-page">{children}</div>
+      </main>
+
+      <TweaksPanel
+        tweaks={tweaks}
+        setTweak={setTweak}
+        canPreviewRole={realRole === "admin" || realRole === "supervisor"}
+        realRole={realRole}
+      />
+    </div>
   );
 }

@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { CuentasToolbar } from "@/components/cuentas/CuentasToolbar";
 import { CuentasDirectoryGrid } from "@/components/cuentas/CuentasDirectoryGrid";
-import { CuentaDetailPanel } from "@/components/cuentas/CuentaDetailPanel";
 import { InactivateNoSalesModal } from "@/components/cuentas/InactivateNoSalesModal";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
+/**
+ * /cuentas — directorio de cuentas (full-width).
+ *
+ * El click en una fila navega a /cuentas/:partnerOdooId (página completa
+ * con tab Resumen). El split-panel viejo (`?selected=`) fue removido en
+ * Sprint CRM-D3 porque el flujo ya no lo usa: la ficha de cuenta es una
+ * ruta dedicada, no un drawer dentro de la lista.
+ */
 export default function CuentasAirtable() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedId = searchParams.get("selected") ? parseInt(searchParams.get("selected")) : null;
-  const activeTab = searchParams.get("tab") || "resumen";
+  const navigate = useNavigate();
 
   const [filters, setFilters] = useState({
     q: searchParams.get("q") || "",
@@ -21,7 +25,15 @@ export default function CuentasAirtable() {
     ciudad: searchParams.get("ciudad") || "",
     asignado: searchParams.get("asignado") || "",
     tienda: searchParams.get("tienda") || "",
-    sort: searchParams.get("sort") || "name",
+    estado_auto: searchParams.get("estado_auto") || "",  // D3
+    tier: searchParams.get("tier") || "",                 // D3
+    // CRM-D9: filtra cuentas con ≥1 tarea pendiente de este motivo.
+    // Single-select; valor en mayúsculas (COBRAR/RECUPERAR/...).
+    motivo: (searchParams.get("motivo") || "").toUpperCase(),
+    // Default = "proxima_tarea" ASC: vencidas primero, después hoy, futuras,
+    // y al final cuentas sin tarea pendiente. La vendedora abre /cuentas y ve
+    // de inmediato qué atender. Se puede revertir al orden alfabético con ?sort=name.
+    sort: searchParams.get("sort") || "proxima_tarea",
     dir: searchParams.get("dir") || "asc",
     page: parseInt(searchParams.get("page")) || 1,
     include_inactive: searchParams.get("include_inactive") === "true",
@@ -30,28 +42,11 @@ export default function CuentasAirtable() {
   const [rows, setRows] = useState([]);
   const [totalRows, setTotalRows] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [panelWidth, setPanelWidth] = useState(800);
-  const isDragging = useRef(false);
-  const startX = useRef(0);
-  const startWidth = useRef(0);
-
-  useEffect(() => {
-    const onMouseMove = (e) => {
-      if (!isDragging.current) return;
-      const delta = e.clientX - startX.current;
-      const newW = Math.max(300, Math.min(startWidth.current + delta, window.innerWidth - 300));
-      setPanelWidth(newW);
-    };
-    const onMouseUp = () => { isDragging.current = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => { window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); };
-  }, []);
   const [showInactivateModal, setShowInactivateModal] = useState(false);
   const limit = 50;
   const fetchRef = useRef(0);
 
-  const syncUrl = useCallback((newFilters, newSelected, newTab) => {
+  const syncUrl = useCallback((newFilters) => {
     const p = {};
     if (newFilters.q) p.q = newFilters.q;
     if (newFilters.estado) p.estado = newFilters.estado;
@@ -59,12 +54,13 @@ export default function CuentasAirtable() {
     if (newFilters.ciudad) p.ciudad = newFilters.ciudad;
     if (newFilters.asignado) p.asignado = newFilters.asignado;
     if (newFilters.tienda) p.tienda = newFilters.tienda;
-    if (newFilters.sort !== "name") p.sort = newFilters.sort;
+    if (newFilters.estado_auto) p.estado_auto = newFilters.estado_auto;
+    if (newFilters.tier) p.tier = newFilters.tier;
+    if (newFilters.motivo) p.motivo = newFilters.motivo;  // CRM-D9
+    if (newFilters.sort !== "proxima_tarea") p.sort = newFilters.sort;
     if (newFilters.dir !== "asc") p.dir = newFilters.dir;
     if (newFilters.page > 1) p.page = String(newFilters.page);
     if (newFilters.include_inactive) p.include_inactive = "true";
-    if (newSelected) p.selected = String(newSelected);
-    if (newTab && newTab !== "resumen") p.tab = newTab;
     setSearchParams(p, { replace: true });
   }, [setSearchParams]);
 
@@ -76,6 +72,8 @@ export default function CuentasAirtable() {
         params: {
           q: f.q, estado: f.estado, clasificacion: f.clasificacion,
           ciudad: f.ciudad, asignado: f.asignado, tienda: f.tienda,
+          estado_auto: f.estado_auto, tier: f.tier,
+          motivo: f.motivo || "",  // CRM-D9
           sort: f.sort, dir: f.dir,
           page: f.page, limit,
           include_inactive: f.include_inactive || false,
@@ -93,19 +91,16 @@ export default function CuentasAirtable() {
 
   useEffect(() => {
     fetchData(filters);
-    syncUrl(filters, selectedId, activeTab);
+    syncUrl(filters);
   }, [filters]); // eslint-disable-line
 
   const handleFiltersChange = (newFilters) => {
     setFilters(newFilters);
   };
 
-  const handleSelectRow = (id) => {
-    syncUrl(filters, id, "resumen");
-  };
-
-  const handleTabChange = (tab) => {
-    syncUrl(filters, selectedId, tab);
+  const handleSelectRow = (partnerOdooId) => {
+    // Click navega a la ficha completa (Camino B desde D1)
+    navigate(`/cuentas/${partnerOdooId}`);
   };
 
   const handleSort = (key) => {
@@ -121,75 +116,29 @@ export default function CuentasAirtable() {
 
   return (
     <div className="flex flex-col" style={{ height: "100vh" }} data-testid="cuentas-airtable">
-      {/* Top Toolbar */}
-      <CuentasToolbar filters={filters} onFiltersChange={handleFiltersChange} totalRows={totalRows}
-        onInactivateNoSales={() => setShowInactivateModal(true)} />
+      {/* Toolbar superior con búsqueda + filtros + chips Estado/Tier */}
+      <CuentasToolbar
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+        totalRows={totalRows}
+        onInactivateNoSales={() => setShowInactivateModal(true)}
+      />
 
-      {/* Split View */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Directory (Desktop) */}
-        <div
-          className="hidden lg:flex flex-col border-r border-slate-200 bg-white shrink-0"
-          style={{ width: panelWidth }}
-          data-testid="left-pane"
-        >
-          <CuentasDirectoryGrid
-            rows={rows}
-            loading={loading}
-            selectedId={selectedId}
-            onSelectRow={handleSelectRow}
-            sort={filters.sort}
-            dir={filters.dir}
-            onSort={handleSort}
-            page={filters.page}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            onRefresh={() => fetchData(filters)}
-          />
-        </div>
-
-        {/* Draggable divider */}
-        <div
-          className="hidden lg:flex items-stretch shrink-0 cursor-col-resize group"
-          onMouseDown={(e) => { isDragging.current = true; startX.current = e.clientX; startWidth.current = panelWidth; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; }}
-          data-testid="panel-divider"
-        >
-          <div className="w-1.5 hover:bg-blue-400 group-active:bg-blue-500 bg-slate-200 transition-colors" />
-        </div>
-
-        {/* Mobile: Show directory as list when no selection */}
-        <div className={`lg:hidden flex-1 ${selectedId ? "hidden" : "flex flex-col"}`}>
-          <CuentasDirectoryGrid
-            rows={rows}
-            loading={loading}
-            selectedId={selectedId}
-            onSelectRow={handleSelectRow}
-            sort={filters.sort}
-            dir={filters.dir}
-            onSort={handleSort}
-            page={filters.page}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            onRefresh={() => fetchData(filters)}
-          />
-        </div>
-
-        {/* Right: Detail Panel */}
-        <div className={`flex-1 flex flex-col min-w-0 ${!selectedId ? "hidden lg:flex" : "flex"}`}>
-          {selectedId && (
-            <div className="lg:hidden shrink-0 border-b border-slate-200 bg-white px-3 py-1.5">
-              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => syncUrl(filters, null, null)} data-testid="back-to-list">
-                Volver a lista
-              </Button>
-            </div>
-          )}
-          <CuentaDetailPanel
-            cuentaId={selectedId}
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            onCuentaChanged={() => fetchData(filters)}
-          />
-        </div>
+      {/* Lista a ancho total */}
+      <div className="flex-1 min-h-0 bg-white">
+        <CuentasDirectoryGrid
+          rows={rows}
+          loading={loading}
+          selectedId={null}
+          onSelectRow={handleSelectRow}
+          sort={filters.sort}
+          dir={filters.dir}
+          onSort={handleSort}
+          page={filters.page}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          onRefresh={() => fetchData(filters)}
+        />
       </div>
 
       <InactivateNoSalesModal

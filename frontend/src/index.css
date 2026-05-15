@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Hilo Andino — temas + shell. Importarlos PRIMERO porque definen
+   las variables CSS y fonts que usa el resto. */
+@import "./styles/themes.css";
+@import "./styles/hilo-shell.css";
 
 @tailwind base;
 @tailwind components;
@@ -6,45 +9,51 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--paper);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Public Sans', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
 }
 
 code, pre {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
+/* shadcn tokens — DEFAULT (Minimal): paleta blanca + acento azul.
+   Los overrides por tema viven en themes.css junto a las vars Hilo,
+   así un cambio de tema mueve TODO (no solo las clases .hilo-*). */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 0 0% 100%;             /* paper #FFFFFF */
+    --foreground: 0 0% 4%;               /* ink #0A0A0A */
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 0 0% 4%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 11%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 0 0% 4%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 98%;               /* paper-2 #FAFAFA */
+    --secondary-foreground: 0 0% 4%;
+    --muted: 0 0% 94%;                   /* paper-3 #F0F0F0 */
+    --muted-foreground: 0 0% 55%;        /* ink-3 #8C8C8C */
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 0 73% 51%;            /* crit #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 88%;                /* line #E4E4E7 */
+    --input: 240 5% 88%;
+    --ring: 217 73% 51%;                 /* clay/blue #2A6FDB */
+    --chart-1: 217 73% 51%;              /* blue */
+    --chart-2: 142 71% 45%;              /* green */
+    --chart-3: 32 95% 44%;               /* orange */
+    --chart-4: 280 64% 60%;              /* purple */
+    --chart-5: 0 73% 51%;                /* red */
     --radius: 0.5rem;
   }
 }
@@ -64,7 +73,7 @@ code, pre {
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar (legacy, lo del shell ya cubre las páginas Hilo) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

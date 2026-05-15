@@ -1,0 +1,441 @@
+/* ============================================================
+   HILO ANDINO CRM — Sistema de temas
+   Default: MINIMAL (Linear/Notion). Otros 4 vía <html data-theme>.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap');
+
+/* ──────────────────────────────────────────────────────────────
+   1. MINIMAL (default) — Linear / Notion
+   Paleta blanca + acento azul. Más pulido y "corporativo".
+   ────────────────────────────────────────────────────────────── */
+:root {
+  --paper:        #FFFFFF;
+  --paper-2:      #FAFAFA;
+  --paper-3:      #F0F0F0;
+  --ink:          #0A0A0A;
+  --ink-2:        #404040;
+  --ink-3:        #8C8C8C;
+  --line:         #E4E4E7;
+
+  --clay:         #2A6FDB;
+  --clay-deep:    #1E54B0;
+  --ochre:        #525252;
+  --olive:        #16A34A;
+  --plum:         #525252;
+  --indigo:       #2A6FDB;
+  --gold:         #D97706;
+
+  --ok:           #16A34A;
+  --warn:         #D97706;
+  --crit:         #DC2626;
+
+  --shadow-sm:    0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:    0 2px 8px rgba(0,0,0,.06);
+  --shadow-lg:    0 16px 40px rgba(0,0,0,.10);
+
+  --radius:       8px;
+  --radius-sm:    5px;
+  --radius-lg:    12px;
+
+  --font-display: "Inter", -apple-system, system-ui, sans-serif;
+  --font-sans:    "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+
+  --sidebar-bg:        linear-gradient(180deg, #18181B 0%, #0F0F12 100%);
+  --sidebar-fg:        #E4E4E7;
+  --sidebar-fg-mute:   rgba(228,228,231,.55);
+  --sidebar-fg-strong: #FFFFFF;
+}
+
+/* Sin grain por default; solo Tierra y Andino lo activan abajo. */
+
+/* ──────────────────────────────────────────────────────────────
+   2. TIERRA — Editorial textil andino
+   ────────────────────────────────────────────────────────────── */
+html[data-theme="tierra"] {
+  --paper:        #F4EFE6;
+  --paper-2:      #EBE3D4;
+  --paper-3:      #E0D5C0;
+  --ink:          #1F1A14;
+  --ink-2:        #4A4136;
+  --ink-3:        #877A66;
+  --line:         #C9BBA1;
+
+  --clay:         #B5462A;
+  --clay-deep:    #8A2F18;
+  --ochre:        #C98A3B;
+  --olive:        #5C7A5A;
+  --plum:         #7A4E7E;
+  --indigo:       #3F5566;
+  --gold:         #D4A85A;
+
+  --ok:           #5C7A5A;
+  --warn:         #C98A3B;
+  --crit:         #B5462A;
+
+  --shadow-sm:    0 1px 0 rgba(31,26,20,.04), 0 1px 2px rgba(31,26,20,.04);
+  --shadow-md:    0 1px 0 rgba(31,26,20,.04), 0 8px 24px -10px rgba(31,26,20,.18);
+  --shadow-lg:    0 30px 60px -30px rgba(31,26,20,.35), 0 1px 0 rgba(31,26,20,.06);
+
+  --radius:       10px;
+  --radius-sm:    6px;
+  --radius-lg:    16px;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans:    "Geist", -apple-system, system-ui, sans-serif;
+  --font-mono:    "Geist Mono", ui-monospace, monospace;
+
+  --sidebar-bg:        linear-gradient(180deg, #2A2218 0%, #1F1A14 100%);
+  --sidebar-fg:        #E8DDC8;
+  --sidebar-fg-mute:   rgba(232,221,200,.55);
+  --sidebar-fg-strong: var(--paper);
+}
+
+/* Grain overlay solo en Tierra y Andino (textura papel) */
+html[data-theme="tierra"] body::before,
+html[data-theme="andino"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: .35;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.12  0 0 0 0 0.10  0 0 0 0 0.08  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ──────────────────────────────────────────────────────────────
+   3. TERMINAL — Bloomberg / dark dense
+   ────────────────────────────────────────────────────────────── */
+html[data-theme="terminal"] {
+  --paper:        #0E1116;
+  --paper-2:      #161B22;
+  --paper-3:      #21262D;
+  --ink:          #E6EDF3;
+  --ink-2:        #B6BFC8;
+  --ink-3:        #7D8590;
+  --line:         #30363D;
+
+  --clay:         #FFB454;
+  --clay-deep:    #E89A28;
+  --ochre:        #FFB454;
+  --olive:        #3FB950;
+  --plum:         #BC8CFF;
+  --indigo:       #58A6FF;
+  --gold:         #FFD93D;
+
+  --ok:           #3FB950;
+  --warn:         #FFB454;
+  --crit:         #FF6B6B;
+
+  --shadow-sm:    0 0 0 1px rgba(255,255,255,.04);
+  --shadow-md:    0 4px 16px rgba(0,0,0,.5);
+  --shadow-lg:    0 30px 60px -30px rgba(0,0,0,.8), 0 1px 0 rgba(255,255,255,.05);
+
+  --radius:       4px;
+  --radius-sm:    3px;
+  --radius-lg:    6px;
+
+  --font-display: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans:    "JetBrains Mono", ui-monospace, monospace;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --sidebar-bg:        #06090D;
+  --sidebar-fg:        var(--ink-2);
+  --sidebar-fg-mute:   var(--ink-3);
+  --sidebar-fg-strong: var(--clay);
+}
+html[data-theme="terminal"] body { font-size: 12.5px; }
+html[data-theme="terminal"] body::before { display: none; }
+html[data-theme="terminal"] em { font-style: normal !important; color: var(--clay); }
+
+/* ──────────────────────────────────────────────────────────────
+   4. SAAS — Stripe / Vercel
+   ────────────────────────────────────────────────────────────── */
+html[data-theme="saas"] {
+  --paper:        #FAFAFA;
+  --paper-2:      #FFFFFF;
+  --paper-3:      #F4F4F5;
+  --ink:          #18181B;
+  --ink-2:        #3F3F46;
+  --ink-3:        #71717A;
+  --line:         #E4E4E7;
+
+  --clay:         #6366F1;
+  --clay-deep:    #4F46E5;
+  --ochre:        #F59E0B;
+  --olive:        #10B981;
+  --plum:         #8B5CF6;
+  --indigo:       #3B82F6;
+  --gold:         #F59E0B;
+
+  --ok:           #10B981;
+  --warn:         #F59E0B;
+  --crit:         #EF4444;
+
+  --shadow-sm:    0 1px 2px rgba(16,24,40,.05);
+  --shadow-md:    0 4px 8px -2px rgba(16,24,40,.10), 0 2px 4px -2px rgba(16,24,40,.06);
+  --shadow-lg:    0 20px 24px -4px rgba(16,24,40,.10), 0 8px 8px -4px rgba(16,24,40,.04);
+
+  --radius:       12px;
+  --radius-sm:    8px;
+  --radius-lg:    16px;
+
+  --font-display: "Manrope", -apple-system, system-ui, sans-serif;
+  --font-sans:    "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+
+  --sidebar-bg:        linear-gradient(180deg, #18181B 0%, #0F0F12 100%);
+  --sidebar-fg:        #E4E4E7;
+  --sidebar-fg-mute:   rgba(228,228,231,.55);
+  --sidebar-fg-strong: #FFFFFF;
+}
+html[data-theme="saas"] body::before { display: none; }
+html[data-theme="saas"] em { font-style: normal !important; }
+
+/* ──────────────────────────────────────────────────────────────
+   5. ANDINO — Cochinilla y telar contemporáneo
+   ────────────────────────────────────────────────────────────── */
+html[data-theme="andino"] {
+  --paper:        #FAF6EE;
+  --paper-2:      #F3EBD9;
+  --paper-3:      #E8DCC0;
+  --ink:          #1A1410;
+  --ink-2:        #44372C;
+  --ink-3:        #8A7355;
+  --line:         #C7B187;
+
+  --clay:         #C73E1D;
+  --clay-deep:    #8B2415;
+  --ochre:        #E9A227;
+  --olive:        #4A6B3A;
+  --plum:         #2E4374;
+  --indigo:       #2E4374;
+  --gold:         #E9A227;
+
+  --ok:           #4A6B3A;
+  --warn:         #E9A227;
+  --crit:         #C73E1D;
+
+  --shadow-sm:    0 1px 0 rgba(26,20,16,.06);
+  --shadow-md:    0 6px 16px -8px rgba(26,20,16,.20);
+  --shadow-lg:    0 24px 48px -24px rgba(26,20,16,.40);
+
+  --radius:       6px;
+  --radius-sm:    3px;
+  --radius-lg:    10px;
+
+  --font-display: "Space Grotesk", -apple-system, system-ui, sans-serif;
+  --font-sans:    "Space Grotesk", -apple-system, system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+
+  --sidebar-bg:        var(--ink);
+  --sidebar-fg:        #E8DCC0;
+  --sidebar-fg-mute:   rgba(232,220,192,.5);
+  --sidebar-fg-strong: var(--paper);
+}
+html[data-theme="andino"] em {
+  font-style: normal !important;
+  color: var(--clay);
+  font-weight: 700;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   SHADCN tokens por tema
+   Para que cambiar de tema mueva TODO (cards, inputs, body bg…),
+   no solo los componentes .hilo-*. El default (Minimal) vive en
+   index.css; aquí van los overrides para los otros 4 temas.
+   ────────────────────────────────────────────────────────────── */
+
+/* TIERRA — paper crudo + tinta cálida + clay */
+html[data-theme="tierra"] {
+  --background: 36 33% 93%;
+  --foreground: 30 20% 10%;
+  --card: 36 33% 93%;
+  --card-foreground: 30 20% 10%;
+  --popover: 36 33% 93%;
+  --popover-foreground: 30 20% 10%;
+  --primary: 30 20% 10%;
+  --primary-foreground: 36 33% 93%;
+  --secondary: 36 30% 88%;
+  --secondary-foreground: 30 20% 10%;
+  --muted: 36 30% 88%;
+  --muted-foreground: 30 14% 47%;
+  --accent: 36 30% 88%;
+  --accent-foreground: 30 20% 10%;
+  --destructive: 12 62% 44%;
+  --destructive-foreground: 36 33% 93%;
+  --border: 38 33% 71%;
+  --input: 38 33% 71%;
+  --ring: 12 62% 44%;
+  --chart-1: 12 62% 44%;
+  --chart-2: 32 56% 51%;
+  --chart-3: 116 16% 42%;
+  --chart-4: 290 23% 40%;
+  --chart-5: 209 24% 32%;
+}
+
+/* TERMINAL — fondos oscuros + acento ámbar */
+html[data-theme="terminal"] {
+  --background: 213 30% 7%;
+  --foreground: 210 17% 92%;
+  --card: 213 22% 11%;
+  --card-foreground: 210 17% 92%;
+  --popover: 213 22% 11%;
+  --popover-foreground: 210 17% 92%;
+  --primary: 33 100% 67%;              /* amber #FFB454 */
+  --primary-foreground: 213 30% 7%;
+  --secondary: 213 13% 16%;
+  --secondary-foreground: 210 17% 92%;
+  --muted: 213 13% 16%;
+  --muted-foreground: 213 9% 53%;
+  --accent: 213 13% 16%;
+  --accent-foreground: 33 100% 67%;
+  --destructive: 0 100% 71%;
+  --destructive-foreground: 213 30% 7%;
+  --border: 213 13% 21%;
+  --input: 213 13% 21%;
+  --ring: 33 100% 67%;
+  --chart-1: 33 100% 67%;
+  --chart-2: 134 56% 49%;
+  --chart-3: 264 100% 78%;
+  --chart-4: 212 100% 67%;
+  --chart-5: 51 100% 62%;
+}
+
+/* SAAS — Stripe / Vercel: gris claro + indigo */
+html[data-theme="saas"] {
+  --background: 0 0% 98%;
+  --foreground: 240 6% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 6% 10%;
+  --primary: 240 6% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 5% 96%;
+  --secondary-foreground: 240 6% 10%;
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 240 5% 96%;
+  --accent-foreground: 240 6% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5% 88%;
+  --input: 240 5% 88%;
+  --ring: 239 84% 67%;                 /* indigo #6366F1 */
+  --chart-1: 239 84% 67%;
+  --chart-2: 158 64% 40%;
+  --chart-3: 35 92% 50%;
+  --chart-4: 262 83% 67%;
+  --chart-5: 217 91% 60%;
+}
+
+/* ANDINO — papel cálido + cochinilla */
+html[data-theme="andino"] {
+  --background: 39 60% 95%;
+  --foreground: 27 24% 8%;
+  --card: 39 60% 95%;
+  --card-foreground: 27 24% 8%;
+  --popover: 39 60% 95%;
+  --popover-foreground: 27 24% 8%;
+  --primary: 27 24% 8%;
+  --primary-foreground: 39 60% 95%;
+  --secondary: 38 53% 90%;
+  --secondary-foreground: 27 24% 8%;
+  --muted: 38 53% 90%;
+  --muted-foreground: 32 24% 44%;
+  --accent: 38 53% 90%;
+  --accent-foreground: 27 24% 8%;
+  --destructive: 9 75% 45%;            /* cochinilla #C73E1D */
+  --destructive-foreground: 39 60% 95%;
+  --border: 36 38% 65%;
+  --input: 36 38% 65%;
+  --ring: 9 75% 45%;
+  --chart-1: 9 75% 45%;
+  --chart-2: 39 81% 53%;
+  --chart-3: 99 30% 32%;
+  --chart-4: 220 44% 32%;
+  --chart-5: 220 44% 32%;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Densidad — modula padding/font de inputs y filas de tabla
+   ────────────────────────────────────────────────────────────── */
+html[data-density="compact"] {
+  --row-py: 8px;
+  --table-py: 8px;
+}
+html[data-density="comfortable"],
+html:not([data-density]) {
+  --row-py: 12px;
+  --table-py: 12px;
+}
+
+/* ============================================================
+   REFINAMIENTOS DEL TEMA MINIMAL (default)
+   ============================================================
+   Como minimal es el default y debe verse el más pulido, aquí
+   sobrescribimos los componentes Hilo cuyos colores estaban
+   hardcoded a la paleta Tierra (state-pills coloridas, sync
+   pill verde olive, etc.) para que respeten la paleta neutra
+   con acento azul de Linear/Notion.
+   ────────────────────────────────────────────────────────────── */
+
+/* Brand mark sin italic acento Tierra — minimal usa el "·" del
+   mismo color que la marca (sin contraste ocre/clay). */
+html[data-theme="minimal"] .hilo-brand-mark em {
+  color: var(--clay);
+  font-style: normal;
+}
+
+/* State pills: en minimal se ven planas con tono neutro + acento del
+   estado, en lugar de los amarillos/morados/marrones de Tierra. */
+html[data-theme="minimal"] .hilo-state-pill.vip        { color: #B45309; background: rgba(217,119,6,.10); }
+html[data-theme="minimal"] .hilo-state-pill.activo     { color: #15803D; background: rgba(22,163,74,.10); }
+html[data-theme="minimal"] .hilo-state-pill.nuevo      { color: #1E54B0; background: rgba(42,111,219,.10); }
+html[data-theme="minimal"] .hilo-state-pill.riesgo     { color: #B91C1C; background: rgba(220,38,38,.10); }
+html[data-theme="minimal"] .hilo-state-pill.dormido    { color: #6B7280; background: rgba(107,114,128,.10); }
+html[data-theme="minimal"] .hilo-state-pill.perdido    { color: #404040; background: rgba(64,64,64,.10); }
+html[data-theme="minimal"] .hilo-state-pill.recuperado { color: #047857; background: rgba(16,185,129,.10); }
+
+/* Chips: colores planos sin warmth de Tierra. */
+html[data-theme="minimal"] .hilo-chip.ok    { background: rgba(22,163,74,.10);  border-color: rgba(22,163,74,.28);  color: #15803D; }
+html[data-theme="minimal"] .hilo-chip.warn  { background: rgba(217,119,6,.10);  border-color: rgba(217,119,6,.28);  color: #B45309; }
+html[data-theme="minimal"] .hilo-chip.crit  { background: rgba(220,38,38,.10);  border-color: rgba(220,38,38,.28);  color: #B91C1C; }
+html[data-theme="minimal"] .hilo-chip.gold  { background: rgba(217,119,6,.10);  border-color: rgba(217,119,6,.28);  color: #B45309; }
+
+/* Sync pill: verde neutro Tailwind en lugar del olive Tierra. */
+html[data-theme="minimal"] .hilo-sync-pill {
+  background: rgba(22,163,74,.08);
+  border-color: rgba(22,163,74,.24);
+  color: #15803D;
+}
+
+/* Sidebar minimal: glow azul sutil en active state (en lugar del
+   clay de Tierra). El clay-deep ya está mapeado a #1E54B0. */
+html[data-theme="minimal"] .hilo-nav-item.active {
+  background: rgba(42,111,219,.12);
+}
+
+/* Brand-tag uppercase mono: en minimal con un poco más de presencia. */
+html[data-theme="minimal"] .hilo-brand-tag {
+  letter-spacing: 0.16em;
+  font-weight: 500;
+}
+
+/* Page title: minimal NO usa italic en em — la cursiva editorial
+   pertenece a Tierra. En minimal el em queda como bold normal. */
+html[data-theme="minimal"] .hilo-page-title em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* Quote sidebar: en minimal sin italic, más subtitle que cita. */
+html[data-theme="minimal"] .hilo-quote-text {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 500;
+  font-size: 13px;
+}

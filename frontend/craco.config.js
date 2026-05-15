@@ -9,7 +9,9 @@ const isDevServer = process.env.NODE_ENV !== "production";
 // Environment variable overrides
 const config = {
   enableHealthCheck: process.env.ENABLE_HEALTH_CHECK === "true",
-  enableVisualEdits: isDevServer, // Only enable during dev server
+  // Visual edits plugin (lovable.dev IDE legacy) — deshabilitado: rompe en
+  // archivos con imports cross-file que el plugin no puede resolver.
+  enableVisualEdits: false,
 };
 
 // Conditionally load visual edits modules only in dev mode
