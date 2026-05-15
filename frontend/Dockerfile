@@ -28,8 +28,13 @@ COPY --from=builder /app/build /usr/share/nginx/html
 
 EXPOSE 80
 
-# Healthcheck simple
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+# NOTA: deshabilitamos el HEALTHCHECK del Dockerfile.
+# nginx:1.27-alpine no garantiza `wget` con flags `--spider`/`--tries`
+# funcionando consistentemente, lo que provocaba que Docker marcara
+# el container como `unhealthy` aunque nginx estuviera sirviendo OK,
+# y EasyPanel respondía con SIGQUIT (kill) en bucle.
+# EasyPanel hace su propio chequeo TCP externo del puerto 80, así que
+# no necesitamos uno custom acá.
+HEALTHCHECK NONE
 
 CMD ["nginx", "-g", "daemon off;"]
