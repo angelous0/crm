@@ -302,6 +302,56 @@ async def _cobrar_automation_loop() -> None:
             raise
 
 
+# ── Post-venta automation: crea tareas POST_VENTA desde ventas POS (CRM-D14) ──
+# Mismo patrón que cobrar: loop while True + mutex local + sleep.
+# Intervalo: 15 min. Llama a automation.postventa.run_postventa_automation().
+# Idempotente vía NOT EXISTS sobre source_type='ODOO_SALE' + source_ref.
+# Filtro: date_order >= CURRENT_DATE → NO hace backfill de ventas viejas.
+
+POSTVENTA_AUTOMATION_INTERVAL = int(os.environ.get("POSTVENTA_AUTOMATION_INTERVAL", "900"))  # 15 min
+
+_postventa_automation_lock = asyncio.Lock()
+
+
+async def _postventa_automation_loop() -> None:
+    """Cada POSTVENTA_AUTOMATION_INTERVAL segundos llama a run_postventa_automation.
+    Mutex previene solapamiento; el loop nunca rompe ante excepciones."""
+    from automation.postventa import run_postventa_automation
+
+    logger.info(
+        f"[postventa-automation] Iniciado · interval={POSTVENTA_AUTOMATION_INTERVAL}s"
+    )
+    # Mismo delay inicial que Cobrar (30s) para que el resto del startup termine.
+    try:
+        await asyncio.sleep(30)
+    except asyncio.CancelledError:
+        return
+
+    while True:
+        if _postventa_automation_lock.locked():
+            logger.debug("[postventa-automation] Pasada anterior aún corriendo, skip")
+        else:
+            try:
+                async with _postventa_automation_lock:
+                    metrics = await run_postventa_automation()
+                logger.info(
+                    f"[postventa-automation] candidatos={metrics['candidatos']} "
+                    f"creadas={metrics['creadas']} "
+                    f"sin_mapeo={metrics['sin_mapeo']} "
+                    f"sin_vendor={metrics['sin_vendor']} "
+                    f"errores={metrics['errores']}"
+                )
+            except asyncio.CancelledError:
+                logger.info("[postventa-automation] Loop cancelado (shutdown)")
+                raise
+            except Exception as e:
+                logger.exception(f"[postventa-automation] Error en loop (ignorado): {e}")
+        try:
+            await asyncio.sleep(POSTVENTA_AUTOMATION_INTERVAL)
+        except asyncio.CancelledError:
+            raise
+
+
 @app.on_event("startup")
 async def startup():
     await get_pool()
@@ -315,11 +365,13 @@ async def startup():
     app.state.ventas_vivo_task = asyncio.create_task(_ventas_en_vivo_loop())
     # Lanzar loop de automatización Cobrar (cada 15 min, CRM-D10)
     app.state.cobrar_task = asyncio.create_task(_cobrar_automation_loop())
+    # Lanzar loop de automatización Post-venta (cada 15 min, CRM-D14)
+    app.state.postventa_task = asyncio.create_task(_postventa_automation_loop())
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    for task_name in ("matview_task", "ventas_vivo_task", "cobrar_task"):
+    for task_name in ("matview_task", "ventas_vivo_task", "cobrar_task", "postventa_task"):
         task = getattr(app.state, task_name, None)
         if task and not task.done():
             task.cancel()
