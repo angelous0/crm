@@ -9,6 +9,15 @@ Cron asíncrono que cada 15 minutos:
   3. Crea tarea con motivo=POST_VENTA, prioridad media (3), tipo=LLAMADA
      y `source_type='ODOO_SALE'` para dedupe en próximos ciclos.
 
+CRM-D15: pasamos de `vendedor_id` (persona) a `user_id` (tienda/caja)
+para resolver el mapeo. En este Odoo el `user_id` es el login de la
+tienda física (s_barranca1552, grau238, gamarra209, etc.), y mapeamos
+cada uno al usuario CRM de la tienda canónica correspondiente
+(gm209, gr238, gm207, taller, gm218, boosh, gr55). Cuando una
+vendedora real registra la primera interacción con esa cuenta, la
+tarea se reasigna automáticamente a esa vendedora (ver POST de
+interacción en cuentas.py).
+
 MVP — solo CREA tareas nuevas:
   · Si una venta cambia en Odoo después → tarea queda con los datos originales
   · Si una venta se cancela → tarea sigue activa (vendedora la cierra manual)
@@ -41,20 +50,26 @@ TASK_DEFAULTS = {
 }
 
 # Fuente: ventas POS reales del día (la view ya filtra cancelaciones,
-# reservas y órdenes fantasma). `vendedor_id` es la PERSONA; `user_id`
-# en este Odoo es el login de la TIENDA/CAJA (no la vendedora real).
+# reservas y órdenes fantasma). CRM-D15: usamos `user_id` (tienda/caja
+# Odoo) en lugar de `vendedor_id` (persona), porque en este Odoo:
+#   · user_id    = login de la TIENDA (gamarra209, grau238, ...) → mapeable
+#   · vendedor_id = persona física (Luz, Janeth, ...) → solo Luz mapeada
+# Las tareas POST_VENTA caen al usuario CRM "Tienda XXX" y se reasignan
+# a una vendedora real cuando esa vendedora registra la primera
+# interacción con la cuenta.
 _QUERY_VENTAS_PENDIENTES = """
     SELECT
         po.odoo_id,
         po.name,
         po.date_order,
         po.cliente_efectivo_id  AS partner_id,
-        po.vendedor_id          AS odoo_vendor_id,
+        po.user_id              AS odoo_user_id,
         po.amount_total,
         po.tipo_comp,
         po.num_comp
     FROM odoo.v_pos_order_real po
-    WHERE po.date_order >= CURRENT_DATE
+    WHERE po.date_order >=
+        (date_trunc('day', now() AT TIME ZONE 'America/Lima') AT TIME ZONE 'America/Lima')
       AND po.cliente_efectivo_id IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM crm.tarea t
@@ -63,6 +78,11 @@ _QUERY_VENTAS_PENDIENTES = """
       )
     ORDER BY po.date_order ASC, po.odoo_id ASC
 """
+# Nota TZ: usamos "inicio del día en Lima" en lugar de CURRENT_DATE
+# (que es UTC en el server). Si en el server son las 00:30 UTC del 18 may
+# y en Lima son las 19:30 del 17 may, CURRENT_DATE da 18 may y se
+# pierden las ventas del día Lima. Esta expresión devuelve el comienzo
+# del día Lima actual como TIMESTAMPTZ, así filtra correctamente.
 
 
 def _calc_due_at(date_venta: datetime, now: datetime) -> datetime:
@@ -87,20 +107,20 @@ def _fmt_descripcion(date_venta: datetime) -> str:
     return f"Llamar post-venta — venta del {date_venta.strftime('%d/%m/%Y')}"
 
 
-def _fmt_notas(venta: dict, nombre_vendedor_odoo: str | None) -> str:
+def _fmt_notas(venta: dict, nombre_tienda_odoo: str | None) -> str:
     monto = float(venta.get("amount_total") or 0)
     num_comp = venta.get("num_comp") or "(sin comprobante)"
     tipo_comp = venta.get("tipo_comp") or ""
     referencia = f"{tipo_comp} {num_comp}".strip()
     fecha = venta["date_order"]
     fecha_str = fecha.strftime("%d/%m/%Y %H:%M") if hasattr(fecha, "strftime") else str(fecha)
-    vendor_str = f"\nVendedor Odoo: {nombre_vendedor_odoo}" if nombre_vendedor_odoo else ""
+    tienda_str = f"\nTienda Odoo: {nombre_tienda_odoo}" if nombre_tienda_odoo else ""
     return (
         f"Monto: S/ {monto:,.2f}\n"
         f"Venta: {venta.get('name') or '(sin número)'}\n"
         f"Comprobante: {referencia}\n"
         f"Fecha: {fecha_str}"
-        f"{vendor_str}\n"
+        f"{tienda_str}\n"
         f"Origen: Odoo pos_order id={venta['odoo_id']}"
     )
 
@@ -112,13 +132,13 @@ async def run_postventa_automation() -> dict:
         {
           "candidatos":  int,   # ventas elegibles encontradas
           "creadas":     int,   # tareas insertadas
-          "sin_mapeo":   int,   # vendedor_id no presente en odoo_user_map
-          "sin_vendor":  int,   # venta sin vendedor_id en Odoo
+          "sin_mapeo":   int,   # user_id no presente en odoo_user_map
+          "sin_user":    int,   # venta sin user_id en Odoo (raro)
           "errores":     int,   # excepciones por venta (no rompe el batch)
         }
     """
     now = datetime.now()
-    metrics = {"candidatos": 0, "creadas": 0, "sin_mapeo": 0, "sin_vendor": 0, "errores": 0}
+    metrics = {"candidatos": 0, "creadas": 0, "sin_mapeo": 0, "sin_user": 0, "errores": 0}
 
     async with safe_acquire() as conn:
         ventas = await conn.fetch(_QUERY_VENTAS_PENDIENTES)
@@ -126,39 +146,39 @@ async def run_postventa_automation() -> dict:
         if not ventas:
             return metrics
 
-        # Mapping completo (es pequeño, ~10 entradas)
+        # Mapping completo (es pequeño, ~15 entradas tras D15)
         mapping_rows = await conn.fetch(
             "SELECT odoo_user_id, crm_username FROM crm.odoo_user_map"
         )
         mapping = {r["odoo_user_id"]: r["crm_username"] for r in mapping_rows}
 
-        # Nombres legibles de res_users para logs y notas
-        vendor_ids = {v["odoo_vendor_id"] for v in ventas if v["odoo_vendor_id"]}
+        # Nombres legibles de res_users para logs (caso sin mapeo)
+        user_ids = {v["odoo_user_id"] for v in ventas if v["odoo_user_id"]}
         names_rows = await conn.fetch(
             "SELECT odoo_id, name, login FROM odoo.res_users "
             "WHERE odoo_id = ANY($1::int[])",
-            list(vendor_ids),
-        ) if vendor_ids else []
-        vendor_names = {r["odoo_id"]: (r["name"] or r["login"] or "?") for r in names_rows}
+            list(user_ids),
+        ) if user_ids else []
+        user_names = {r["odoo_id"]: (r["name"] or r["login"] or "?") for r in names_rows}
 
         for v in ventas:
             try:
-                vendor_id = v["odoo_vendor_id"]
-                if not vendor_id:
-                    metrics["sin_vendor"] += 1
+                odoo_user_id = v["odoo_user_id"]
+                if not odoo_user_id:
+                    metrics["sin_user"] += 1
                     logger.warning(
                         f"[postventa-automation] Venta {v['odoo_id']} "
-                        f"({v.get('name') or '?'}) sin vendedor_id en Odoo — saltando."
+                        f"({v.get('name') or '?'}) sin user_id en Odoo — saltando."
                     )
                     continue
 
-                asignado = mapping.get(vendor_id)
+                asignado = mapping.get(odoo_user_id)
                 if not asignado:
                     metrics["sin_mapeo"] += 1
-                    nombre = vendor_names.get(vendor_id, "?")
+                    nombre = user_names.get(odoo_user_id, "?")
                     logger.warning(
                         f"[postventa-automation] Venta {v['odoo_id']} sin mapeo: "
-                        f"odoo_vendor_id={vendor_id} ({nombre}). "
+                        f"odoo_user_id={odoo_user_id} ({nombre}). "
                         f"Agregar a crm.odoo_user_map para procesar."
                     )
                     continue
@@ -183,7 +203,7 @@ async def run_postventa_automation() -> dict:
 
                 due_at = _calc_due_at(v["date_order"], now)
                 desc = _fmt_descripcion(v["date_order"])
-                notas = _fmt_notas(v, vendor_names.get(vendor_id))
+                notas = _fmt_notas(v, user_names.get(odoo_user_id))
 
                 await conn.execute(
                     """

@@ -338,7 +338,7 @@ async def _postventa_automation_loop() -> None:
                     f"[postventa-automation] candidatos={metrics['candidatos']} "
                     f"creadas={metrics['creadas']} "
                     f"sin_mapeo={metrics['sin_mapeo']} "
-                    f"sin_vendor={metrics['sin_vendor']} "
+                    f"sin_user={metrics['sin_user']} "
                     f"errores={metrics['errores']}"
                 )
             except asyncio.CancelledError:

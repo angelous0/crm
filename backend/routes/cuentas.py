@@ -3764,6 +3764,45 @@ async def create_interaccion(
                     f"(cuenta={cuenta['id']}, user={username}): {e}"
                 )
 
+        # ─── CRM-D15: reasignar tareas de tiendas al usuario real ─────────
+        # Las tareas POST_VENTA del cron caen al usuario CRM "Tienda XXX"
+        # (gm209, gr238, gm207, taller, gm218, boosh, gr55). Cuando la
+        # primera vendedora interactúa con esa cuenta, todas sus tareas
+        # PENDIENTES asignadas a una "tienda" se reasignan al user real.
+        # Cobrar también puede caer en estas tiendas si en el futuro
+        # mapeamos otros user_id; este UPDATE las atrapa igual.
+        try:
+            reasignadas = await conn.fetchval(
+                """
+                WITH upd AS (
+                    UPDATE crm.tarea
+                    SET asignado_a = $1,
+                        updated_at = now(),
+                        updated_by = $1
+                    WHERE cuenta_id = $2
+                      AND status = 'PENDIENTE'
+                      AND asignado_a IN
+                          ('gm209','gr238','gm207','taller','gm218','boosh','gr55')
+                      AND asignado_a <> $1
+                    RETURNING 1
+                )
+                SELECT COUNT(*) FROM upd
+                """,
+                username, cuenta["id"],
+            )
+            if reasignadas and reasignadas > 0:
+                import logging
+                logging.getLogger(__name__).info(
+                    f"[interaccion-reasignar] {reasignadas} tarea(s) PENDIENTE de "
+                    f"tiendas reasignada(s) a '{username}' tras interaccion={row['id']} "
+                    f"(cuenta={cuenta['id']})"
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"[interaccion-reasignar] Falla reasignación tras interaccion={row['id']}: {e}"
+            )
+
     result = row_to_dict(row)
     result["tarea_auto_id"] = tarea_auto_id   # CRM-D11: null si no aplica o falló
     return result
