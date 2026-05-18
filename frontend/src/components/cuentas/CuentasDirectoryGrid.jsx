@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { normalizeDepartamento, isCanonicalDepartamento } from "@/components/cuentas/perfil-options";
 import { NuevaInteraccionModal } from "@/components/cuentas/modals/NuevaInteraccionModal";
 import { NuevaTareaModal } from "@/components/cuentas/modals/NuevaTareaModal";
+import { WhatsappRegistroPanel } from "@/components/cuentas/WhatsappRegistroPanel";
+import { useAuth } from "@/lib/auth";
 
 const fmtDate = (d) => {
   if (!d) return "-";
@@ -303,6 +305,7 @@ function SortHeaderResizable({ col, currentSort, currentDir, onSort, width, onRe
 const COL_COUNT = COLUMNS.length + 1; // +1 for checkbox
 
 export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, sort, dir, onSort, page, totalPages, onPageChange, onRefresh }) {
+  const { user } = useAuth();   // CRM-D16: para pasar username al panel WhatsApp
   const [selected, setSelected] = useState(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
 
@@ -311,6 +314,8 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
   const [interaccionFor, setInteraccionFor] = useState(null); // { id, nombre } | null
   const [tareaFor,       setTareaFor]       = useState(null); // { id, nombre } | null
   const [tareaDefaults,  setTareaDefaults]  = useState(null); // precarga desde "Guardar+crear tarea"
+  // CRM-D16: panel lateral de WhatsApp. Guarda { id, nombre, phone_whatsapp, phone_display }
+  const [whatsappPanelFor, setWhatsappPanelFor] = useState(null);
 
   // Column widths state
   const [colWidths, setColWidths] = useState(() => {
@@ -538,16 +543,22 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
                         <CheckSquare size={14} strokeWidth={2.25} />
                       </button>
                       {r.phone_whatsapp ? (
-                        <a
-                          href={`https://wa.me/${r.phone_whatsapp}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={`Abrir WhatsApp · ${r.phone_display || ""}`}
-                          onClick={e => e.stopPropagation()}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setWhatsappPanelFor({
+                              id: r.id,
+                              nombre: r.nombre,
+                              phone_whatsapp: r.phone_whatsapp,
+                              phone_display: r.phone_display,
+                            });
+                          }}
+                          title={`Registrar WhatsApp · ${r.phone_display || ""}`}
                           className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 hover:bg-emerald-500 hover:text-white hover:ring-emerald-500 hover:shadow-sm active:scale-95 transition-all duration-150"
                           data-testid={`btn-whatsapp-${r.id}`}>
                           <MessageCircle size={14} strokeWidth={2.25} />
-                        </a>
+                        </button>
                       ) : (
                         <span
                           title="Sin WhatsApp registrado"
@@ -612,6 +623,21 @@ export function CuentasDirectoryGrid({ rows, loading, selectedId, onSelectRow, s
           toast.success("Tarea creada");
         }}
       />
+      {/* CRM-D16: panel lateral de WhatsApp.
+          Solo se monta cuando whatsappPanelFor !== null (evita lifecycle
+          extra cuando no se usa). Tras guardar, refresca el directorio
+          para que la columna "Próxima Tarea" muestre la tarea recién creada. */}
+      {whatsappPanelFor && (
+        <WhatsappRegistroPanel
+          partnerOdooId={whatsappPanelFor.id}
+          cuentaName={whatsappPanelFor.nombre}
+          phoneWhatsapp={whatsappPanelFor.phone_whatsapp}
+          phoneDisplay={whatsappPanelFor.phone_display}
+          username={user?.username}
+          onClose={() => setWhatsappPanelFor(null)}
+          onSaved={() => onRefresh?.()}
+        />
+      )}
     </div>
   );
 }
